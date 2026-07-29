@@ -4,7 +4,7 @@
   "private": true,
   "workspaces": ["apps/web"],
   "scripts": {
-    "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
+    "setup": "uv sync --locked --group dev && npm ci",
     "dev": "node -e \"console.error('dev is unavailable until the web application phase is implemented.'); process.exit(1)\"",
     "test": "uv run pytest",
     "demo": "node -e \"console.error('demo is unavailable until the demonstration phase is implemented.'); process.exit(1)\"",
@@ -16,4 +16,3 @@
     "reproduce": "node -e \"console.error('reproduce is unavailable until the reproducibility pipeline phase is implemented.'); process.exit(1)\""
   }
 }
-

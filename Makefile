@@ -1,7 +1,8 @@
 .PHONY: setup dev test demo benchmark report lint typecheck security reproduce
 
 setup:
-	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
+	uv sync --locked --group dev
+	npm ci
 
 dev:
 	@echo "dev is unavailable until the web application phase is implemented."
@@ -35,4 +36,3 @@ security:
 reproduce:
 	@echo "reproduce is unavailable until the reproducibility pipeline phase is implemented."
 	@exit 1
-

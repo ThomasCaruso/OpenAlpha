@@ -9,17 +9,16 @@ try {
         throw "Environment validation failed. Resolve the diagnostics above and rerun setup."
     }
 
-    & uv sync --group dev
+    & uv sync --locked --group dev
     if ($LASTEXITCODE -ne 0) {
         throw "uv sync failed with exit code $LASTEXITCODE."
     }
 
-    & npm install
+    & npm ci
     if ($LASTEXITCODE -ne 0) {
-        throw "npm install failed with exit code $LASTEXITCODE."
+        throw "npm ci failed with exit code $LASTEXITCODE."
     }
 }
 finally {
     Pop-Location
 }
-
