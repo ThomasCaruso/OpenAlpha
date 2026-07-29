@@ -1,5 +1,6 @@
+from collections.abc import Mapping
 from datetime import date
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -91,6 +92,18 @@ class FrozenModel(BaseModel):
         strict=True,
     )
 
+    def model_copy(
+        self,
+        *,
+        update: Mapping[str, Any] | None = None,
+        deep: bool = False,
+    ) -> Self:
+        if update:
+            raise TypeError(
+                "model_copy updates bypass validation; create and validate a new experiment"
+            )
+        return super().model_copy(update=None, deep=deep)
+
 
 class Metadata(FrozenModel):
     name: MetadataName
@@ -110,8 +123,8 @@ class Data(FrozenModel):
     provider: NonEmptyString
     assets: Annotated[
         tuple[UppercaseSymbol, ...],
-        BeforeValidator(_parse_wire_array),
         Field(min_length=1, max_length=1),
+        BeforeValidator(_parse_wire_array),
     ]
     start: WireDate
     end: WireDate
@@ -194,8 +207,8 @@ class ExponentialSmoothingParameters(FrozenModel):
 class GradientBoostedTreeParameters(FrozenModel):
     lags: Annotated[
         tuple[Annotated[int, Field(ge=1, le=512)], ...],
-        BeforeValidator(_parse_wire_array),
         Field(min_length=1),
+        BeforeValidator(_parse_wire_array),
     ]
     estimators: int = Field(ge=10, le=5000)
     max_depth: Annotated[int, Field(ge=1, le=64)] | None
@@ -205,7 +218,7 @@ class GradientBoostedTreeParameters(FrozenModel):
     @classmethod
     def lags_are_unique(cls, value: tuple[int, ...]) -> tuple[int, ...]:
         if len(value) != len(set(value)):
-            _raise_semantic(cls.__name__, ("lags",), "lags must be unique", value)
+            _raise_semantic(cls.__name__, (), "lags must be unique", value)
         return value
 
 
@@ -308,8 +321,8 @@ class Statistics(FrozenModel):
 class Reporting(FrozenModel):
     formats: Annotated[
         tuple[Literal["html", "pdf"], ...],
-        BeforeValidator(_parse_wire_array),
         Field(min_length=1),
+        BeforeValidator(_parse_wire_array),
     ]
     include_lineage: Literal[True]
     include_limitations: Literal[True]
@@ -328,13 +341,13 @@ class ExperimentSpec(FrozenModel):
     forecast: Forecast
     features: Annotated[
         tuple[FeatureName, ...],
-        BeforeValidator(_parse_wire_array),
         Field(min_length=1),
+        BeforeValidator(_parse_wire_array),
     ]
     models: Annotated[
         tuple[ModelDefinition, ...],
-        BeforeValidator(_parse_wire_array),
         Field(min_length=1),
+        BeforeValidator(_parse_wire_array),
     ]
     training: Training
     evaluation: Evaluation

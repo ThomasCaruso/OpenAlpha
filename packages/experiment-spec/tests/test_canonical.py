@@ -1,9 +1,12 @@
 import json
 import tomllib
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from openalpha_experiment_spec import (
     ExperimentSpec,
     canonical_bytes,
@@ -48,6 +51,12 @@ def test_root_workspace_sync_installs_experiment_spec(example_path: Path) -> Non
     assert workspace["tool"]["uv"]["sources"]["openalpha-experiment-spec"] == {
         "workspace": True
     }
+
+
+def test_installed_distribution_includes_py_typed_marker() -> None:
+    marker = files("openalpha_experiment_spec").joinpath("py.typed")
+
+    assert marker.is_file()
 
 
 def test_yaml_and_reordered_json_have_identical_canonical_identity(
@@ -111,6 +120,52 @@ def test_top_level_and_nested_values_are_deeply_immutable(
         spec.models[0] = spec.models[1]  # type: ignore[index]
 
 
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"features": ["calendar"]},
+        {"random_seed": -1},
+        {"random_seed": "7"},
+    ],
+)
+def test_model_copy_rejects_unvalidated_top_level_updates(
+    valid_mapping: dict[str, object],
+    update: dict[str, object],
+) -> None:
+    spec = ExperimentSpec.model_validate(valid_mapping)
+
+    with pytest.raises(
+        TypeError,
+        match="create and validate a new experiment",
+    ):
+        spec.model_copy(update=update)
+
+
+def test_nested_model_copy_rejects_unvalidated_updates(
+    valid_mapping: dict[str, object],
+) -> None:
+    spec = ExperimentSpec.model_validate(valid_mapping)
+
+    with pytest.raises(
+        TypeError,
+        match="create and validate a new experiment",
+    ):
+        spec.models[0].model_copy(update={"parameters": {"temperature": float("inf")}})
+
+
+def test_update_free_model_copy_preserves_immutable_identity(
+    valid_mapping: dict[str, object],
+) -> None:
+    spec = ExperimentSpec.model_validate(valid_mapping)
+
+    copied = spec.model_copy()
+
+    assert copied is not spec
+    assert isinstance(copied.features, tuple)
+    assert canonical_bytes(copied) == canonical_bytes(spec)
+    assert experiment_id(copied) == experiment_id(spec)
+
+
 def test_json_schema_is_formal_and_describes_discriminated_models() -> None:
     schema = ExperimentSpec.model_json_schema()
     required = {
@@ -143,3 +198,54 @@ def test_json_schema_is_formal_and_describes_discriminated_models() -> None:
     assert "$defs" in schema
     assert required <= set(schema["required"])
     assert any("oneOf" in node and "discriminator" in node for node in nodes(schema))
+
+
+def test_json_schema_uses_array_collection_keywords() -> None:
+    schema = ExperimentSpec.model_json_schema()
+    definitions = schema["$defs"]
+    bounded_arrays = [
+        (definitions["Data"]["properties"]["assets"], 1, 1),
+        (schema["properties"]["features"], 1, None),
+        (schema["properties"]["models"], 1, None),
+        (definitions["Reporting"]["properties"]["formats"], 1, None),
+        (
+            definitions["GradientBoostedTreeParameters"]["properties"]["lags"],
+            1,
+            None,
+        ),
+    ]
+
+    for field_schema, minimum, maximum in bounded_arrays:
+        assert field_schema["minItems"] == minimum
+        assert "minLength" not in field_schema
+        assert "maxLength" not in field_schema
+        if maximum is None:
+            assert "maxItems" not in field_schema
+        else:
+            assert field_schema["maxItems"] == maximum
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("features",), []),
+        (("models",), []),
+        (("reporting", "formats"), []),
+        (("models", 5, "parameters", "lags"), []),
+        (("data", "assets"), []),
+        (("data", "assets"), ["SPY", "QQQ"]),
+    ],
+)
+def test_draft_2020_12_schema_rejects_invalid_collection_sizes(
+    valid_mapping: dict[str, Any],
+    path: tuple[str | int, ...],
+    value: object,
+) -> None:
+    target: Any = valid_mapping
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = value
+    validator = Draft202012Validator(ExperimentSpec.model_json_schema())
+
+    with pytest.raises(JsonSchemaValidationError):
+        validator.validate(valid_mapping)

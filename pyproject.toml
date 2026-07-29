@@ -5,7 +5,7 @@ requires-python = ">=3.13,<3.14"
 dependencies = []
 
 [dependency-groups]
-dev = ["hypothesis>=6.0", "openalpha-experiment-spec", "pyright>=1.1", "pytest>=8.0", "pytest-asyncio>=0.25", "ruff>=0.12"]
+dev = ["hypothesis>=6.0", "jsonschema>=4.23,<5", "openalpha-experiment-spec", "pyright>=1.1", "pytest>=8.0", "pytest-asyncio>=0.25", "ruff>=0.12"]
 
 [tool.uv.workspace]
 members = ["apps/api", "apps/worker", "packages/*"]

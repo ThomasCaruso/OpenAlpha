@@ -10,6 +10,31 @@ from .models import ExperimentSpec
 MAX_INPUT_BYTES = 1024 * 1024
 
 
+def _mapping_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    mapping: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in mapping:
+            raise ValueError(f"document contains duplicate key {key!r}")
+        mapping[key] = value
+    return mapping
+
+
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    def construct_mapping(
+        self,
+        node: yaml.MappingNode,
+        deep: bool = False,
+    ) -> dict[Any, Any]:
+        self.flatten_mapping(node)
+        mapping: dict[Any, Any] = {}
+        for key_node, value_node in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise ValueError(f"document contains duplicate key {key!r}")
+            mapping[key] = self.construct_object(value_node, deep=deep)
+        return mapping
+
+
 def _decode_input(value: str | bytes) -> str:
     if isinstance(value, bytes):
         size = len(value)
@@ -42,9 +67,13 @@ def _reject_json_constant(value: str) -> None:
 def load_json(value: str | bytes) -> ExperimentSpec:
     return _load(
         value,
-        lambda text: json.loads(text, parse_constant=_reject_json_constant),
+        lambda text: json.loads(
+            text,
+            object_pairs_hook=_mapping_without_duplicates,
+            parse_constant=_reject_json_constant,
+        ),
     )
 
 
 def load_yaml(value: str | bytes) -> ExperimentSpec:
-    return _load(value, yaml.safe_load)
+    return _load(value, lambda text: yaml.load(text, Loader=_UniqueKeySafeLoader))

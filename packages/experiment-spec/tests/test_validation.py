@@ -158,6 +158,24 @@ def test_model_names_are_unique(valid_mapping: dict[str, Any]) -> None:
     _assert_error(valid_mapping, ("models", 1, "name"), "model names must be unique")
 
 
+def test_duplicate_tree_lags_have_a_single_meaningful_field_location(
+    valid_mapping: dict[str, Any],
+) -> None:
+    valid_mapping["models"][5]["parameters"]["lags"] = [1, 1]
+
+    with pytest.raises(ValidationError) as captured:
+        ExperimentSpec.model_validate(valid_mapping)
+
+    assert captured.value.errors()[0]["loc"] == (
+        "models",
+        5,
+        "gradient_boosted_tree",
+        "parameters",
+        "lags",
+    )
+    assert "lags must be unique" in captured.value.errors()[0]["msg"]
+
+
 @pytest.mark.parametrize(
     ("checkpoint", "tokenizer"),
     [
@@ -701,4 +719,51 @@ def test_loaders_migrate_before_validation(
     payload = "{}" if loader is load_json else "{}\n"
 
     with pytest.raises(ValueError, match="schema_version is required"):
+        loader(payload)
+
+
+@pytest.mark.parametrize(
+    ("loader", "payload", "duplicate"),
+    [
+        (
+            load_json,
+            '{"schema_version":"1.0","schema_version":"1.0"}',
+            "schema_version",
+        ),
+        (
+            load_json,
+            '{"schema_version":"1.0","value":1,"value":2}',
+            "value",
+        ),
+        (
+            load_json,
+            '{"schema_version":"1.0","metadata":{"name":"first","name":"second"}}',
+            "name",
+        ),
+        (
+            load_yaml,
+            'schema_version: "1.0"\nschema_version: "1.0"\n',
+            "schema_version",
+        ),
+        (
+            load_yaml,
+            'schema_version: "1.0"\nvalue: 1\nvalue: 2\n',
+            "value",
+        ),
+        (
+            load_yaml,
+            'schema_version: "1.0"\nmetadata:\n  name: first\n  name: second\n',
+            "name",
+        ),
+    ],
+)
+def test_loaders_reject_duplicate_keys_at_any_nesting(
+    loader: Callable[[str | bytes], ExperimentSpec],
+    payload: str,
+    duplicate: str,
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match=rf"duplicate key ['\"]{duplicate}['\"]",
+    ):
         loader(payload)
