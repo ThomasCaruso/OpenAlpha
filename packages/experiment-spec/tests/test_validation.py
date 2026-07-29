@@ -1,8 +1,12 @@
+import json
+import math
 from collections.abc import Callable
 from copy import deepcopy
+from datetime import date
 from typing import Any
 
 import pytest
+import yaml
 from openalpha_experiment_spec import ExperimentSpec, load_json, load_yaml
 from pydantic import ValidationError
 
@@ -30,6 +34,62 @@ def test_checked_in_mapping_is_valid(valid_mapping: dict[str, object]) -> None:
     assert spec.schema_version == "1.0"
     assert spec.data.assets == ("SPY",)
     assert len(spec.models) == 6
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "location", "message"),
+    [
+        (
+            ("forecast", "horizon"),
+            "5",
+            ("forecast", "horizon"),
+            "Input should be a valid integer",
+        ),
+        (
+            ("strategy", "threshold_bps"),
+            "15.0",
+            ("strategy", "threshold_bps"),
+            "Input should be a valid number",
+        ),
+    ],
+)
+def test_numeric_strings_are_not_coerced(
+    valid_mapping: dict[str, Any],
+    path: tuple[str | int, ...],
+    value: object,
+    location: tuple[str | int, ...],
+    message: str,
+) -> None:
+    _set_path(valid_mapping, path, value)
+
+    _assert_error(valid_mapping, location, message)
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+def test_non_finite_numbers_fail_during_validation(
+    valid_mapping: dict[str, Any], value: float
+) -> None:
+    valid_mapping["execution"]["commission_bps"] = value
+
+    _assert_error(
+        valid_mapping,
+        ("execution", "commission_bps"),
+        "Input should be a finite number",
+    )
+
+
+def test_yaml_and_json_loaders_accept_exact_iso_date_strings(
+    valid_mapping: dict[str, Any],
+) -> None:
+    json_spec = load_json(json.dumps(valid_mapping))
+    yaml_spec = load_yaml(yaml.safe_dump(valid_mapping))
+
+    assert json_spec.data.start == date(2024, 7, 1)
+    assert json_spec.data.end == date(2026, 6, 30)
+    assert json_spec.evaluation.final_test_start == date(2026, 1, 2)
+    assert yaml_spec.data.start == json_spec.data.start
+    assert yaml_spec.data.end == json_spec.data.end
+    assert yaml_spec.evaluation.final_test_start == json_spec.evaluation.final_test_start
 
 
 @pytest.mark.parametrize(
@@ -146,13 +206,31 @@ def test_kronos_tokenizer_must_match_checkpoint_family(
             ("training", "policy"),
             "trainable baselines require fit_per_origin",
         ),
+        (
+            ("models", 3, "parameters", "window"),
+            41,
+            ("models", 3, "parameters", "window"),
+            "moving_average window must not exceed forecast.context_window",
+        ),
+        (
+            ("models", 5, "parameters", "lags"),
+            [1, 41],
+            ("models", 5, "parameters", "lags", 1),
+            "tree lag must not exceed forecast.context_window",
+        ),
+        (
+            ("statistics", "block_length"),
+            253,
+            ("statistics", "block_length"),
+            "block_length must not exceed evaluation.initial_training_bars",
+        ),
     ],
 )
 def test_cross_section_training_and_evaluation_rules(
     valid_mapping: dict[str, Any],
-    path: tuple[str, ...],
+    path: tuple[str | int, ...],
     value: object,
-    location: tuple[str, ...],
+    location: tuple[str | int, ...],
     message: str,
 ) -> None:
     _set_path(valid_mapping, path, value)
@@ -202,6 +280,335 @@ def test_tuple_values_are_unique(
     _set_path(valid_mapping, path, [duplicate, duplicate])
 
     _assert_error(valid_mapping, location, message)
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "location", "message"),
+    [
+        (("schema_version",), "2.0", ("schema_version",), "Input should be '1.0'"),
+        (("data", "calendar"), "NASDAQ", ("data", "calendar"), "Input should be 'XNYS'"),
+        (("data", "interval"), "1h", ("data", "interval"), "Input should be '1d'"),
+        (
+            ("data", "timezone"),
+            "UTC",
+            ("data", "timezone"),
+            "Input should be 'America/New_York'",
+        ),
+        (("data", "adjusted"), False, ("data", "adjusted"), "Input should be True"),
+        (
+            ("data", "corporate_action_policy"),
+            "raw",
+            ("data", "corporate_action_policy"),
+            "Input should be 'provider_adjusted'",
+        ),
+        (
+            ("forecast", "target"),
+            "open",
+            ("forecast", "target"),
+            "Input should be 'close' or 'log_return'",
+        ),
+        (("features", 0), "rsi", ("features", 0), "Input should be"),
+        (
+            ("models", 0, "kind"),
+            "unsupported",
+            ("models", 0),
+            "does not match any of the expected tags",
+        ),
+        (
+            ("models", 0, "fit_policy"),
+            "fit_per_origin",
+            ("models", 0, "kronos", "fit_policy"),
+            "Input should be 'zero_shot'",
+        ),
+        (
+            ("models", 0, "parameters", "checkpoint"),
+            "NeoQuasar/Kronos-large",
+            ("models", 0, "kronos", "parameters", "checkpoint"),
+            "Input should be",
+        ),
+        (
+            ("models", 0, "parameters", "tokenizer"),
+            "NeoQuasar/Kronos-Tokenizer-large",
+            ("models", 0, "kronos", "parameters", "tokenizer"),
+            "Input should be",
+        ),
+        (
+            ("models", 4, "parameters", "trend"),
+            "linear",
+            ("models", 4, "exponential_smoothing", "parameters", "trend"),
+            "Input should be 'additive' or 'multiplicative'",
+        ),
+        (
+            ("models", 4, "parameters", "seasonal"),
+            "linear",
+            ("models", 4, "exponential_smoothing", "parameters", "seasonal"),
+            "Input should be 'additive' or 'multiplicative'",
+        ),
+        (
+            ("training", "policy"),
+            "sometimes",
+            ("training", "policy"),
+            "Input should be 'zero_shot' or 'fit_per_origin'",
+        ),
+        (
+            ("evaluation", "protocol"),
+            "holdout",
+            ("evaluation", "protocol"),
+            "Input should be",
+        ),
+        (
+            ("strategy", "kind"),
+            "long_short",
+            ("strategy", "kind"),
+            "Input should be 'long_cash_threshold'",
+        ),
+        (
+            ("execution", "signal_time"),
+            "open",
+            ("execution", "signal_time"),
+            "Input should be 'close'",
+        ),
+        (
+            ("execution", "execution_time"),
+            "same_close",
+            ("execution", "execution_time"),
+            "Input should be 'next_open'",
+        ),
+        (
+            ("benchmark", "kind"),
+            "cash",
+            ("benchmark", "kind"),
+            "Input should be 'buy_and_hold'",
+        ),
+        (
+            ("statistics", "bootstrap_method"),
+            "iid",
+            ("statistics", "bootstrap_method"),
+            "Input should be 'moving_block' or 'stationary'",
+        ),
+        (
+            ("statistics", "multiple_testing"),
+            "none",
+            ("statistics", "multiple_testing"),
+            "Input should be 'holm'",
+        ),
+        (
+            ("reporting", "formats", 0),
+            "json",
+            ("reporting", "formats", 0),
+            "Input should be 'html' or 'pdf'",
+        ),
+        (
+            ("reporting", "include_lineage"),
+            False,
+            ("reporting", "include_lineage"),
+            "Input should be True",
+        ),
+        (
+            ("reporting", "include_limitations"),
+            False,
+            ("reporting", "include_limitations"),
+            "Input should be True",
+        ),
+    ],
+)
+def test_declared_literals_are_enforced(
+    valid_mapping: dict[str, Any],
+    path: tuple[str | int, ...],
+    value: object,
+    location: tuple[str | int, ...],
+    message: str,
+) -> None:
+    _set_path(valid_mapping, path, value)
+
+    _assert_error(valid_mapping, location, message)
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "location", "message"),
+    [
+        (("metadata", "name"), "ab", ("metadata", "name"), "at least 3 characters"),
+        (("metadata", "name"), "x" * 121, ("metadata", "name"), "at most 120 characters"),
+        (
+            ("metadata", "description"),
+            "too short",
+            ("metadata", "description"),
+            "at least 20 characters",
+        ),
+        (("metadata", "owner"), "", ("metadata", "owner"), "at least 1 character"),
+        (("hypothesis",), "too short", ("hypothesis",), "at least 20 characters"),
+        (("forecast", "context_window"), 19, ("forecast", "context_window"), "greater than or equal to 20"),
+        (("forecast", "context_window"), 513, ("forecast", "context_window"), "less than or equal to 512"),
+        (("forecast", "horizon"), 0, ("forecast", "horizon"), "greater than or equal to 1"),
+        (("forecast", "horizon"), 65, ("forecast", "horizon"), "less than or equal to 64"),
+        (
+            ("models", 0, "parameters", "temperature"),
+            0.0,
+            ("models", 0, "kronos", "parameters", "temperature"),
+            "greater than 0",
+        ),
+        (
+            ("models", 0, "parameters", "temperature"),
+            5.01,
+            ("models", 0, "kronos", "parameters", "temperature"),
+            "less than or equal to 5",
+        ),
+        (
+            ("models", 0, "parameters", "top_p"),
+            0.0,
+            ("models", 0, "kronos", "parameters", "top_p"),
+            "greater than 0",
+        ),
+        (
+            ("models", 0, "parameters", "top_p"),
+            1.01,
+            ("models", 0, "kronos", "parameters", "top_p"),
+            "less than or equal to 1",
+        ),
+        (
+            ("models", 0, "parameters", "top_k"),
+            -1,
+            ("models", 0, "kronos", "parameters", "top_k"),
+            "greater than or equal to 0",
+        ),
+        (
+            ("models", 0, "parameters", "top_k"),
+            1025,
+            ("models", 0, "kronos", "parameters", "top_k"),
+            "less than or equal to 1024",
+        ),
+        (
+            ("models", 0, "parameters", "sample_count"),
+            0,
+            ("models", 0, "kronos", "parameters", "sample_count"),
+            "greater than or equal to 1",
+        ),
+        (
+            ("models", 0, "parameters", "sample_count"),
+            101,
+            ("models", 0, "kronos", "parameters", "sample_count"),
+            "less than or equal to 100",
+        ),
+        (
+            ("models", 3, "parameters", "window"),
+            1,
+            ("models", 3, "moving_average", "parameters", "window"),
+            "greater than or equal to 2",
+        ),
+        (
+            ("models", 3, "parameters", "window"),
+            513,
+            ("models", 3, "moving_average", "parameters", "window"),
+            "less than or equal to 512",
+        ),
+        (
+            ("models", 4, "parameters", "seasonal_periods"),
+            1,
+            ("models", 4, "exponential_smoothing", "parameters", "seasonal_periods"),
+            "greater than or equal to 2",
+        ),
+        (
+            ("models", 5, "parameters", "lags", 0),
+            0,
+            ("models", 5, "gradient_boosted_tree", "parameters", "lags", 0),
+            "greater than or equal to 1",
+        ),
+        (
+            ("models", 5, "parameters", "lags", 0),
+            513,
+            ("models", 5, "gradient_boosted_tree", "parameters", "lags", 0),
+            "less than or equal to 512",
+        ),
+        (
+            ("models", 5, "parameters", "estimators"),
+            9,
+            ("models", 5, "gradient_boosted_tree", "parameters", "estimators"),
+            "greater than or equal to 10",
+        ),
+        (
+            ("models", 5, "parameters", "estimators"),
+            5001,
+            ("models", 5, "gradient_boosted_tree", "parameters", "estimators"),
+            "less than or equal to 5000",
+        ),
+        (
+            ("models", 5, "parameters", "max_depth"),
+            0,
+            ("models", 5, "gradient_boosted_tree", "parameters", "max_depth"),
+            "greater than or equal to 1",
+        ),
+        (
+            ("models", 5, "parameters", "max_depth"),
+            65,
+            ("models", 5, "gradient_boosted_tree", "parameters", "max_depth"),
+            "less than or equal to 64",
+        ),
+        (
+            ("models", 5, "parameters", "learning_rate"),
+            0.0,
+            ("models", 5, "gradient_boosted_tree", "parameters", "learning_rate"),
+            "greater than 0",
+        ),
+        (
+            ("models", 5, "parameters", "learning_rate"),
+            1.01,
+            ("models", 5, "gradient_boosted_tree", "parameters", "learning_rate"),
+            "less than or equal to 1",
+        ),
+        (("training", "retraining_cadence"), 0, ("training", "retraining_cadence"), "greater than or equal to 1"),
+        (("training", "retraining_cadence"), 2521, ("training", "retraining_cadence"), "less than or equal to 2520"),
+        (("evaluation", "initial_training_bars"), 39, ("evaluation", "initial_training_bars"), "greater than or equal to 40"),
+        (("evaluation", "step_bars"), 0, ("evaluation", "step_bars"), "greater than or equal to 1"),
+        (("evaluation", "purge_bars"), -1, ("evaluation", "purge_bars"), "greater than or equal to 0"),
+        (("evaluation", "embargo_bars"), -1, ("evaluation", "embargo_bars"), "greater than or equal to 0"),
+        (("strategy", "threshold_bps"), -0.1, ("strategy", "threshold_bps"), "greater than or equal to 0"),
+        (("strategy", "neutral_zone_bps"), -0.1, ("strategy", "neutral_zone_bps"), "greater than or equal to 0"),
+        (("strategy", "max_position_fraction"), 0.0, ("strategy", "max_position_fraction"), "greater than 0"),
+        (("strategy", "max_position_fraction"), 1.01, ("strategy", "max_position_fraction"), "less than or equal to 1"),
+        (("execution", "delay_bars"), 0, ("execution", "delay_bars"), "greater than or equal to 1"),
+        (("execution", "delay_bars"), 21, ("execution", "delay_bars"), "less than or equal to 20"),
+        (("execution", "commission_bps"), -0.1, ("execution", "commission_bps"), "greater than or equal to 0"),
+        (("execution", "slippage_bps"), -0.1, ("execution", "slippage_bps"), "greater than or equal to 0"),
+        (("statistics", "confidence_level"), 0.79, ("statistics", "confidence_level"), "greater than or equal to 0.8"),
+        (("statistics", "confidence_level"), 1.0, ("statistics", "confidence_level"), "less than or equal to 0.999"),
+        (("statistics", "bootstrap_samples"), 199, ("statistics", "bootstrap_samples"), "greater than or equal to 200"),
+        (("statistics", "bootstrap_samples"), 1_000_001, ("statistics", "bootstrap_samples"), "less than or equal to 1000000"),
+        (("statistics", "block_length"), 0, ("statistics", "block_length"), "greater than or equal to 1"),
+        (("statistics", "block_length"), 513, ("statistics", "block_length"), "less than or equal to 512"),
+        (("statistics", "random_seed"), -1, ("statistics", "random_seed"), "greater than or equal to 0"),
+        (("statistics", "random_seed"), 2**32, ("statistics", "random_seed"), "less than or equal to 4294967295"),
+        (("reporting", "formats"), [], ("reporting", "formats"), "at least 1 item"),
+        (("random_seed",), -1, ("random_seed",), "greater than or equal to 0"),
+        (("random_seed",), 2**32, ("random_seed",), "less than or equal to 4294967295"),
+    ],
+)
+def test_declared_local_bounds_are_enforced(
+    valid_mapping: dict[str, Any],
+    path: tuple[str | int, ...],
+    value: object,
+    location: tuple[str | int, ...],
+    message: str,
+) -> None:
+    _set_path(valid_mapping, path, value)
+
+    _assert_error(valid_mapping, location, message)
+
+
+def test_tree_max_depth_may_be_none(valid_mapping: dict[str, Any]) -> None:
+    valid_mapping["models"][5]["parameters"]["max_depth"] = None
+
+    model = ExperimentSpec.model_validate(valid_mapping).models[5]
+    assert model.kind == "gradient_boosted_tree"
+    assert model.parameters.max_depth is None
+
+
+@pytest.mark.parametrize("formats", [["html"], ["pdf"], ["html", "pdf"]])
+def test_reporting_accepts_unique_nonempty_supported_subsets(
+    valid_mapping: dict[str, Any], formats: list[str]
+) -> None:
+    valid_mapping["reporting"]["formats"] = formats
+
+    assert ExperimentSpec.model_validate(valid_mapping).reporting.formats == tuple(formats)
 
 
 @pytest.mark.parametrize(

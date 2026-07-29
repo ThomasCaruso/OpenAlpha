@@ -3,6 +3,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     StringConstraints,
@@ -23,6 +24,26 @@ FeatureName = Literal[
     "rolling_volatility",
     "calendar",
 ]
+
+
+def _parse_wire_date(value: Any) -> Any:
+    if isinstance(value, str):
+        if len(value) != 10 or value[4] != "-" or value[7] != "-":
+            return value
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _parse_wire_array(value: Any) -> Any:
+    if isinstance(value, list):
+        return tuple(value)
+    return value
+
+
+WireDate = Annotated[date, BeforeValidator(_parse_wire_date)]
 
 REQUIRED_MODEL_KINDS = {
     "kronos",
@@ -63,14 +84,21 @@ def _ensure_unique(
 
 
 class FrozenModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(
+        allow_inf_nan=False,
+        extra="forbid",
+        frozen=True,
+        strict=True,
+    )
 
 
 class Metadata(FrozenModel):
     name: MetadataName
     description: LongText
     owner: NonEmptyString
-    tags: tuple[NonEmptyString, ...] = ()
+    tags: Annotated[
+        tuple[NonEmptyString, ...], BeforeValidator(_parse_wire_array)
+    ] = ()
 
     @field_validator("tags")
     @classmethod
@@ -80,9 +108,13 @@ class Metadata(FrozenModel):
 
 class Data(FrozenModel):
     provider: NonEmptyString
-    assets: tuple[UppercaseSymbol, ...] = Field(min_length=1, max_length=1)
-    start: date
-    end: date
+    assets: Annotated[
+        tuple[UppercaseSymbol, ...],
+        BeforeValidator(_parse_wire_array),
+        Field(min_length=1, max_length=1),
+    ]
+    start: WireDate
+    end: WireDate
     calendar: Literal["XNYS"]
     interval: Literal["1d"]
     timezone: Literal["America/New_York"]
@@ -120,9 +152,9 @@ class KronosParameters(FrozenModel):
         "NeoQuasar/Kronos-Tokenizer-2k",
         "NeoQuasar/Kronos-Tokenizer-base",
     ]
-    temperature: float = Field(gt=0)
+    temperature: float = Field(gt=0, le=5)
     top_p: float = Field(gt=0, le=1)
-    top_k: int = Field(ge=0)
+    top_k: int = Field(ge=0, le=1024)
     sample_count: int = Field(ge=1, le=100)
 
     @model_validator(mode="after")
@@ -150,7 +182,7 @@ class LastValueParameters(FrozenModel):
 
 
 class MovingAverageParameters(FrozenModel):
-    window: int = Field(ge=1)
+    window: int = Field(ge=2, le=512)
 
 
 class ExponentialSmoothingParameters(FrozenModel):
@@ -160,9 +192,13 @@ class ExponentialSmoothingParameters(FrozenModel):
 
 
 class GradientBoostedTreeParameters(FrozenModel):
-    lags: tuple[Annotated[int, Field(ge=1)], ...] = Field(min_length=1)
-    estimators: int = Field(ge=1)
-    max_depth: int = Field(ge=1)
+    lags: Annotated[
+        tuple[Annotated[int, Field(ge=1, le=512)], ...],
+        BeforeValidator(_parse_wire_array),
+        Field(min_length=1),
+    ]
+    estimators: int = Field(ge=10, le=5000)
+    max_depth: Annotated[int, Field(ge=1, le=64)] | None
     learning_rate: float = Field(gt=0, le=1)
 
     @field_validator("lags")
@@ -228,7 +264,7 @@ ModelDefinition = Annotated[
 
 class Training(FrozenModel):
     policy: Literal["zero_shot", "fit_per_origin"]
-    retraining_cadence: int = Field(ge=1)
+    retraining_cadence: int = Field(ge=1, le=2520)
 
 
 class Evaluation(FrozenModel):
@@ -237,7 +273,7 @@ class Evaluation(FrozenModel):
     step_bars: int = Field(ge=1)
     purge_bars: int = Field(ge=0)
     embargo_bars: int = Field(ge=0)
-    final_test_start: date
+    final_test_start: WireDate
 
 
 class Strategy(FrozenModel):
@@ -250,7 +286,7 @@ class Strategy(FrozenModel):
 class Execution(FrozenModel):
     signal_time: Literal["close"]
     execution_time: Literal["next_open"]
-    delay_bars: int = Field(ge=1)
+    delay_bars: int = Field(ge=1, le=20)
     commission_bps: float = Field(ge=0)
     slippage_bps: float = Field(ge=0)
 
@@ -263,14 +299,18 @@ class Benchmark(FrozenModel):
 class Statistics(FrozenModel):
     confidence_level: float = Field(ge=0.8, le=0.999)
     bootstrap_method: Literal["moving_block", "stationary"]
-    bootstrap_samples: int = Field(ge=200)
-    block_length: int = Field(ge=1)
+    bootstrap_samples: int = Field(ge=200, le=1_000_000)
+    block_length: int = Field(ge=1, le=512)
     multiple_testing: Literal["holm"]
     random_seed: int = Field(ge=0, le=2**32 - 1)
 
 
 class Reporting(FrozenModel):
-    formats: tuple[Literal["html", "pdf"], ...] = Field(min_length=1)
+    formats: Annotated[
+        tuple[Literal["html", "pdf"], ...],
+        BeforeValidator(_parse_wire_array),
+        Field(min_length=1),
+    ]
     include_lineage: Literal[True]
     include_limitations: Literal[True]
 
@@ -286,8 +326,16 @@ class ExperimentSpec(FrozenModel):
     hypothesis: LongText
     data: Data
     forecast: Forecast
-    features: tuple[FeatureName, ...] = Field(min_length=1)
-    models: tuple[ModelDefinition, ...] = Field(min_length=1)
+    features: Annotated[
+        tuple[FeatureName, ...],
+        BeforeValidator(_parse_wire_array),
+        Field(min_length=1),
+    ]
+    models: Annotated[
+        tuple[ModelDefinition, ...],
+        BeforeValidator(_parse_wire_array),
+        Field(min_length=1),
+    ]
     training: Training
     evaluation: Evaluation
     strategy: Strategy
@@ -323,6 +371,25 @@ class ExperimentSpec(FrozenModel):
                     model.name,
                 )
             seen_names.add(model.name)
+            if (
+                model.kind == "moving_average"
+                and model.parameters.window > self.forecast.context_window
+            ):
+                _raise_semantic(
+                    self.__class__.__name__,
+                    ("models", index, "parameters", "window"),
+                    "moving_average window must not exceed forecast.context_window",
+                    model.parameters.window,
+                )
+            if model.kind == "gradient_boosted_tree":
+                for lag_index, lag in enumerate(model.parameters.lags):
+                    if lag > self.forecast.context_window:
+                        _raise_semantic(
+                            self.__class__.__name__,
+                            ("models", index, "parameters", "lags", lag_index),
+                            "tree lag must not exceed forecast.context_window",
+                            lag,
+                        )
 
         if self.training.policy != "fit_per_origin":
             _raise_semantic(
@@ -353,6 +420,13 @@ class ExperimentSpec(FrozenModel):
                 self.__class__.__name__,
                 ("statistics", "block_length"),
                 "block_length must be at least forecast.horizon",
+                self.statistics.block_length,
+            )
+        if self.statistics.block_length > self.evaluation.initial_training_bars:
+            _raise_semantic(
+                self.__class__.__name__,
+                ("statistics", "block_length"),
+                "block_length must not exceed evaluation.initial_training_bars",
                 self.statistics.block_length,
             )
         if not self.data.start < self.evaluation.final_test_start <= self.data.end:
