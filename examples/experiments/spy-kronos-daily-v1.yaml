@@ -1,0 +1,118 @@
+schema_version: "1.0"
+metadata:
+  name: SPY Kronos daily comparison
+  description: >-
+    A leakage-controlled daily SPY forecast comparison between Kronos and five
+    reproducible baselines over a fixed post-cutoff evaluation period.
+  owner: openalpha-research
+  tags:
+    - spy
+    - kronos
+    - daily
+hypothesis: >-
+  Zero-shot Kronos forecasts improve risk-adjusted next-open trading performance
+  over predeclared baseline forecasts after realistic costs.
+data:
+  provider: yahoo
+  assets:
+    - SPY
+  start: "2024-07-01"
+  end: "2026-06-30"
+  calendar: XNYS
+  interval: 1d
+  timezone: America/New_York
+  adjusted: true
+  corporate_action_policy: provider_adjusted
+forecast:
+  context_window: 40
+  horizon: 5
+  target: log_return
+features:
+  - close_lags
+  - return_lags
+  - rolling_mean
+  - rolling_volatility
+  - calendar
+models:
+  - kind: kronos
+    name: kronos-mini
+    fit_policy: zero_shot
+    parameters:
+      checkpoint: NeoQuasar/Kronos-mini
+      tokenizer: NeoQuasar/Kronos-Tokenizer-2k
+      temperature: 1.0
+      top_p: 0.9
+      top_k: 20
+      sample_count: 20
+  - kind: random_walk
+    name: random-walk
+    fit_policy: fit_per_origin
+    parameters:
+      drift: false
+  - kind: last_value
+    name: last-value
+    fit_policy: fit_per_origin
+    parameters: {}
+  - kind: moving_average
+    name: moving-average-20
+    fit_policy: fit_per_origin
+    parameters:
+      window: 20
+  - kind: exponential_smoothing
+    name: exponential-smoothing
+    fit_policy: fit_per_origin
+    parameters:
+      trend: null
+      seasonal: null
+      seasonal_periods: null
+  - kind: gradient_boosted_tree
+    name: gradient-boosted-tree
+    fit_policy: fit_per_origin
+    parameters:
+      lags:
+        - 1
+        - 2
+        - 5
+        - 10
+        - 20
+      estimators: 200
+      max_depth: 3
+      learning_rate: 0.05
+training:
+  policy: fit_per_origin
+  retraining_cadence: 5
+evaluation:
+  protocol: rolling_origin
+  initial_training_bars: 252
+  step_bars: 5
+  purge_bars: 4
+  embargo_bars: 1
+  final_test_start: "2026-01-02"
+strategy:
+  kind: long_cash_threshold
+  threshold_bps: 15.0
+  neutral_zone_bps: 5.0
+  max_position_fraction: 0.9
+execution:
+  signal_time: close
+  execution_time: next_open
+  delay_bars: 1
+  commission_bps: 1.0
+  slippage_bps: 1.0
+benchmark:
+  kind: buy_and_hold
+  asset: SPY
+statistics:
+  confidence_level: 0.95
+  bootstrap_method: moving_block
+  bootstrap_samples: 1000
+  block_length: 10
+  multiple_testing: holm
+  random_seed: 20260728
+reporting:
+  formats:
+    - html
+    - pdf
+  include_lineage: true
+  include_limitations: true
+random_seed: 20260728
