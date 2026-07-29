@@ -1,2 +1,43 @@
 # Isolated feature worktrees
 .worktrees/
+
+# Local environments and secrets
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Python output and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Node output and caches
+node_modules/
+.npm/
+.next/
+coverage/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Downloaded model checkpoints
+checkpoints/
+*.ckpt
+*.safetensors
+
+# Generated research artifacts
+artifacts/
+reports/generated/
+benchmarks/results/

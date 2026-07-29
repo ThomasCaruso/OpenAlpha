@@ -1,0 +1,19 @@
+{
+  "name": "openalpha-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/web"],
+  "scripts": {
+    "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
+    "dev": "node -e \"console.error('dev is unavailable until the web application phase is implemented.'); process.exit(1)\"",
+    "test": "uv run pytest",
+    "demo": "node -e \"console.error('demo is unavailable until the demonstration phase is implemented.'); process.exit(1)\"",
+    "benchmark": "node -e \"console.error('benchmark is unavailable until the benchmark phase is implemented.'); process.exit(1)\"",
+    "report": "node -e \"console.error('report is unavailable until the reporting phase is implemented.'); process.exit(1)\"",
+    "lint": "uv run ruff check .",
+    "typecheck": "uv run pyright",
+    "security": "node -e \"console.error('security scanning is unavailable until the security tooling phase is implemented.'); process.exit(1)\"",
+    "reproduce": "node -e \"console.error('reproduce is unavailable until the reproducibility pipeline phase is implemented.'); process.exit(1)\""
+  }
+}
+

@@ -1,0 +1,20 @@
+[project]
+name = "openalpha-workspace"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[dependency-groups]
+dev = ["hypothesis>=6.0", "pyright>=1.1", "pytest>=8.0", "pytest-asyncio>=0.25", "ruff>=0.12"]
+
+[tool.uv.workspace]
+members = ["apps/api", "apps/worker", "packages/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ['.']
+testpaths = ["tests", "packages", "apps"]
+markers = ["slow: resource-intensive integration", "network: external network required", "kronos: official checkpoint inference"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
