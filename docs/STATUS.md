@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 ## Completed
 
@@ -14,10 +14,13 @@ Last updated: 2026-07-28
 - Established the reproducible Python/npm workspace, lock-enforced setup, environment verification, CI smoke workflow, and isolated feature worktree.
 - Implemented the v1 immutable experiment specification with strict typed model parameters, semantic finance validation, safe YAML/JSON loading, version gating, formal JSON Schema, canonical serialization, and stable SHA-256 experiment identity.
 - Added a valid post-cutoff SPY/Kronos example specification with no generated results.
+- Implemented atomic content-addressed artifact publication with portable path confinement, symlink/junction escape rejection, idempotent writes, conflict refusal, hash/size verification, and stable integrity errors.
+- Implemented immutable append-only run-state journals with validated lifecycle transitions, terminal-state enforcement, monotonic event time, and retry attempts that preserve prior history.
+- Implemented canonical completed-run manifests that require the full pre-report Phase 1 artifact inventory, verified JSON schema/media metadata, acyclic input lineage, matching experiment/Git/environment identity, and a non-failed methodology audit.
 
 ## Current work
 
-- Beginning content-addressed artifact storage, append-only run state, and completed-manifest integrity checks.
+- Beginning the validated daily-equity snapshot pipeline: provider contracts, normalization, quality findings, provenance, and deterministic Parquet artifacts.
 
 ## Blocked work
 
@@ -37,12 +40,13 @@ Environment constraints that affect execution:
 - Confirmed the public base checkpoint is 102.3M parameters with a 512-bar context and MIT metadata.
 - Confirmed MLflow's current local/server storage behavior and database-backed Registry requirement.
 - Confirmed current VectorBT is Apache 2.0 with Commons Clause and therefore unsuitable as OpenAlpha's mandatory authoritative engine.
-- Verified lock-enforced `uv sync --group dev` and `npm ci`.
-- Verified 163 experiment-spec tests and 15 workspace smoke tests: 178 total passing.
+- Verified lock-enforced `uv sync --locked --group dev` and `npm ci`.
+- Verified 163 experiment-spec tests, 15 workspace smoke tests, and 42 research-core tests: 220 total passing.
 - Verified Ruff reports no findings and Pyright reports zero errors or warnings.
 - Verified duplicate JSON/YAML keys, unsafe updates, non-finite values, invalid cross-field combinations, and externally invalid JSON Schema instances are rejected.
 - Verified the checked-in YAML and JSON round-trip to the same identity: `exp_8e72de5fcc485d3d512227f89f3d8e74e6f73bdfe6c90ddced158614d7ec6efb`.
 - Completed independent spec-compliance and code-quality reviews for Phase 1 Tasks 1 and 2 with no open Critical or Important findings.
+- Completed a production-readiness review for Phase 1 Task 3 and closed all Critical/Important findings before the final quality gate.
 
 ## Known limitations
 
@@ -50,10 +54,11 @@ Environment constraints that affect execution:
 - No checkpoint has yet been downloaded or timed on this CPU-only machine.
 - No application, API, worker, report, or user interface exists yet.
 - No financial result has been computed.
+- The research-core contracts are not yet wired into a real data/model run.
 - Kronos training-data provenance is incomplete: the released checkpoint does not include reconstructable source-data hashes or a training run manifest.
 - Any one-ETF result will remain exploratory and cannot establish broad alpha.
 - Pydantic's deprecated v1 `copy(update=...)` compatibility method remains a minor defense-in-depth follow-up; the supported `model_copy(update=...)` path is blocked.
 
 ## Exact next task
 
-Write failing tests for atomic content-addressed artifact publication, path confinement, hash verification, append-only run-state transitions, and refusal to publish a completed manifest with missing or mismatched artifacts.
+Write failing property and contract tests for daily adjusted OHLCV normalization, duplicate/missing-session findings, provider provenance, deterministic Parquet snapshots, and content-addressed snapshot manifests.

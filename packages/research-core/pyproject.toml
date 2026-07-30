@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openalpha-research-core"
+version = "0.1.0"
+description = "Auditable run lifecycle and content-addressed artifacts for OpenAlpha"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "pydantic>=2.11,<3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openalpha_research"]
