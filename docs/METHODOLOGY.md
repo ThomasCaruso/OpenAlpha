@@ -21,7 +21,7 @@ Protocol v1 remains unfrozen. The result is not a trading claim or scientific pu
 
 ## Forecast ensemble
 
-Real pinned Kronos-mini inference runs at context lengths 128, 256, and 512 under seeds 1729, 2027, and 7919. Every request uses temperature 1.0, top-p 0.9, and one generated path. The last-value baseline predicts a flat path and zero five-session return.
+Real pinned Kronos-mini inference runs at context lengths 128, 256, and 512 under seeds 1729, 2027, and 7919. Every request uses temperature 1.0, top-p 0.9, and one generated path. The canonical forecast is the timestamp-wise arithmetic mean of only the three 512-context close paths; shorter contexts are stress tests. The raw last-value baseline predicts a flat path and zero five-session return.
 
 All nine forecasts and failures are persisted before outcome access.
 
@@ -33,10 +33,10 @@ Analogue outcomes and recent model errors must have resolved before the current 
 
 ## Targets
 
-- Continuous primary: absolute error of the median predicted five-session log return.
+- Continuous primary: absolute error of the canonical 512-context predicted raw five-session close-to-close log return.
 - Binary failure: error at or above the pooled development 75th percentile, with that threshold frozen for holdout.
 - Deployability: Kronos absolute error is strictly worse than the same-cutoff baseline.
-- Secondary: direction correctness, realized return magnitude, and adjusted-close path error.
+- Secondary: direction correctness, realized return magnitude, and raw-close path error.
 
 Profitability does not define v0 failure.
 

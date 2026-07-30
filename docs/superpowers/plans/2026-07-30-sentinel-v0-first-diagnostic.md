@@ -4,15 +4,15 @@
 
 **Goal:** Produce one real, auditable SPY forecast origin that proves the causal Alpaca-to-Kronos-to-diagnostics-to-outcome chain without starting the development sample.
 
-**Architecture:** Add one internal `openalpha-sentinel` package with typed v0-only boundaries and pure diagnostic functions. Reuse `LocalArtifactStore`, `RunStateJournal`, path confinement, and manifest verification. Forecast creation and outcome resolution are separate commands so the creation path cannot read the future outcome. Real Kronos runs from pinned official source and Hub revisions in a temporary cache outside Git; deterministic synthetic providers exist only in tests.
+**Architecture:** Add one internal `openalpha-sentinel` package with typed v0-only boundaries and pure diagnostic functions. Reuse `LocalArtifactStore`, `RunStateJournal`, path confinement, and manifest verification. Forecast creation and outcome resolution are separate commands so the creation path cannot read the future outcome. Real Kronos runs behind a typed subprocess boundary from pinned official source and Hub revisions in an isolated temporary cache/environment outside Git; deterministic synthetic providers exist only in tests.
 
-**Tech Stack:** Python 3.13, Pydantic 2, NumPy, pandas, SciPy, scikit-learn only where needed later, PyTorch and Hugging Face Hub for pinned Kronos feasibility, pytest, Ruff, Pyright, uv.
+**Tech Stack:** Python 3.13 for repository code, isolated Python 3.11 for inference if required, Pydantic 2, NumPy, pandas, SciPy, PyTorch, Hugging Face Hub, exchange-calendars, pytest, Ruff, Pyright, uv.
 
 ---
 
 ## Scope lock
 
-This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff `2024-07-05`, subject only to XNYS calendar confirmation and declared provider/data-quality failure. It uses the five-session outcome ending `2024-07-12`, context lengths 128/256/512, seeds 1729/2027/7919, `temperature=1.0`, `top_p=0.9`, and one generated path per request. It does not fit a Sentinel risk model, inspect the holdout, add a public SDK/API, or begin the chronological development sample.
+This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff `2024-07-05`, with XNYS forecast sessions 2024-07-08 through 2024-07-12. It uses raw SIP OHLCV, context lengths 128/256/512, seeds 1729/2027/7919, `temperature=1.0`, `top_p=0.9`, and `sample_count=1`. Only the three 512-context close paths form the canonical timestamp-wise arithmetic mean; shorter paths are stress tests. It does not fit a Sentinel risk model, emit an action, inspect the holdout, add a public SDK/API, or begin the chronological development sample.
 
 ## Task 1: Create the narrow internal package and v0 contracts
 
@@ -26,7 +26,7 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 - Test: `packages/sentinel/tests/test_contracts.py`
 - Modify: `pyproject.toml`
 
-- [ ] Write failing strict-model tests for ordered timezone-aware timestamps, one-to-one finite OHLCV rows, allowed context lengths, horizon 5, declared seeds, one path, checkpoint identity, typed failures, and the invariant that a success cannot also carry failure information.
+- [ ] Write failing strict-model tests for ordered timezone-aware timestamps, one-to-one finite raw OHLCV rows, allowed context lengths, horizon 5, declared seeds, one path, adjustment identity, checkpoint identity, typed failures, and the invariant that a success cannot also carry failure information.
 - [ ] Run `uv run pytest packages/sentinel/tests/test_contracts.py -q` and confirm failure because the package does not exist.
 - [ ] Implement frozen Pydantic models `OHLCVObservation`, `ForecastRequest`, `ForecastPath`, `ForecastSummary`, `ForecastFailure`, and `ForecastResponse`, plus a `ForecastProvider` protocol with `forecast(request) -> ForecastResponse`.
 - [ ] Keep provider identifiers internal and explicit. Do not expose the conceptual public `sentinel.forecast(...)` API.
@@ -55,11 +55,11 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 - Create: `packages/sentinel/tests/fixtures/alpaca_spy_daily.synthetic.json`
 - Create: `packages/sentinel/tests/test_market_data.py`
 
-- [ ] Write failing tests for environment-only credentials, fixed HTTPS host, explicit SIP/1Day/start/end/all/as-of fields, bounded pagination, ascending timestamps, duplicate/missing/nonfinite bar rejection, response hashing, and secret redaction.
+- [ ] Write failing tests for environment-only credentials, fixed HTTPS host, explicit SIP/1Day/start/end/raw/as-of fields, bounded pagination, ascending XNYS sessions, exact cutoff, duplicate/missing/nonfinite bar rejection, OHLC inequalities, nonnegative volume, response hashing, retrieval timestamps, and secret redaction.
 - [ ] Mark the fixture metadata `synthetic: true`; never represent it as empirical market data.
 - [ ] Implement a minimal HTTP-client port and `AlpacaHistoricalBarsProvider`. Keep raw bytes in memory only long enough to validate and SHA-256 hash, then return normalized observations plus provenance rather than raw response payloads.
 - [ ] Make missing credentials, SIP entitlement, HTTP failure, malformed payload, and page-limit exhaustion typed failures. Do not fall back to IEX, Yahoo, or another provider.
-- [ ] Implement a causal context constructor that returns only sessions at or before `2024-07-05` for creation, with at least 512 observations and a separate outcome request for the following five XNYS sessions.
+- [ ] Implement a causal context constructor that returns only raw OHLCV sessions at or before `2024-07-05` for creation, with at least 512 observations, no amount field, and a separate outcome request for exactly 2024-07-08/09/10/11/12.
 - [ ] Run the market-data tests, Ruff, and Pyright.
 
 ## Task 4: Make one pinned real Kronos path operational
@@ -68,15 +68,17 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 
 - Create: `packages/sentinel/src/openalpha_sentinel/providers/__init__.py`
 - Create: `packages/sentinel/src/openalpha_sentinel/providers/kronos.py`
+- Create: `scripts/kronos_inference_worker.py`
 - Create: `packages/sentinel/tests/test_kronos_provider.py`
 - Modify: `packages/sentinel/pyproject.toml`
 
-- [ ] Write unit tests around an injected predictor seam for shape conversion, OHLC requirement, optional volume handling, timestamp ordering, `sample_count=1`, seed application, evaluation mode, duration/provenance capture, empty-on-failure semantics, and no fake fallback.
+- [ ] Write unit tests around an injected predictor seam and typed JSON subprocess protocol for shape conversion, OHLCV input without amount, timestamp ordering, `sample_count=1`, seed application, evaluation mode, duration/provenance capture, empty-on-failure semantics, and no fake fallback.
 - [ ] Add a `network`/`kronos` marked real smoke test that is skipped unless explicit environment gates and an outside-Git cache path are supplied.
-- [ ] Load only the exact source revision `67b630e67f6a18c9e9be918d9b4337c960db1e9a`, model revision `f4e68697d9d5aed55cef5c96aabc3376bcad9f81`, and tokenizer revision `26966d0035065a0cae0ebad7af8ece35bc1fb51c`. Record downloaded file hashes, package versions, device, and cache size.
+- [ ] Create an isolated inference environment outside Git. Try the repository Python 3.13 runtime only when compatible; otherwise use Python 3.11 behind the same typed subprocess contract. Do not add a service, queue, database, container, or daemon.
+- [ ] Resolve and load only the exact source revision `67b630e67f6a18c9e9be918d9b4337c960db1e9a`, model revision `f4e68697d9d5aed55cef5c96aabc3376bcad9f81`, and tokenizer revision `26966d0035065a0cae0ebad7af8ece35bc1fb51c`. Record repository names, downloaded filenames and SHA-256 values, package versions, Python/PyTorch/OS/device identity, cache path, and total cache size.
 - [ ] Keep the source checkout and Hugging Face cache outside the repository. Use safe fixed-revision loading without `trust_remote_code`, and reject any unsafe serialized format or unexpected file.
-- [ ] Set Python, NumPy, and PyTorch seeds before each request; use evaluation/inference mode. Run the same seeded request twice and record whether output hashes reproduce.
-- [ ] Execute one 128-context, seed-1729, five-session SPY request. If the host cannot run it within the declared resource limits, document the exact failure and evaluate one documented ephemeral alternative; never substitute baseline or fake output.
+- [ ] Run a synthetic OHLCV shape-validation inference before any Alpaca request and prove the response maps to exactly five declared sessions.
+- [ ] Set Python, NumPy, PyTorch CPU, and applicable accelerator seeds before each request; use evaluation/inference mode. Probe A=512/1729, B=512/1729, C=512/2027, canonicalize every output, and record whether A/B hashes match and A/C ordinarily differ. Preserve mismatches without changing Kronos.
 
 ## Task 5: Build the nine-request ensemble and baseline
 
@@ -86,7 +88,7 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 - Create: `packages/sentinel/tests/test_ensemble.py`
 
 - [ ] Write failing tests that require the exact Cartesian product of three contexts and three seeds, reject duplicate/missing/extra combinations, preserve every request failure, and prohibit aggregation of an incomplete real ensemble.
-- [ ] Implement the last-value baseline, per-path five-session cumulative log return, direction, pointwise median path, median primary return, and context-level medians.
+- [ ] Implement the raw last-value baseline and all individual raw-close path returns. Construct the canonical point forecast by timestamp-wise arithmetic mean of only the three 512-context close paths; derive its return as `log(final averaged close / raw cutoff close)`. Use 128/256 paths only for diagnostics.
 - [ ] Ensure all output timestamps are the five expected XNYS sessions and every forecast derives from the same cutoff data identity.
 - [ ] Run ensemble tests, Ruff, and Pyright.
 
@@ -97,9 +99,9 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 - Create: `packages/sentinel/src/openalpha_sentinel/diagnostics.py`
 - Create: `packages/sentinel/tests/test_diagnostics.py`
 
-- [ ] Write table-driven synthetic tests for every formula locked in `docs/SENTINEL_METHODOLOGY.md`, including units, zero-volatility missingness, robust-z behavior, causal analogue eligibility, and horizon-divergence slope.
+- [ ] Write table-driven synthetic tests for every formula locked in `docs/SENTINEL_METHODOLOGY.md`, including units, zero-volatility missingness, robust-z behavior, causal analogue eligibility, non-overlapping-candidate selection, minimum support, and horizon-divergence slope.
 - [ ] Prove analogue candidates with unresolved or post-cutoff outcomes are excluded.
-- [ ] Prove `RECENT_MODEL_ERROR` is missing at the first origin because eight earlier resolved scheduled forecasts do not exist; do not synthesize history.
+- [ ] Prove `RECENT_MODEL_ERROR` is `not_computable/NO_PRIOR_RESOLVED_FORECASTS` and `UNCERTAINTY_MISCALIBRATION` is `not_computable/NO_PRIOR_CALIBRATION_SAMPLE`; never replace either with zero.
 - [ ] Return a fixed-order diagnostic vector with value, missingness, units, causal cutoff, and input hashes for every diagnostic.
 - [ ] Run diagnostic tests, Ruff, and Pyright.
 
@@ -115,7 +117,7 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 - [ ] Write failing tests proving canonical content-addressed publication, immutable forecast/diagnostic/decision payloads, append-only lifecycle hash linkage, path confinement, and refusal to resolve an outcome before the fifth following session exists.
 - [ ] Define v0 records for `FORECAST_CREATED`, `DIAGNOSTICS_COMPUTED`, and `OUTCOME_RESOLVED`; each carries its own hash and the previous event hash. Outcome data never appears in the creation-service input type.
 - [ ] Do not emit a Sentinel decision, failure probability, reliability score, action, or failure reason before the Phase 3 risk model is fitted and frozen. The only v0 action values remain USE, BLEND, and ABSTAIN.
-- [ ] Add a separate resolver that reads immutable forecast identities, retrieves only the required future sessions, computes realized return/error/direction/path error, and appends a new outcome record without changing the forecast.
+- [ ] Add a separate resolver that reads a sealed immutable forecast identity, retrieves exactly the five future XNYS sessions, computes raw realized log return, canonical 512-path error, direction, flat-baseline error, and path error, then appends a new outcome without changing the forecast.
 - [ ] Publish and verify a `SENTINEL_ORIGIN` completed manifest only after outcome resolution. Include Git, dependency lock, hardware, data/model/config identities, test evidence, and methodology warnings.
 - [ ] Run evidence/origin tests and the complete research-core suite.
 
@@ -128,7 +130,7 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 - Create: `packages/sentinel/tests/test_reporting.py`
 - Modify: `research/sentinel-v0/README.md`
 
-- [ ] Write a failing reporting test that requires cutoff/data identity, nine configurations and outcomes, primary forecast, baseline, all diagnostics/missingness, later realized result, errors, failures, runtime/cache details, artifact hashes, manifest verification, and explicit `DEVELOPMENT_FEASIBILITY_ONLY` language.
+- [ ] Write a failing reporting test that requires `DEVELOPMENT PROOF — NOT EMPIRICAL EVIDENCE`, cutoff/horizon, provider/feed/raw adjustment, model/tokenizer revisions, environment/device, probe result, nine individual returns, three 512 paths, canonical averaged path/return, context summaries, diagnostic availability, realized return, Kronos/baseline errors, direction result, closer model, runtime/latencies/cache, failures/retries, limitations, artifact hashes, and manifest verification.
 - [ ] Implement separate `create` and `resolve` subcommands in the internal script. `create` cannot import or call the outcome resolver; `resolve` requires the published creation record hash.
 - [ ] Render canonical JSON evidence and a human-readable Markdown audit from verified artifacts only. Store generated output under ignored `research/sentinel-v0/results/generated/` and `reports/generated/` paths.
 - [ ] Run `create` for SPY/2024-07-05 using the user's environment credentials and outside-Git cache, then run `resolve` for the five-session outcome ending 2024-07-12.
@@ -148,4 +150,4 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 
 ## Stop conditions
 
-Stop and document a blocker if real Alpaca SIP context is unavailable, the pinned Kronos source cannot be loaded safely, seed control cannot be established, `sample_count=1` does not expose an individual path, memory/runtime exceeds the locked feasibility limits, or real output would require a permanent expensive deployment. A deterministic provider may keep automated tests passing, but it is never admissible as completion of this plan.
+Stop and document a blocker if Alpaca credentials or SIP history are unavailable, 512 raw causal sessions cannot be retrieved, the pinned Kronos model/tokenizer cannot load, five output sessions cannot be mapped, outputs are non-finite, `sample_count=1` paths cannot be preserved, the forecast cannot be sealed before outcome access, memory/runtime is unreasonable, or real output would require a permanent deployment. A deterministic provider may keep automated tests passing, but it is never admissible as completion of this plan.

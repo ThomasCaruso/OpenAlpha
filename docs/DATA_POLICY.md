@@ -14,9 +14,11 @@ Every request records provider/adapter identity, symbols, SIP feed, 1Day timefra
 
 ## V0 representation
 
-Sentinel v0 uses `adjustment=all` daily bars for Kronos context, the last-value baseline, diagnostics, and return/path outcomes. This reduces mechanical discontinuities from supported splits, dividends, and spin-offs but represents a modern revised provider view.
+Sentinel v0 uses `adjustment=raw` daily OHLCV bars for Kronos context, the last-value baseline, diagnostics, and return/path outcomes. The primary realized return is `log(raw close after five XNYS sessions / raw cutoff close)`.
 
-V0 has no trading simulation and therefore requests no raw execution-price view. A later economic experiment must reintroduce separately hashed raw prices and explicit corporate-action accounting.
+This choice avoids assuming that a currently requested split-, dividend-, and spin-off-adjusted history is identical to what was available at the historical cutoff. It also excludes dividend return and may expose split or other corporate-action discontinuities. V0 records those limitations and does not build a corporate-action engine.
+
+V0 has no trading simulation. A later economic experiment would require explicit dividend and corporate-action accounting under a separately amended design.
 
 Daily timestamps are normalized to XNYS sessions while preserving provider UTC timestamps. `asof` controls symbol mapping; it is not a guarantee that today's historical response matches the vintage available at the historical cutoff.
 

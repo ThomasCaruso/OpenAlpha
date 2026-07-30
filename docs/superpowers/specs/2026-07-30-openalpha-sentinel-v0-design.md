@@ -37,7 +37,7 @@ A preflight artifact freezes the exact ordered origin list before any diagnostic
 
 ### Market data boundary
 
-The existing provider-independent request contract remains. Alpaca is the first adapter, with explicit SIP, 1Day, start/end, adjustment=all, cutoff-date as-of mapping, pagination, and environment credentials. Raw responses are hashed then discarded for v0.
+The existing provider-independent request contract remains. Alpaca is the first adapter, with explicit SIP, 1Day, start/end, `adjustment=raw`, cutoff-date as-of mapping, pagination, and environment credentials. Raw responses are hashed then discarded for v0. The raw close-to-close target avoids revised adjusted-history assumptions while explicitly omitting dividend return; no corporate-action engine is added.
 
 ### Forecast provider
 
@@ -47,7 +47,7 @@ Kronos-mini is pinned to official source/model/tokenizer revisions. With no docu
 
 ### Ensemble and baseline
 
-Context lengths 128, 256, and 512 are crossed with seeds 1729, 2027, and 7919 at temperature 1.0, top-p 0.9, and one path per request. The primary forecast is the pointwise median. The baseline repeats the cutoff adjusted close and predicts zero return.
+Context lengths 128, 256, and 512 are crossed with seeds 1729, 2027, and 7919 at temperature 1.0, top-p 0.9, and one path per request. The primary forecast is the timestamp-wise arithmetic mean of the three 512-context close paths. The six shorter-context paths are stress tests only. The baseline repeats the cutoff raw close and predicts zero return.
 
 ### Diagnostics
 

@@ -66,6 +66,16 @@ These are Phase 2 feasibility questions, not permission to substitute fake outpu
 - No model weights have been downloaded into Git or the worktree.
 - No real Kronos forecast, Sentinel diagnostic, outcome, risk model, holdout result, or empirical Sentinel claim exists.
 
+## Phase 2 pre-execution amendment
+
+Before any Alpaca request, model download, or Kronos inference, Sentinel v0 was amended to use raw SIP OHLCV and raw five-session close-to-close log return. Only the three 512-context paths now form the canonical timestamp-wise averaged close path; 128/256-context paths are stress tests only.
+
+- Previous experiment SHA-256: `c6459409e6b750217b4e81d09d461dc4b8cf303746d3efdcc8de80762e5a763c`.
+- Amended experiment SHA-256: `261e4bac51b9b3d6b68b6cf0128d406ca63cbf4bcd9735ccbda1aa04d1fa761a`.
+- Exact field changes and rationale: `research/sentinel-v0/amendments/2026-07-30-raw-bars-and-canonical-forecast.md`.
+- Dividend omission and possible raw corporate-action discontinuities are known limitations; no corporate-action engine is in scope.
+- No Phase 2 action is emitted.
+
 ## Verification evidence
 
 Fresh Phase 1 verification on 2026-07-30:
@@ -80,6 +90,17 @@ Fresh Phase 1 verification on 2026-07-30:
 
 These gates verify the preserved code and the Phase 1 document/configuration lock. They do not constitute real-data, real-inference, or empirical Sentinel evidence.
 
+Pre-execution amendment verification on 2026-07-30:
+
+- `uv run pytest -q` — exit 0; 220 passed in 3.04 seconds.
+- `uv run ruff check .` — exit 0; all checks passed.
+- `uv run pyright packages/research-core packages/experiment-spec` — exit 0; 0 errors, 0 warnings, 0 informations.
+- `git diff --check` — exit 0.
+- Exact amendment contract assertions — exit 0.
+- `experiment.sha256` byte check — exit 0; `261e4bac51b9b3d6b68b6cf0128d406ca63cbf4bcd9735ccbda1aa04d1fa761a`.
+
+No external request or inference was made while producing or verifying this amendment.
+
 ## Exact next task
 
-Implement the minimal `ForecastProvider` and causal market-context contracts test-first, then execute one real pinned Kronos-mini SPY cutoff through the nine-path ensemble, persisted diagnostic vector, separately resolved outcome, error calculation, human-readable audit record, and verified manifest. Do not manufacture a Sentinel action before the Phase 3 risk-model freeze; stop on unreasonable real-inference infrastructure.
+Implement the minimal `ForecastProvider` and causal raw-market-context contracts test-first, validate a synthetic five-session inference shape, then run the 512/1729 replay probe and one real SPY 2024-07-05 nine-path origin. Seal the three-path 512-context canonical mean and diagnostics before separately resolving 2024-07-08 through 2024-07-12. Do not emit an action or begin the development sample; stop on any declared data, model, sealing, or infrastructure blocker.

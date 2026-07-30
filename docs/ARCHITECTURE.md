@@ -27,7 +27,7 @@ Phase 1 creates no `sentinel` package. When Phase 2 begins, the package contains
 ```text
 experiment.yaml
   -> exact weekly origin list
-  -> development: causal context -> forecasts -> diagnostics -> later outcome
+  -> development: causal raw context -> nine paths -> 512-path mean -> diagnostics -> later outcome
   -> frozen development risk model and action policy
   -> holdout: causal context -> forecasts -> diagnostics -> decision
   -> later holdout outcome -> immutable error and postmortem

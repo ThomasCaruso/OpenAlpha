@@ -21,7 +21,7 @@ Every forecast and diagnostic vector is persisted before its five-session outcom
 | Untouched holdout | 2025-07-01 through 2026-06-30 |
 | Cutoff rule | Last valid XNYS session of each ISO week |
 | Expected sample | About 52 cutoffs per segment and 104 per asset |
-| Baseline | Last-value path; predicted five-session return is zero |
+| Baseline | Raw last-value path; predicted five-session return is zero |
 | Kronos checkpoint | `NeoQuasar/Kronos-mini` |
 | Context lengths | 128, 256, 512 sessions |
 | Sampling seeds | 1729, 2027, 7919 |
@@ -33,13 +33,13 @@ Development and holdout boundaries do not change after this commit. The prefligh
 
 ## Data boundary
 
-Sentinel v0 requests SPY and QQQ from Alpaca's documented historical-bars endpoint with explicit `feed=sip`, `timeframe=1Day`, inclusive start/end, `adjustment=all`, `asof=<cutoff date>`, ascending sort, and bounded pagination. There is no provider fallback.
+Sentinel v0 requests SPY and QQQ from Alpaca's documented historical-bars endpoint with explicit `feed=sip`, `timeframe=1Day`, inclusive start/end, `adjustment=raw`, `asof=<cutoff date>`, ascending sort, and bounded pagination. There is no provider fallback.
 
 The retrieval window begins 2022-06-01, providing more than 512 eligible daily observations before the first cutoff, and ends 2026-07-08, allowing five-session outcomes for the final weekly cutoff. Context constructors still enforce each forecast's own cutoff.
 
-Raw provider responses are held only for request validation and hashing, then discarded. Credentials never enter artifacts. Normalized OHLCV input may be retained in user-local content-addressed storage only when terms permit and only as required to reproduce a request; Git stores hashes, provenance, parameters, predictions, outcomes, and aggregate metrics.
+Raw provider responses are held only for request validation and hashing, then discarded. Credentials never enter artifacts. Normalized raw OHLCV input may be retained in user-local content-addressed storage only when terms permit and only as required to reproduce a request; Git stores hashes, provenance, parameters, predictions, outcomes, and aggregate metrics.
 
-Sentinel v0 performs no trading simulation, so it does not request a raw execution-price view.
+The primary outcome is the raw five-session close-to-close log return. This avoids treating a currently revised adjusted history as point-in-time truth, but it omits dividend return and can contain corporate-action discontinuities. Sentinel v0 does not add a corporate-action engine or make trading-return claims.
 
 ## Real Kronos inference boundary
 
@@ -118,7 +118,11 @@ A Sentinel decision is created only after Phase 3 has fitted and frozen the deve
 
 Each cutoff creates nine independent requests: three context lengths crossed with three seeds. Each request uses `sample_count=1` so the system receives one actual path instead of an average that hides sampling disagreement. No temperature/top-p sensitivity branch is included in v0.
 
-The primary Kronos forecast is the pointwise median of the nine paths. The primary predicted return is the median of the nine five-session cumulative log returns. Context summaries are medians across the three seeds at each context length.
+Only the three 512-context paths define the canonical Kronos forecast. Their predicted raw close values are averaged timestamp by timestamp. The canonical predicted return is `log(final averaged predicted close / final observed raw close at cutoff)`. Each individual 512 path remains an immutable artifact.
+
+The six 128- and 256-context paths are stress-test evidence only. They contribute to sampling and context diagnostics but never to the canonical point forecast. For context comparisons, each context-level summary is the return implied by the timestamp-wise arithmetic mean of its three seeded close paths.
+
+Before the official nine paths, Phase 2 runs 512/1729 twice and 512/2027 once. Python, NumPy, PyTorch CPU, and applicable accelerator RNGs reset before every call. Canonical output hashes determine whether exact seeded replay is supported; a mismatch is preserved and reported, never hidden by modifying Kronos.
 
 ## Pre-outcome diagnostics
 
@@ -128,18 +132,20 @@ Let `r[i]` be path `i`'s five-session cumulative log return and `r[i,s]` its cum
 2. **RETURN_DISPERSION:** sample standard deviation of `r[i]`, reported in basis points.
 3. **PATH_DISPERSION:** mean across steps 1–5 of the cross-path standard deviation of `r[i,s]`, divided by trailing 20-session daily volatility times `sqrt(s)`; a zero volatility denominator is an explicit missing value.
 4. **CONTEXT_DIRECTION_AGREEMENT:** modal share of the three context-level median-return signs.
-5. **CONTEXT_RETURN_SPREAD:** absolute difference in basis points between the 128- and 512-context median returns.
-6. **BASELINE_DISAGREEMENT:** absolute difference between the ensemble median return and the baseline's zero return.
+5. **CONTEXT_RETURN_SPREAD:** absolute difference in basis points between the 128- and 512-context summary returns.
+6. **BASELINE_DISAGREEMENT:** absolute difference between the canonical three-path 512-context return and the baseline's zero return.
 7. **RECENT_VOLATILITY:** annualized sample standard deviation of the last 20 daily log returns using `sqrt(252)`.
 8. **VOLATILITY_CHANGE:** absolute log-ratio of 20-session to 60-session realized volatility; zero denominators are missing.
 9. **TREND_STRENGTH:** absolute 20-session cumulative log return divided by the sum of absolute daily log returns over the same window, bounded to `[0, 1]`.
 10. **GAP_OR_OUTLIER_SCORE:** maximum absolute robust z-score among the last 20 close-to-close returns and open-versus-prior-close gaps, using the preceding 252 eligible sessions' median and MAD.
-11. **HISTORICAL_ANALOGUE_DISTANCE:** mean Euclidean distance, divided by `sqrt(20)`, to the ten nearest z-normalized 20-return windows whose five-session outcomes resolved before the cutoff.
+11. **HISTORICAL_ANALOGUE_DISTANCE:** mean Euclidean distance, divided by `sqrt(20)`, to ten eligible z-normalized 20-return windows whose five-session outcomes resolved before the cutoff.
 12. **ANALOGUE_OUTCOME_DISPERSION:** sample standard deviation of the resolved five-session returns following those ten nearest contexts.
 13. **RECENT_MODEL_ERROR:** mean absolute return error from the eight most recent resolved scheduled Kronos forecasts for the same asset; missing until eight exist.
 14. **HORIZON_PATH_DIVERGENCE:** ordinary least-squares slope of cross-path cumulative-return standard deviation against steps 1–5.
 
-Analogue search uses only data and outcomes available before the current cutoff. It never searches the holdout future or unresolved prior origins.
+Analogue search uses only data and outcomes available before the current cutoff. Candidate windows are normalized from their own causal values, ordered by distance, and greedily selected while excluding candidates whose input or outcome sessions overlap an already selected candidate. Both analogue diagnostics are `not_computable` unless ten candidates remain. The search never uses unresolved outcomes or holdout future.
+
+At the first origin, `RECENT_MODEL_ERROR` is `not_computable` with reason `NO_PRIOR_RESOLVED_FORECASTS`. `UNCERTAINTY_MISCALIBRATION` is separately reported as unavailable with reason `NO_PRIOR_CALIBRATION_SAMPLE`; neither is replaced with zero.
 
 Expected univariate associations with future absolute error are locked as follows: directional and context-direction agreement are negative; return/path dispersion, context spread, baseline disagreement, recent volatility, volatility change, gap/outlier score, analogue distance, analogue outcome dispersion, recent model error, and horizon path divergence are positive. Trend strength has no preregistered sign and is ineligible to satisfy S5 by itself. These signs are research expectations, not assumptions used to calculate the diagnostics.
 
@@ -149,14 +155,14 @@ The primary continuous target is:
 
 ```text
 absolute_return_error =
-    abs(median_predicted_5_session_log_return - realized_5_session_log_return)
+    abs(canonical_512_predicted_raw_log_return - realized_raw_log_return)
 ```
 
 The development failure threshold is the pooled 75th percentile of development absolute return errors. The binary label is `absolute_return_error >= frozen_development_threshold`. That numeric threshold is applied unchanged to holdout observations.
 
 The secondary deployability label is true when Kronos absolute return error is strictly greater than the last-value baseline absolute return error at the same cutoff. Ties are false.
 
-Each resolved outcome also records realized return magnitude, direction correctness, and mean absolute error of the median adjusted-close path. V0 never defines failure from trading profitability.
+Each resolved outcome also records realized return magnitude, direction correctness, and mean absolute error of the canonical averaged raw-close path. V0 never defines failure from trading profitability.
 
 ## Development discipline
 

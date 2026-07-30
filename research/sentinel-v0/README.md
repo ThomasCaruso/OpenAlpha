@@ -5,6 +5,8 @@ This directory contains the locked development-only configuration for testing wh
 ## Boundaries
 
 - `experiment.yaml` is the Phase 1 experiment lock.
+- `experiment.sha256` identifies the current amended experiment bytes.
+- `amendments/` preserves the reason and hashes for pre-execution changes.
 - `results/` is for compact derived evaluation artifacts and their provenance.
 - `reports/` is for human-readable artifact-grounded reports.
 - Raw Alpaca responses, normalized restricted datasets, model weights, and Hugging Face caches remain outside Git.

@@ -1,8 +1,35 @@
-schema_version: "sentinel-v0.1"
+schema_version: "sentinel-v0.2"
 experiment_id: "openalpha-sentinel-v0"
-status: "phase_1_locked"
+status: "phase_2_amended_before_execution"
 locked_on: "2026-07-30"
 claim_scope: "development_feasibility_only"
+amendment:
+  amended_on: "2026-07-30"
+  supersedes_sha256: "c6459409e6b750217b4e81d09d461dc4b8cf303746d3efdcc8de80762e5a763c"
+  changed_fields:
+    - "schema_version"
+    - "status"
+    - "market_data.request.adjustment"
+    - "market_data.representation"
+    - "market_data.return_target"
+    - "market_data.corporate_action_policy"
+    - "ensemble.primary_path_aggregation"
+    - "ensemble.primary_return_aggregation"
+    - "ensemble.canonical_forecast"
+    - "ensemble.stress_test_paths"
+    - "ensemble.reproducibility_probe"
+    - "baseline.path_rule"
+    - "targets.continuous_primary"
+    - "targets.secondary"
+    - "action_policy.use.output"
+    - "phase_2_origin"
+    - "analogue_policy"
+    - "phase_2_diagnostic_availability"
+  methodological_reason: >-
+    Raw bars avoid assuming that a currently requested dividend-, split-, and
+    spin-off-adjusted history exactly represents information available at the
+    historical cutoff. The canonical forecast now isolates the declared
+    512-session inference context; shorter contexts are stress tests only.
 research_question: >-
   Can information available at forecast time predict the future error of a
   financial forecasting model, and can selective use, blending, or abstention
@@ -56,7 +83,7 @@ market_data:
     timeframe: "1Day"
     start: "2022-06-01"
     end: "2026-07-08"
-    adjustment: "all"
+    adjustment: "raw"
     asof_policy: "forecast_cutoff_date"
     sort: "asc"
     page_limit: 10000
@@ -65,6 +92,11 @@ market_data:
   raw_response_storage: "ephemeral_hash_then_discard"
   normalized_storage: "user_local_content_addressed_if_permitted"
   redistribution: "forbidden_without_documented_permission"
+  representation: "raw_ohlcv"
+  return_target: "raw_five_session_close_to_close_log_return"
+  corporate_action_policy: >-
+    No corporate-action engine in v0; raw bars are used as delivered and
+    dividend effects are recorded as a known return-target limitation.
 
 forecast_provider:
   contract_version: "sentinel-forecast-provider-v0"
@@ -104,13 +136,75 @@ ensemble:
   generated_paths_per_request: 1
   requests_per_cutoff: 9
   sensitivity_configuration: null
-  primary_path_aggregation: "pointwise_median"
-  primary_return_aggregation: "median"
+  primary_path_aggregation: "arithmetic_mean_of_three_512_context_close_paths"
+  primary_return_aggregation: >-
+    log(final_averaged_512_context_predicted_close /
+    final_observed_raw_close_at_cutoff)
+  canonical_forecast:
+    context_length: 512
+    sampling_seeds: [1729, 2027, 7919]
+    path_count: 3
+    close_path_aggregation: "timestamp_by_timestamp_arithmetic_mean"
+    individual_paths_preserved: true
+  stress_test_paths:
+    context_lengths: [128, 256]
+    sampling_seeds: [1729, 2027, 7919]
+    contribute_to_canonical_forecast: false
+  reproducibility_probe:
+    requests:
+      - {context_length: 512, sampling_seed: 1729, label: "A"}
+      - {context_length: 512, sampling_seed: 1729, label: "B"}
+      - {context_length: 512, sampling_seed: 2027, label: "C"}
+    reset_rngs_before_each_request:
+      - "python"
+      - "numpy"
+      - "torch_cpu"
+      - "torch_accelerators_if_applicable"
+    canonicalize_and_hash_each_output: true
+    expected_identical_pairs: [["A", "B"]]
+    expected_ordinary_difference_pairs: [["A", "C"]]
+    mismatch_policy: "preserve_outputs_and_mark_exact_replay_unsupported"
 
 baseline:
   identifier: "last-value-zero-return"
-  path_rule: "repeat_cutoff_adjusted_close_for_five_sessions"
+  path_rule: "repeat_cutoff_raw_close_for_five_sessions"
   predicted_return: 0.0
+
+phase_2_origin:
+  asset: "SPY"
+  forecast_cutoff: "2024-07-05"
+  forecast_sessions:
+    - "2024-07-08"
+    - "2024-07-09"
+    - "2024-07-10"
+    - "2024-07-11"
+    - "2024-07-12"
+  calendar: "XNYS"
+  input_fields: ["open", "high", "low", "close", "volume"]
+  amount_field: "forbidden"
+  action_emission: "forbidden_before_phase_3_risk_model_freeze"
+  report_label: "DEVELOPMENT PROOF — NOT EMPIRICAL EVIDENCE"
+
+analogue_policy:
+  context_returns: 20
+  nearest_count: 10
+  minimum_support: 10
+  normalization: "per_candidate_window_z_score_using_only_window_values"
+  candidate_outcome_must_resolve_before_cutoff: true
+  overlap_policy: >-
+    Greedily select by ascending distance and exclude candidates whose input or
+    five-session outcome sessions overlap a previously selected candidate.
+  insufficient_support_status: "not_computable"
+
+phase_2_diagnostic_availability:
+  RECENT_MODEL_ERROR:
+    status: "not_computable"
+    value: null
+    reason: "NO_PRIOR_RESOLVED_FORECASTS"
+  UNCERTAINTY_MISCALIBRATION:
+    status: "not_computable"
+    value: null
+    reason: "NO_PRIOR_CALIBRATION_SAMPLE"
 
 diagnostics:
   - "DIRECTIONAL_AGREEMENT"
@@ -145,7 +239,9 @@ expected_error_correlation_signs:
   HORIZON_PATH_DIVERGENCE: "positive"
 
 targets:
-  continuous_primary: "absolute_five_session_log_return_error"
+  continuous_primary: "absolute_raw_five_session_close_to_close_log_return_error"
+  realized_return_definition: >-
+    log(raw_close_on_2024-07-12 / raw_close_on_2024-07-05)
   failure_label:
     rule: "error_greater_than_or_equal_to_pooled_development_quantile"
     quantile: 0.75
@@ -154,7 +250,7 @@ targets:
   secondary:
     - "DIRECTION_CORRECT"
     - "REALIZED_RETURN_MAGNITUDE"
-    - "MEAN_ADJUSTED_CLOSE_PATH_ABSOLUTE_ERROR"
+    - "MEAN_RAW_CLOSE_PATH_ABSOLUTE_ERROR"
   trading_profitability_used: false
 
 risk_model:
@@ -185,7 +281,7 @@ action_policy:
   threshold_source: "development_risk_distribution"
   use:
     maximum_risk_quantile: 0.50
-    output: "kronos_median_forecast"
+    output: "kronos_mean_512_context_forecast"
   blend:
     minimum_risk_quantile_exclusive: 0.50
     maximum_risk_quantile: 0.80

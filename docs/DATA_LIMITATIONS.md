@@ -4,9 +4,9 @@
 
 Alpaca historical bars retrieved now may contain corrections, adjustments, and symbol mappings unavailable in identical form at a historical cutoff. `asof` addresses symbol identity, not complete point-in-time data vintage. Sentinel v0 therefore tests its method on a fixed retrieved historical representation, not a perfect reconstruction of the provider's past state.
 
-## Adjusted representation
+## Raw representation
 
-`adjustment=all` is appropriate for forecast returns but is provider-defined and revised. Sentinel v0 performs no execution simulation. Its results cannot support fill-price or trading-profit claims.
+`adjustment=raw` avoids presenting a modern adjusted series as exact point-in-time history. Raw close-to-close return omits distributions, can contain corporate-action discontinuities, and is not a total shareholder return. Sentinel v0 performs no corporate-action reconstruction or execution simulation, so its results cannot support dividend, fill-price, or trading-profit claims.
 
 ## Universe and sample
 

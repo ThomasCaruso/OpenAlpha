@@ -52,9 +52,9 @@ Acceptance:
 For one historical SPY cutoff:
 
 1. fetch one causal context through Alpaca;
-2. run the nine declared real Kronos requests;
+2. run the seed-reproducibility probe and nine declared real Kronos requests;
 3. generate the last-value baseline;
-4. publish forecasts before outcome access;
+4. average only the three 512-context close paths and publish every path before outcome access;
 5. compute and publish the diagnostic vector without inventing an unfitted Sentinel action;
 6. resolve the five-session outcome;
 7. append errors and a human-readable audit record;
