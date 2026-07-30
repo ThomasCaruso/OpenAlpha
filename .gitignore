@@ -36,8 +36,12 @@ coverage/
 checkpoints/
 *.ckpt
 *.safetensors
+.huggingface/
+sentinel-cache/
 
 # Generated research artifacts
 artifacts/
 reports/generated/
 benchmarks/results/
+research/sentinel-v0/results/generated/
+research/sentinel-v0/reports/generated/

@@ -1,64 +1,55 @@
-# OpenAlpha Data Policy
+# OpenAlpha Sentinel Data and Model-Artifact Policy
 
 ## Scope
 
-This policy governs market data used by Kronos Reality Check. Provider access is a research input with licensing, revision, feed, timestamp, and corporate-action limitations. A content hash proves identity, not correctness or redistribution rights.
+This policy governs market inputs and forecast-provider artifacts for Sentinel v0. Hashes prove byte identity, not data correctness, historical vintage, model validity, or redistribution rights.
 
-## Initial provider
+## Market-data provider
 
-Alpaca is the first supported US equity and ETF provider because its historical stock-bars endpoint is authenticated and officially documented. The provider-independent contract must permit another lawful provider without changing rolling-origin evaluation or model adapters.
+Alpaca remains the first US equity/ETF provider because its historical-bars endpoint is authenticated and documented. The provider-independent boundary allows a future lawful provider without changing diagnostics or evaluation.
 
-The fixed endpoint is `https://data.alpaca.markets/v2/stocks/bars`. Credentials are read only from `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY` and sent in the documented authentication headers. Missing, invalid, or insufficiently entitled credentials are explicit provider failures. There is no Yahoo adapter and no fallback provider.
+The fixed endpoint is `https://data.alpaca.markets/v2/stocks/bars`. Credentials come only from `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`. Missing credentials, SIP entitlement, invalid responses, and rate limits fail explicitly. There is no Yahoo adapter and no provider fallback.
 
-Every request declares and records:
+Every request records provider/adapter identity, symbols, SIP feed, 1Day timeframe, inclusive start/end, adjustment, cutoff-date `asof`, ascending sort, bounded pagination, retrieval time, and request/response hashes.
 
-- provider and adapter version;
-- symbols;
-- `feed`;
-- `timeframe`;
-- inclusive `start` and `end`;
-- `adjustment`;
-- `asof`, including the difference between a date and `-`;
-- pagination tokens and retrieval timestamp;
-- response/request hashes without exposing credentials.
+## V0 representation
 
-The first protocol requests `feed=sip` and `timeframe=1Day`. Alpaca documents that SIP combines all US exchanges while IEX is a single-exchange feed. If the account cannot access the declared historical SIP request, the run fails; it must not silently use IEX.
+Sentinel v0 uses `adjustment=all` daily bars for Kronos context, the last-value baseline, diagnostics, and return/path outcomes. This reduces mechanical discontinuities from supported splits, dividends, and spin-offs but represents a modern revised provider view.
 
-## Representations and corporate actions
+V0 has no trading simulation and therefore requests no raw execution-price view. A later economic experiment must reintroduce separately hashed raw prices and explicit corporate-action accounting.
 
-The study stores two separately hashed views from separately declared requests:
+Daily timestamps are normalized to XNYS sessions while preserving provider UTC timestamps. `asof` controls symbol mapping; it is not a guarantee that today's historical response matches the vintage available at the historical cutoff.
 
-1. **Forecast-target view — `adjustment=all`.** Used for model inputs and return targets to reduce mechanical discontinuities from splits, cash dividends, and spin-offs. It is a revised, provider-adjusted representation and is not an executable price series.
-2. **Execution view — `adjustment=raw`.** Used for hypothetical next-bar reference prices and cost accounting. Corporate actions during a held position require explicit events or the experiment is invalid; adjusted forecast prices are never used as fills.
+## Storage
 
-The protocol records both hashes and prohibits joining rows across views without matching provider, feed, symbol, session, retrieval batch, and declared mapping. Volume semantics follow the requested adjustment and remain provider-defined.
+- Raw Alpaca response bytes are validated, hashed, and discarded.
+- Normalized input is retained only when legally permitted and necessary, inside the user-local confined content-addressed store.
+- Git contains request recipes, provenance, hashes, configurations, forecasts, diagnostics, outcomes, and derived aggregate metrics—not restricted raw bars.
+- Tests use purpose-built fixtures marked synthetic and inadmissible as empirical evidence.
 
-## Timestamp and as-of semantics
+## Model inference and weights
 
-Daily provider timestamps are normalized to named XNYS sessions while preserving the original UTC timestamp. `asof` controls symbol-entity mapping, not a full vintage snapshot of all historical corrections. Historical replay therefore cannot claim that a modern response is bit-for-bit identical to what the provider would have returned at the forecast date.
+The official Kronos-mini page currently reports no hosted Hugging Face Inference Provider. Sentinel v0 therefore uses a temporary local Hugging Face cache outside Git unless a documented ephemeral option proves simpler during the Phase 2 feasibility check.
 
-This unresolved point-in-time limitation is a methodology warning in replay and sealed-test reports. Live forecasts preserve the actual local snapshot obtained before prediction.
+The source, model, and tokenizer revisions are pinned in `research/sentinel-v0/experiment.yaml`. Downloaded file hashes, cache class, device, runtime, and failure information are recorded. Model weights, tokenizer weights, cache directories, and generated temporary deployments are never committed.
 
-## Storage and credentials
+No adapter may require arbitrary remote code, untrusted pickle/joblib loading, or a permanent paid deployment for v0. Real inference failures cannot be replaced with fake Kronos output.
 
-- API keys and secrets exist only in environment variables or an external secret store.
-- Secrets never enter URLs, logs, exceptions, manifests, fixtures, or Git.
-- Raw provider responses and normalized market snapshots are stored only in the user-local content-addressed artifact root, which is ignored by Git.
-- Tests use deterministic synthetic bars or purpose-built fixtures labeled `synthetic`.
-- Synthetic fixtures are never admissible research evidence.
-- Public reports may contain derived aggregate metrics and small non-reconstructive illustrations, not raw provider datasets.
+## Redistribution
 
-## Redistribution and access restrictions
+Alpaca states its API market data cannot be redistributed. Public reproducibility uses user-owned credentials, request metadata, hashes, code/configuration identity, and permitted derived aggregates. Any raw-data publication requires documented permission and a policy revision.
 
-Alpaca states that its API data may not be redistributed. OpenAlpha therefore does not commit or publish raw responses, Parquet snapshots, or a public data download. Reproduction requires the user’s own Alpaca credentials and compares locally computed snapshot hashes and declared query metadata. Any future redistribution requires documented written permission and a policy revision.
+Kronos source and released model/tokenizer pages state MIT licensing, but downstream publication still records exact source/model identities and license metadata.
 
-## Limitations shown in evidence
+## Reproducibility limitations
 
-Every data manifest and report discloses feed coverage, access plan, adjustment, retrieval time, missing sessions, corrections, stale/zero volume, timestamp normalization, symbol mapping, and the absence of a guaranteed point-in-time vintage. Provider data is supplied as-is and may be incomplete, delayed, corrected, or unavailable.
+A third party may reproduce code and request parameters yet receive corrected provider history, a changed access entitlement, or different hardware-dependent stochastic output. Sentinel records these limitations and never describes historical replay as a literal reconstruction of the information service available at the cutoff.
 
-## Official references
+## Primary sources
 
-- [Alpaca historical stock bars](https://docs.alpaca.markets/us/v1.4.2/reference/stockbars)
+- [Alpaca historical stock bars](https://docs.alpaca.markets/us/reference/stockbars)
 - [Alpaca Market Data FAQ](https://docs.alpaca.markets/us/docs/market-data-faq)
-- [Alpaca feed description](https://alpaca.markets/support/data-provider-alpaca)
 - [Alpaca redistribution policy](https://alpaca.markets/support/redistribute-alpaca-api)
+- [Official Kronos repository](https://github.com/shiyu-coder/Kronos)
+- [Kronos-mini model card](https://huggingface.co/NeoQuasar/Kronos-mini)
+- [Kronos-Tokenizer-2k model card](https://huggingface.co/NeoQuasar/Kronos-Tokenizer-2k)

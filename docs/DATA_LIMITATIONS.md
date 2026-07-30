@@ -1,53 +1,45 @@
-# Data Limitations
+# Sentinel v0 Data and Inference Limitations
 
-`docs/DATA_POLICY.md` is the governing access and storage policy. This document records limitations that must accompany every result.
+## Provider history
 
-## Provider and entitlement limits
+Alpaca historical bars retrieved now may contain corrections, adjustments, and symbol mappings unavailable in identical form at a historical cutoff. `asof` addresses symbol identity, not complete point-in-time data vintage. Sentinel v0 therefore tests its method on a fixed retrieved historical representation, not a perfect reconstruction of the provider's past state.
 
-Alpaca is the first supported US equity and ETF provider. Access requires user-supplied environment credentials and the requested feed entitlement. SIP and IEX do not have equivalent venue coverage; the initial protocol pins SIP and fails explicitly if it is unavailable. Rate limits, outages, schema changes, corrections, and entitlement changes can prevent exact refetching.
+## Adjusted representation
 
-Provider identity, feed, timeframe, start, end, adjustment, as-of behavior, retrieval timestamp, request identity, and response hash are recorded. A successful HTTP response is not accepted until schema, pagination, bounds, ordering, and quality checks pass.
+`adjustment=all` is appropriate for forecast returns but is provider-defined and revised. Sentinel v0 performs no execution simulation. Its results cannot support fill-price or trading-profit claims.
 
-## Modern-data and point-in-time limits
+## Universe and sample
 
-Historical bars retrieved today may include corrections, corporate-action adjustments, or symbol mappings that were not available in identical form at a historical forecast cutoff. Alpaca's `asof` parameter controls symbol mapping behavior; it does not prove complete historical-vintage reconstruction. Historical replay and sealed results disclose this residual limitation.
+SPY and QQQ are current, liquid ETFs with related US equity exposure. Two assets and roughly 104 weekly cutoffs per asset are enough for signal feasibility, not broad generalization. Weekly rows remain serially dependent and the two assets are correlated.
 
-## Paired representations
+## Kronos contamination and model scope
 
-The initial study requests two content-addressed views over the same sessions:
+Evaluation starts after the reported June 2024 pretraining boundary, reducing direct temporal overlap but not proving absence of related patterns or data. Kronos-mini may behave differently from larger Kronos checkpoints and other forecasting models.
 
-- `adjustment=all` for model inputs and return targets, so splits, dividends, and supported spin-offs do not masquerade as forecastable returns;
-- `adjustment=raw` for hypothetical next-bar execution prices, so fills are expressed in observed price units.
+## Stochastic inference
 
-This does not make daily OHLCV an execution tape. Corporate actions crossing a simulated holding period require an explicit accounting adjustment; ambiguous cases fail or are excluded under the locked protocol rather than silently repaired.
+Recorded seeds and settings improve auditability but may not guarantee bit-identical paths across PyTorch versions, devices, or kernels. The v0 question concerns diagnostic predictiveness under the recorded execution environment.
 
-## Timestamp and calendar limits
+## Analogue diagnostics
 
-Provider timestamps, XNYS session labels, market timezone, early closes, holidays, halts, and missing sessions are distinct concepts. Future returned rows are never used to infer the schedule available at a forecast cutoff. Normalization stores provider timestamps and canonical session identities.
+Historical analogue distance depends on a short, ETF-specific eligible history and one fixed normalization/distance rule. Nearest windows are descriptive support, not proof that regimes are causally equivalent.
 
-## Missing, stale, and revised observations
+## Recent-error availability
 
-Missing bars are not zeros and are not silently forward-filled. Quality artifacts distinguish expected closures, provider gaps, halts, unavailable fields, duplicates, zero-volume observations, stale runs, and insufficient context. Any repair creates a new derived snapshot and records its causal rule and lineage.
+`RECENT_MODEL_ERROR` is unavailable for the first eight scheduled resolved forecasts per asset. Development-fitted missingness handling preserves those rows, but early-period behavior may differ from mature live operation.
 
-## Universe and contamination limits
+## Failure labels
 
-The five current ETFs avoid historical constituent selection but do not remove fund-survival or asset-selection bias. Kronos checkpoint provenance does not expose row-level pretraining data; evaluation after June 2024 reduces direct temporal overlap but cannot prove the absence of related information or learned market structure.
+The worst-development-quartile label is relative to this dataset. It is not a universal definition of a bad forecast. The baseline-relative label depends on a deliberately simple zero-return baseline.
 
-## Execution limits
+## Events and omitted information
 
-Daily bars do not reveal spread paths, auction mechanics, queue position, market impact, partial fills, or intrabar event order. Economic results are hypothetical, use a locked next-bar convention and fixed costs, and are not live-brokerage performance.
+News, earnings, filings, macro releases, and unscheduled events are excluded. Sentinel v0 cannot conclude that market/model-output diagnostics capture exogenous-event risk.
 
-## Storage and redistribution
+## Holdout and multiplicity
 
-Raw provider requests and responses remain local, outside Git and public artifacts. Alpaca states that its API market data may not be redistributed. Public reproducibility therefore uses request recipes, normalized-schema descriptions, content hashes, code and protocol hashes, and permitted derived aggregates; another researcher must fetch their own licensed copy.
+The later year is untouched for configuration, but many diagnostics and outputs remain a multiple-comparison risk. Continuation uses the locked aggregate criteria rather than selecting a favorable chart or asset.
 
-## Reviewer checklist
+## Storage and reproducibility
 
-A valid data-quality artifact answers:
-
-1. Which provider, endpoint, feed, entitlement, and retrieval time produced the data?
-2. Which explicit request and raw response hashes identify the source bytes?
-3. Which timestamp, calendar, adjustment, as-of, and corporate-action semantics apply?
-4. Which rows or fields were missing, stale, duplicated, transformed, repaired, or excluded?
-5. Which point-in-time, survivorship, contamination, and execution guarantees remain absent?
-6. May the raw or derived output be redistributed?
+Raw data and model caches are not committed. Reproduction requires provider credentials, network availability, exact pinned code/model identities, and sufficient local resources. Hashing proves which artifacts were used, not that their sources were correct.

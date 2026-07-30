@@ -1,86 +1,93 @@
-# OpenAlpha Architecture
+# OpenAlpha Sentinel Architecture
 
 ## Position
 
-OpenAlpha is a CLI-first evidence kernel organized as a modular Python monorepo. Its primary object is an immutable forecast linked to a locked protocol, causal data snapshot, model configuration, later outcome, comparison metrics, and reproducibility manifest.
+OpenAlpha is a local, evidence-first Python research repository. Sentinel v0 adds no service topology. Its primary object is a pre-outcome reliability decision linked to causal data, an ensemble forecast, diagnostics, a later outcome, and verified provenance.
 
-The initial release has no required API, worker, MLflow service, database server, or web application. Those transports may be added only after the real forecast-to-outcome path works through the CLI.
+No frontend, API server, worker, database, MLflow service, or public SDK is required.
 
-## Preserved and planned packages
+## Repository shape
 
 ```text
 packages/
-  experiment-spec/      # preserved v1 execution-spec contracts
-  research-core/        # preserved artifacts, manifests, run journals
-  reality-check/        # protocol, provider/model ports, ledger, evaluation, CLI
+  experiment-spec/      # preserved execution-spec prototype
+  research-core/        # preserved artifact, journal, and manifest infrastructure
+  sentinel/             # Phase 2 only: one narrow internal package
 research/
-  protocol/             # human and machine v1 protocol plus SHA-256 lock
-  reports/              # generated local reports; raw provider data excluded
+  sentinel-v0/
+    experiment.yaml     # fixed v0 experiment choices
+    results/            # compact derived artifacts only
+    reports/            # artifact-grounded reports only
 ```
 
-The existing `experiment-spec` package is preserved as an execution-contract prototype. The new protocol schema is broader and evidence-focused; any reuse or migration is explicit. Modules inside `reality-check` keep protocol, data, models, ledger, evaluation, orchestration, and CLI boundaries distinct without multiplying packages before those boundaries need independent release cycles.
+Phase 1 creates no `sentinel` package. When Phase 2 begins, the package contains only focused modules for forecast-provider contracts, diagnostics, labels, risk scoring, actions, evaluation, reporting, and one orchestration service.
 
 ## Evidence flow
 
 ```text
-protocol YAML
-  -> validate + canonical hash
-  -> authenticated provider requests
-  -> adjusted target snapshot + raw execution snapshot
-  -> causal origin and context
-  -> real Kronos + baseline forecast artifacts
-  -> append forecast ledger records
-  -> later append outcome records
-  -> forecast/statistical/economic metrics
-  -> chain verification + completed-run manifest
-  -> CLI audit/reproduction
-  -> later scoreboard, audit page, and paper
+experiment.yaml
+  -> exact weekly origin list
+  -> development: causal context -> forecasts -> diagnostics -> later outcome
+  -> frozen development risk model and action policy
+  -> holdout: causal context -> forecasts -> diagnostics -> decision
+  -> later holdout outcome -> immutable error and postmortem
+  -> untouched holdout report
+  -> verified manifests and go/no-go decision
 ```
 
-The scorer accepts forecast IDs and outcome snapshots, not an unrestricted full dataset. Historical runners persist each forecast before obtaining the target slice. Live runners cannot resolve an outcome before its expected evaluation time.
+Outcome data is inaccessible to the forecast/diagnostic operation. A separate resolver receives forecast identities after their artifacts are durably published. Development origins have no Sentinel action because no frozen risk model exists yet. Holdout decisions use only the frozen development configuration and are published before resolution.
 
-## Core contracts
+## Minimal internal boundaries
 
-### Research protocol
+### Market data
 
-A frozen, extra-forbid model locks hypotheses, universe, data requests and representations, periods, evidence classes, horizons, targets, models, metrics, statistical family, strategy/costs, success/failure criteria, exclusions, missing/corporate-action policies, and seeds. Canonical UTF-8 JSON produces the protocol hash. A published version is never updated in place.
+The provider-independent historical-bars request remains unchanged in principle: symbols, feed, timeframe, start, end, adjustment, as-of behavior, sort, and pagination are explicit. Alpaca is the first adapter; credentials are environment-only and no fallback exists.
 
-### Market data provider
+### Forecast provider
 
-`MarketDataProvider.fetch_historical_bars(request)` accepts a provider-independent request with symbols, feed, timeframe, start, end, adjustment, as-of behavior, page limit, and sort. `AlpacaHistoricalBarsProvider` alone knows headers and the fixed Alpaca URL. It obtains credentials from the environment, paginates with bounds and cycle detection, redacts failures, and records feed/adjustment/retrieval metadata. No provider fallback exists.
+The v0 port accepts model/checkpoint/source identity, ordered OHLCV, context length, horizon, seed, temperature, top-p, path count, and request metadata. It returns paths, summary, duration, provider/checkpoint/request identity, and typed failure.
 
-### Data snapshots
+Kronos uses a pinned temporary cache outside Git. A deterministic provider is test-only.
 
-Raw bytes, normalized tables, quality findings, and manifests are separate content-addressed artifacts stored outside Git. Forecast-target and execution views never share an ambiguous hash. Sessions use XNYS labels while retaining original provider timestamps.
+### Diagnostics
 
-### Model adapters
+Pure functions consume causal context, the nine forecast paths, the baseline, eligible prior contexts, and only previously resolved model errors. They emit fourteen named values and missingness evidence.
 
-One typed adapter contract records model/checkpoint/version/configuration, causal fit/context window, cutoff, horizon, runtime, hardware, seed, prediction, uncertainty capabilities, and artifact inputs. A failed model emits a failure record and cannot be silently replaced. Test-only adapters mark outputs as synthetic and inadmissible.
+### Labels and outcomes
 
-### Forecast ledger
+Outcome resolution computes five-session return error, development-frozen failure label, baseline-relative label, direction correctness, and path error. It appends; it never mutates the forecast or decision.
 
-Forecast and outcome are distinct immutable record types. Each record has a canonical payload hash and previous-record hash. An outcome references exactly one forecast; duplicate or premature resolution fails. Chain verification checks every payload, link, evidence class, protocol hash, and referenced artifact.
+### Risk and action
 
-### Evaluation and economic accounting
+Development-only preprocessing feeds logistic and ridge models. A frozen config converts failure probability to 0–100 reliability and USE/BLEND/ABSTAIN. Reasons are deterministic diagnostic mappings, never generated text.
 
-Rolling origins come from the declared XNYS calendar and enforce input cutoffs. Metrics distinguish returns, direction, magnitude/volatility, price, path, and interval behavior. Results always place Kronos beside baselines. The fixed strategy uses the declared threshold, next eligible raw bar, commissions, and slippage. Cash, buy-and-hold, and equivalent baseline signals use matching periods and costs.
+### Evaluation and reporting
 
-## Evidence classes
+The evaluator reports risk/error correlation, quintiles, coverage, direction, baseline, calibration, stability, diagnostic contribution, and runtime/cost. Reports read verified artifacts only.
 
-`historical_replay`, `sealed_historical_test`, and `live_precommitted_forecast` are non-interchangeable provenance. Aggregation keys include evidence class. A UI or report may compare classes but cannot pool them without an explicitly labeled analysis.
+## Preserved infrastructure mapping
 
-## Error and validity model
+- `LocalArtifactStore` publishes immutable request, forecast, diagnostic, decision, outcome, and report bytes.
+- `RunStateJournal` records the experiment attempt lifecycle.
+- Sentinel forecast/decision/outcome/postmortem events are new append-only payload artifacts; the existing journal is not rewritten into a forecast database.
+- `RunManifest` binds all compatible artifact kinds and provenance. Existing required artifact semantics remain until a failing compatibility test justifies an amendment.
+- Existing path confinement governs every artifact path.
 
-Typed failures cover protocol, credentials, provider entitlement/rate limits, data quality, causality, model capability/resource, forecast persistence, outcome timing, ledger integrity, statistics, accounting, artifact integrity, and infrastructure. Failures remain visible. A manifest publishes only after required artifacts and methodology status verify.
+## Error model
+
+Typed failures distinguish credentials, entitlement, provider response, data quality, insufficient history, model loading, inference resource, seed control, ensemble completeness, diagnostic availability, outcome timing, risk configuration, holdout mutation, artifact integrity, and report provenance.
+
+Failures remain in counts. No fake output silently replaces a real model failure.
 
 ## Security and storage
 
-- Fixed HTTPS provider hosts and bounded pagination prevent SSRF and unbounded fetches.
-- Secrets are environment-only and redacted from logs, artifacts, and exceptions.
-- Existing path confinement protects local datasets and reports.
-- Raw Alpaca data stays in ignored user-local artifact storage and is never redistributed.
-- Model files use pinned revisions/hashes and reviewed safe formats.
+- Fixed HTTPS hosts and bounded requests.
+- Secrets excluded from URLs, logs, artifacts, exceptions, and Git.
+- Raw market responses are hashed then discarded in v0.
+- Restricted normalized contexts, if retained, remain in the user-local confined store.
+- Checkpoints and Hugging Face caches remain outside Git.
+- No arbitrary remote code or pickle/joblib loading.
 
-## Deferred topology
+## Deferred architecture
 
-Live scheduling will eventually need durable execution, and the evidence application will need read APIs. Those systems call the same protocol, provider, ledger, evaluation, and manifest services used by the CLI; they do not redefine research semantics.
+A public `sentinel.forecast(...)` interface is a product hypothesis, not a v0 deliverable. Scheduling, services, databases, dashboards, additional models, and complex repair are considered only after the holdout decision.

@@ -4,62 +4,82 @@ Last updated: 2026-07-30
 
 ## Product direction
 
-OpenAlpha has pivoted to **Kronos Reality Check**, an evidence-first historical, sealed, and live evaluation of Kronos against simple baselines. The generalized quantitative-platform Phase 1 plan is stopped before any Yahoo adapter work and archived for history.
+OpenAlpha has made its second and final pivot to **OpenAlpha Sentinel**: a forecast-time reliability, failure-detection, and intervention layer. Kronos is the first forecast provider and case study.
+
+Benchmarking remains necessary for errors, labels, baselines, and evaluation. It is no longer the product.
 
 ## Preserved completed work
 
-- Commit `c037bd5efafd728cb4e0df961dd6a93889b0ce56` is preserved.
-- Reproducible Python/npm workspace and lock enforcement.
-- Immutable experiment-spec prototype with canonical identity.
-- Content-addressed artifact publication, path confinement, symlink/junction defenses, hash/size/media/schema verification, and acyclic lineage.
-- Immutable run-state journals and retry history.
-- Completed-run manifests with methodology, Git, environment, and artifact verification.
-- 220 passing tests at the preserved checkpoint, Ruff clean, and Pyright at zero errors/warnings.
+- `c037bd5efafd728cb4e0df961dd6a93889b0ce56` is preserved.
+- `27f0c69d73e2de678300c44a7899de4295a310c5` is preserved.
+- Content-addressed artifacts, path confinement, immutable run journals, verified manifests, and artifact verification remain unchanged.
+- Existing tests, Ruff, and Pyright configuration remain unchanged.
+- The provider-independent market-data boundary remains.
+- Alpaca remains the first documented provider; no Yahoo adapter or silent fallback exists.
 
-## Pivot decisions completed in this worktree
+## Sentinel Phase 1
 
-- Added `docs/PIVOT.md` with the rejected scope, new question, preserved infrastructure, evidence classes, non-goals, and value definition.
-- Replaced the governing master plan, architecture, and methodology with CLI-first evidence-product documents.
-- Added `docs/DATA_POLICY.md`.
-- Removed Yahoo’s undocumented endpoint from all active plans.
-- Selected an authenticated provider-independent boundary with Alpaca as the first adapter and no fallback.
-- Declared SIP daily requests, explicit adjustment/as-of fields, environment credentials, local-only raw data, and no redistribution.
-- Archived the superseded generalized Phase 1 plan.
-- Added ADRs for the evidence product, Alpaca boundary, and CLI-first proof slice.
+The worktree now defines:
 
-## Current work
+- final direction and value test;
+- controlled failure-reason taxonomy;
+- exact Sentinel v0 methodology;
+- development period 2024-07-01 through 2025-06-30;
+- untouched holdout 2025-07-01 through 2026-06-30;
+- weekly SPY/QQQ five-session experiment;
+- nine-path Kronos ensemble and zero-return baseline;
+- fourteen diagnostics;
+- continuous error, worst-development-quartile failure, and baseline-relative labels;
+- logistic/ridge risk configuration;
+- USE, 50/50 BLEND, and ABSTAIN policy;
+- required evaluation outputs and numeric continuation rules;
+- minimal internal provider/decision contracts;
+- research workspace and experiment YAML;
+- archived unimplemented Kronos Reality Check plan and design.
 
-The replacement test-first implementation plan is written for one real SPY forecast/outcome proof slice before any dashboard or service work. No proof-slice implementation has begun.
+No Sentinel package or experiment implementation has begun.
 
-## Pivot-planning verification
+## Verified provider and model facts
 
-Verified on 2026-07-30 from this worktree:
-
-- `uv sync --locked --group dev`: exit 0, 26 packages resolved and 25 checked;
-- `uv run pytest -q`: 220 passed;
-- `uv run ruff check .`: all checks passed;
-- `uv run pyright packages/research-core packages/experiment-spec`: 0 errors, 0 warnings, 0 informations;
-- `git diff --check`: no whitespace errors;
-- active-plan scans: 13 sequential tasks, no placeholder phrases, and no active Yahoo/no-key provider configuration.
-
-## Verified provider facts
-
-- Alpaca documents `https://data.alpaca.markets/v2/stocks/bars` with explicit symbols, timeframe, start, end, adjustment, as-of, feed, pagination, and sort fields.
-- Authentication uses `APCA-API-KEY-ID` and `APCA-API-SECRET-KEY` headers sourced from `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY` environment variables.
-- SIP and IEX have materially different coverage; the protocol must pin one and cannot accept a fallback.
+- Alpaca documents the historical endpoint, inclusive dates, daily timeframe, adjustment values, as-of mapping, SIP/IEX feed choices, pagination, authentication errors, and rate limits.
 - Alpaca states API market data cannot be redistributed.
+- The official Kronos-mini model card declares Kronos-Tokenizer-2k, time-series forecasting, MIT license, 4,108,192 parameters, and no deployed Hugging Face Inference Provider.
+- Current feasibility pins are source `67b630e67f6a18c9e9be918d9b4337c960db1e9a`, model `f4e68697d9d5aed55cef5c96aabc3376bcad9f81`, and tokenizer `26966d0035065a0cae0ebad7af8ece35bc1fb51c`.
+- Reported Hub storage is 16,440,776 model bytes plus 15,842,376 tokenizer bytes.
 
-## Known limitations and unresolved evidence
+## Unresolved real-inference questions
 
-- No Alpaca credentials are present or required for automated tests; no real provider request has run.
-- No raw market data is committed or publicly redistributable.
-- Protocol v1 is not yet frozen; candidate dates remain subject to availability and feasibility checks that do not inspect sealed performance.
-- January–June 2024 overlaps Kronos’s reported pretraining range and is replay-only, not clean sealed evidence.
-- No real Kronos checkpoint has been downloaded or timed on this CPU-only host.
-- No real forecast, outcome, metric, ledger chain, CLI proof slice, scoreboard, or report exists yet.
-- Modern adjusted bars do not provide a complete historical-vintage guarantee.
-- The existing experiment-spec contract is preserved but does not itself represent the new full research protocol.
+- Whether the pinned official source and PyTorch dependencies run correctly on this Python 3.13 Windows CPU host.
+- Whether seed control produces reproducible independent paths through the official predictor.
+- Whether `sample_count=1` exposes the raw path needed for disagreement diagnostics without hidden averaging.
+- Actual median and tail latency for nine requests at 128/256/512 contexts.
+- Exact downloaded file hashes and total transient cache footprint.
+- Whether the user's Alpaca account has historical SIP entitlement.
+- Whether a documented ephemeral hosted alternative is cheaper than local execution if the host is too slow.
+
+These are Phase 2 feasibility questions, not permission to substitute fake output.
+
+## Evidence status
+
+- Protocol v1 is unfrozen and its implementation task is paused.
+- No Alpaca request has run in this repository.
+- No model weights have been downloaded into Git or the worktree.
+- No real Kronos forecast, Sentinel diagnostic, outcome, risk model, holdout result, or empirical Sentinel claim exists.
+
+## Verification evidence
+
+Fresh Phase 1 verification on 2026-07-30:
+
+- `uv sync --locked --group dev` — exit 0; resolved 26 packages and checked 25 packages.
+- `uv run pytest -q` — exit 0; 220 passed in 2.84 seconds.
+- `uv run ruff check .` — exit 0; `All checks passed!`
+- `uv run pyright packages/research-core packages/experiment-spec` — exit 0; 0 errors, 0 warnings, 0 informations.
+- `git diff --check` — exit 0; Git emitted only working-copy CRLF-to-LF normalization notices for three amended ADR files.
+- Sentinel YAML lock assertion — exit 0; `sentinel experiment lock: valid`.
+- Active-document scope/encoding assertion — exit 0; 27 files valid.
+
+These gates verify the preserved code and the Phase 1 document/configuration lock. They do not constitute real-data, real-inference, or empirical Sentinel evidence.
 
 ## Exact next task
 
-Implement the versioned research-protocol schema test-first, including canonical bytes/hash, immutable v1 locking, evidence classes, five-asset universe, paired Alpaca data representations, candidate periods, three horizons, declared models/metrics/statistics/strategy, and explicit validation that no sealed period overlaps the reported Kronos pretraining cutoff.
+Implement the minimal `ForecastProvider` and causal market-context contracts test-first, then execute one real pinned Kronos-mini SPY cutoff through the nine-path ensemble, persisted diagnostic vector, separately resolved outcome, error calculation, human-readable audit record, and verified manifest. Do not manufacture a Sentinel action before the Phase 3 risk-model freeze; stop on unreasonable real-inference infrastructure.

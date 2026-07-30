@@ -1,6 +1,6 @@
 # ADR 0005: Pin Kronos and Evaluate After Its Pretraining Cutoff
 
-- Status: Accepted
+- Status: Amended by ADR 0010
 - Date: 2026-07-28
 
 ## Context
@@ -9,7 +9,7 @@ Kronos inference is stochastic, the official branch has changed since checkpoint
 
 ## Decision
 
-- Pin an reviewed official Kronos commit.
+- Pin a reviewed official Kronos commit.
 - Pin model/tokenizer Hugging Face revisions and SHA-256 hashes.
 - Set model/tokenizer to evaluation mode and record deterministic controls.
 - Validate all wrapper assumptions outside the upstream predictor.
@@ -17,7 +17,7 @@ Kronos inference is stochastic, the official branch has changed since checkpoint
 - Classify 2024-01-01 through 2024-06-30 as historical replay only, begin candidate sealed evaluation after 2024-06-30, and disclose residual contamination uncertainty.
 - Support CPU with explicit progress/resource diagnostics and never substitute a fake forecast.
 
-The official mini checkpoint may serve as the laptop real-inference path; base remains the flagship configured research checkpoint. Results always name the exact checkpoint.
+ADR 0010 fixes `NeoQuasar/Kronos-mini` as the only Sentinel v0 checkpoint because the immediate question is diagnostic feasibility under bounded local inference. Kronos-base is not a v0 flagship or fallback. Results always name the exact checkpoint.
 
 ## Consequences
 

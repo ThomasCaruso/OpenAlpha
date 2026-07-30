@@ -1,0 +1,260 @@
+schema_version: "sentinel-v0.1"
+experiment_id: "openalpha-sentinel-v0"
+status: "phase_1_locked"
+locked_on: "2026-07-30"
+claim_scope: "development_feasibility_only"
+research_question: >-
+  Can information available at forecast time predict the future error of a
+  financial forecasting model, and can selective use, blending, or abstention
+  outperform blindly accepting every forecast?
+
+universe:
+  assets: ["SPY", "QQQ"]
+  calendar: "XNYS"
+  frequency: "1Day"
+  horizon_sessions: 5
+
+periods:
+  development:
+    start: "2024-07-01"
+    end: "2025-06-30"
+  holdout:
+    start: "2025-07-01"
+    end: "2026-06-30"
+    status: "untouched_until_risk_model_freeze"
+
+cutoffs:
+  rule: "last_valid_xnys_session_of_each_iso_week"
+  boundary_policy: >-
+    Compute the final XNYS session of each complete ISO week first, then include
+    that cutoff only when the computed session falls inside the segment; never
+    create partial-week cutoffs at a segment boundary.
+  chronological: true
+  expected_per_segment_per_asset: 52
+  target_usable_per_asset:
+    minimum: 100
+    maximum: 200
+  exact_list_policy: >-
+    Materialize and content-address the exact ordered cutoff list before the
+    first diagnostic-model fit; retain exclusions and do not select replacement
+    dates after failures.
+  allowed_exclusions:
+    - "INSUFFICIENT_CAUSAL_HISTORY"
+    - "MISSING_FIVE_SESSION_OUTCOME"
+    - "PROVIDER_DATA_QUALITY_FAILURE"
+    - "REAL_INFERENCE_FAILURE"
+
+market_data:
+  provider: "alpaca"
+  endpoint: "https://data.alpaca.markets/v2/stocks/bars"
+  credentials:
+    key_id_env: "APCA_API_KEY_ID"
+    secret_key_env: "APCA_API_SECRET_KEY"
+  request:
+    symbols: ["SPY", "QQQ"]
+    feed: "sip"
+    timeframe: "1Day"
+    start: "2022-06-01"
+    end: "2026-07-08"
+    adjustment: "all"
+    asof_policy: "forecast_cutoff_date"
+    sort: "asc"
+    page_limit: 10000
+    maximum_pages: 20
+  fallback_provider: null
+  raw_response_storage: "ephemeral_hash_then_discard"
+  normalized_storage: "user_local_content_addressed_if_permitted"
+  redistribution: "forbidden_without_documented_permission"
+
+forecast_provider:
+  contract_version: "sentinel-forecast-provider-v0"
+  selected_mode: "temporary_local_huggingface_cache_outside_git"
+  selection_reason: >-
+    The official Kronos-mini model page reports no deployed Hugging Face
+    Inference Provider; a permanent custom endpoint is disproportionate before
+    signal discovery.
+  official_source:
+    repository: "https://github.com/shiyu-coder/Kronos"
+    revision: "67b630e67f6a18c9e9be918d9b4337c960db1e9a"
+  model:
+    identifier: "NeoQuasar/Kronos-mini"
+    revision: "f4e68697d9d5aed55cef5c96aabc3376bcad9f81"
+    reported_parameters: 4108192
+    reported_storage_bytes: 16440776
+  tokenizer:
+    identifier: "NeoQuasar/Kronos-Tokenizer-2k"
+    revision: "26966d0035065a0cae0ebad7af8ece35bc1fb51c"
+    reported_parameters: 3958259
+    reported_storage_bytes: 15842376
+  cache_must_be_outside_git: true
+  commit_weights: false
+  trust_remote_code: false
+  file_hashes: "resolve_and_record_before_first_real_forecast"
+  stop_conditions:
+    - "NO_REAL_KRONOS_OUTPUT"
+    - "UNREASONABLE_RUNTIME_OR_MEMORY"
+    - "UNCONTROLLED_SAMPLING_SEED"
+    - "UNSAFE_MODEL_LOADING_REQUIRED"
+
+ensemble:
+  context_lengths: [128, 256, 512]
+  sampling_seeds: [1729, 2027, 7919]
+  temperature: 1.0
+  top_p: 0.9
+  generated_paths_per_request: 1
+  requests_per_cutoff: 9
+  sensitivity_configuration: null
+  primary_path_aggregation: "pointwise_median"
+  primary_return_aggregation: "median"
+
+baseline:
+  identifier: "last-value-zero-return"
+  path_rule: "repeat_cutoff_adjusted_close_for_five_sessions"
+  predicted_return: 0.0
+
+diagnostics:
+  - "DIRECTIONAL_AGREEMENT"
+  - "RETURN_DISPERSION"
+  - "PATH_DISPERSION"
+  - "CONTEXT_DIRECTION_AGREEMENT"
+  - "CONTEXT_RETURN_SPREAD"
+  - "BASELINE_DISAGREEMENT"
+  - "RECENT_VOLATILITY"
+  - "VOLATILITY_CHANGE"
+  - "TREND_STRENGTH"
+  - "GAP_OR_OUTLIER_SCORE"
+  - "HISTORICAL_ANALOGUE_DISTANCE"
+  - "ANALOGUE_OUTCOME_DISPERSION"
+  - "RECENT_MODEL_ERROR"
+  - "HORIZON_PATH_DIVERGENCE"
+diagnostic_definition_source: "docs/SENTINEL_METHODOLOGY.md"
+expected_error_correlation_signs:
+  DIRECTIONAL_AGREEMENT: "negative"
+  RETURN_DISPERSION: "positive"
+  PATH_DISPERSION: "positive"
+  CONTEXT_DIRECTION_AGREEMENT: "negative"
+  CONTEXT_RETURN_SPREAD: "positive"
+  BASELINE_DISAGREEMENT: "positive"
+  RECENT_VOLATILITY: "positive"
+  VOLATILITY_CHANGE: "positive"
+  TREND_STRENGTH: null
+  GAP_OR_OUTLIER_SCORE: "positive"
+  HISTORICAL_ANALOGUE_DISTANCE: "positive"
+  ANALOGUE_OUTCOME_DISPERSION: "positive"
+  RECENT_MODEL_ERROR: "positive"
+  HORIZON_PATH_DIVERGENCE: "positive"
+
+targets:
+  continuous_primary: "absolute_five_session_log_return_error"
+  failure_label:
+    rule: "error_greater_than_or_equal_to_pooled_development_quantile"
+    quantile: 0.75
+    threshold_source: "development_only"
+  deployability_label: "kronos_absolute_error_strictly_greater_than_baseline"
+  secondary:
+    - "DIRECTION_CORRECT"
+    - "REALIZED_RETURN_MAGNITUDE"
+    - "MEAN_ADJUSTED_CLOSE_PATH_ABSOLUTE_ERROR"
+  trading_profitability_used: false
+
+risk_model:
+  primary:
+    kind: "l2_logistic_regression"
+    c_grid: [0.01, 0.1, 1.0, 10.0]
+    selection_metric: "mean_expanding_split_log_loss"
+  continuous_secondary:
+    kind: "ridge_regression"
+    alpha_grid: [0.1, 1.0, 10.0, 100.0]
+    selection_metric: "mean_expanding_split_mae"
+  folds:
+    kind: "expanding_time_series_split"
+    splits: 3
+    gap_weeks: 1
+    group_assets_by_cutoff: true
+  include_asset_identity: false
+  missingness:
+    drop_if_development_missing_fraction_above: 0.20
+    imputation: "development_median"
+    add_missing_indicator: true
+  redundancy:
+    absolute_spearman_threshold: 0.95
+    keep_rule: "more_directly_interpretable_diagnostic"
+  random_seed: 314159
+
+action_policy:
+  threshold_source: "development_risk_distribution"
+  use:
+    maximum_risk_quantile: 0.50
+    output: "kronos_median_forecast"
+  blend:
+    minimum_risk_quantile_exclusive: 0.50
+    maximum_risk_quantile: 0.80
+    kronos_weight: 0.50
+    baseline_weight: 0.50
+  abstain:
+    minimum_risk_quantile_exclusive: 0.80
+    output: null
+
+evaluation:
+  coverage_levels: [1.00, 0.90, 0.80, 0.70, 0.50]
+  required_outputs:
+    - "SPEARMAN_RISK_ERROR"
+    - "ERROR_BY_RISK_QUINTILE"
+    - "RISK_COVERAGE_CURVE"
+    - "ACCEPTED_FORECAST_MAE"
+    - "DIRECTIONAL_ACCURACY_BY_COVERAGE"
+    - "BASELINE_COMPARISON"
+    - "FAILURE_PROBABILITY_CALIBRATION"
+    - "FAILURE_CONFUSION_MATRIX"
+    - "PER_ASSET_AND_POOLED_RESULTS"
+    - "QUARTERLY_STABILITY"
+    - "DIAGNOSTIC_CONTRIBUTIONS"
+    - "RUNTIME_COST_AND_FAILURE_SUMMARY"
+  holdout_modification_allowed: false
+
+continuation:
+  signal_criteria:
+    s1_minimum_pooled_spearman: 0.20
+    s2_maximum_mae_ratio_at_70_percent_coverage: 0.90
+    s3_minimum_nondecreasing_adjacent_quintile_steps: 3
+    s3_highest_quintile_must_exceed_lowest: true
+    s4_each_asset_spearman_must_be_positive: true
+    s4_each_asset_70_percent_mae_must_not_exceed_full_mae: true
+    s5_minimum_supported_diagnostic_absolute_spearman: 0.15
+  feasibility_criterion:
+    minimum_real_request_success_rate: 0.95
+    maximum_median_ensemble_latency_seconds: 600
+    maximum_cache_bytes: 2147483648
+    maximum_hosted_equivalent_cost_usd_per_cutoff: 0.50
+  decision_rule_source: "docs/SENTINEL_METHODOLOGY.md"
+
+reason_taxonomy: "docs/SENTINEL_FAILURE_TAXONOMY.md"
+
+artifact_policy:
+  reuse_openalpha_research_core: true
+  content_address:
+    - "FORECAST_REQUEST"
+    - "FORECAST_RESPONSE"
+    - "DIAGNOSTIC_VECTOR"
+    - "SENTINEL_DECISION"
+    - "RESOLVED_OUTCOME"
+    - "EVALUATION_REPORT"
+  append_lifecycle:
+    - "FORECAST_CREATED"
+    - "DIAGNOSTICS_COMPUTED"
+    - "SENTINEL_DECIDED"
+    - "OUTCOME_RESOLVED"
+    - "POSTMORTEM_CLASSIFIED"
+  raw_market_data_in_git: false
+  model_weights_in_git: false
+
+non_goals:
+  - "PUBLIC_SDK_OR_API"
+  - "FRONTEND"
+  - "DATABASE"
+  - "TRADING_OR_PORTFOLIO_SIMULATION"
+  - "NEWS_FILINGS_OR_MACRO_EVENTS"
+  - "MODEL_FINETUNING"
+  - "COMPLEX_FORECAST_REPAIR"
+  - "UNIVERSAL_PROTOCOL_SCHEMA"
+  - "ADDITIONAL_ASSETS_OR_HORIZONS"
