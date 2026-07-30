@@ -1,6 +1,6 @@
 # ADR 0001: Modular Monorepo with Process Isolation
 
-- Status: Accepted
+- Status: Amended by ADR 0009
 - Date: 2026-07-28
 
 ## Context
@@ -9,11 +9,11 @@ OpenAlpha needs full-stack product quality, expensive research jobs, and strict 
 
 ## Decision
 
-Use one repository with focused Python packages, a Next.js web application, a FastAPI API, and a separate worker process. Domain packages do not import web, API, queue, or vendor infrastructure. API and worker share typed application contracts.
+Use one repository with focused Python packages. Domain packages do not import presentation, queue, or vendor infrastructure. A Next.js application, FastAPI API, and separate worker remain permissible future adapters, but ADR 0009 removes them from the initial acceptance boundary until the CLI forecast-to-outcome slice is verified.
 
 ## Consequences
 
-- Expensive jobs never run on request threads.
+- The initial proof slice has no request thread; resource limits and explicit diagnostics apply in the CLI process.
 - Cross-package changes remain atomic and testable.
 - Deployment can split services later without rewriting financial logic.
 - The repository needs disciplined dependency direction and package-level contract tests.

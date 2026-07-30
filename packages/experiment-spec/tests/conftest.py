@@ -9,12 +9,23 @@ PACKAGE_SRC = Path(__file__).parents[1] / "src"
 sys.path.insert(0, str(PACKAGE_SRC))
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-EXAMPLE_PATH = REPOSITORY_ROOT / "examples" / "experiments" / "spy-kronos-daily-v1.yaml"
+EXAMPLE_PATH = (
+    REPOSITORY_ROOT
+    / "examples"
+    / "experiments"
+    / "archive"
+    / "spy-kronos-daily-v1.yaml"
+)
 
 
 @pytest.fixture
 def example_path() -> Path:
     return EXAMPLE_PATH
+
+
+@pytest.fixture
+def repository_root() -> Path:
+    return REPOSITORY_ROOT
 
 
 @pytest.fixture

@@ -42,9 +42,9 @@ def test_public_api_is_importable() -> None:
     )
 
 
-def test_root_workspace_sync_installs_experiment_spec(example_path: Path) -> None:
+def test_root_workspace_sync_installs_experiment_spec(repository_root: Path) -> None:
     workspace = tomllib.loads(
-        (example_path.parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+        (repository_root / "pyproject.toml").read_text(encoding="utf-8")
     )
 
     assert "openalpha-experiment-spec" in workspace["dependency-groups"]["dev"]

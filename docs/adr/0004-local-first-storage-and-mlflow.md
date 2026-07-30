@@ -1,6 +1,6 @@
 # ADR 0004: Explicit Local-First Storage with MLflow Behind an Adapter
 
-- Status: Accepted
+- Status: Amended by ADR 0009
 - Date: 2026-07-28
 
 ## Context
@@ -9,16 +9,16 @@ The development machine has no Docker installation and must still run the end-to
 
 ## Decision
 
-Use explicit SQLite URIs, DuckDB, and local content-addressed artifacts in laptop mode. Use PostgreSQL and S3-compatible artifacts in the full profile. Isolate MLflow 3 calls behind a tracking adapter and pin client/server versions. Do not use implicit `mlruns` defaults. The Model Registry uses a database-backed store.
+Use local content-addressed artifacts as the initial authoritative store. SQLite, DuckDB, PostgreSQL, S3-compatible storage, and an MLflow tracking adapter remain possible later implementations, but ADR 0009 defers them until the CLI proof slice establishes an evidence need. Do not use implicit `mlruns` defaults.
 
 OpenAlpha's canonical manifest remains authoritative. MLflow model stages are not used; version tags and aliases represent governance state, while audits persist exact immutable versions.
 
 ## Consequences
 
-- The demo runs without containers.
+- The proof slice runs without containers or an MLflow service.
 - Storage promotion does not change research semantics.
 - SQLite concurrency is intentionally limited.
-- Operators must back up and migrate MLflow's database separately from application metadata.
+- If MLflow is introduced later, operators must back up and migrate its database separately from canonical evidence.
 
 ## Sources
 

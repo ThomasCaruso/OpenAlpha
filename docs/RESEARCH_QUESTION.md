@@ -2,102 +2,69 @@
 
 ## Central question
 
-> Do pretrained financial foundation models generate statistically robust and economically meaningful improvements over conventional forecasting methods after accounting for data leakage, transaction costs, market regimes, model-selection bias, and realistic execution constraints?
+> Does Kronos generate statistically meaningful and economically useful out-of-sample forecasts relative to simple forecasting methods, and does any apparent advantage survive realistic costs, different forecast horizons, and forward testing?
 
-Kronos is the flagship case study, not the assumed winner. OpenAlpha is model-agnostic and must be capable of producing a credible negative result.
+Kronos is the subject of the study, not the assumed winner. Negative, mixed, and inconclusive findings are valid outcomes.
 
-## Phase 1 estimands
+## Evidence classes
 
-The first study uses one liquid US ETF and daily bars after the Kronos pretraining cutoff. It estimates four distinct quantities:
+Every forecast, outcome, metric, comparison, and report claim carries exactly one evidence class:
 
-1. **Forecast value:** the difference in out-of-sample horizon-return loss between Kronos and each prespecified baseline.
-2. **Directional value:** the difference in correct horizon-return sign classification.
-3. **Trading value:** the net performance difference between a prespecified forecast-derived strategy and its benchmarks after costs.
-4. **Stability:** how the first three quantities vary through time and across deterministic market regimes.
+1. `historical_replay`: generated retrospectively under a locked rolling-origin process;
+2. `sealed_historical_test`: generated for a period whose protocol was frozen before its outcomes were evaluated;
+3. `live_precommitted_forecast`: stored immutably before the outcome was knowable.
 
-Price-level resemblance, return predictability, and implementable trading value are not interchangeable.
+Results may be displayed side by side, but they are never pooled or described as equivalent evidence.
 
-## Prespecified hypotheses
+## Initial estimands
 
-For model `m`, forecast origin `t`, horizon `h`, realized log return `r[t,h]`, and forecast `r_hat[m,t,h]`:
+For SPY, QQQ, IWM, TLT, and GLD at 1-, 5-, and 20-session horizons, the preregistered study estimates:
 
-- **H1 — Forecast loss:** Kronos has lower mean absolute horizon-return error than the random-walk, last-value, moving-average, statistical, and tree baselines.
-- **H2 — Direction:** Kronos directional accuracy is greater than 0.5 and greater than the corresponding baseline accuracy.
-- **H3 — Economic value:** the locked Kronos-derived rule improves net risk-adjusted performance over cash and buy-and-hold without unacceptable drawdown or turnover.
-- **H4 — Stability:** any measured improvement is not concentrated entirely in one short time window or one deterministic regime.
+- the paired difference between Kronos and each baseline in log-return MAE and RMSE;
+- directional accuracy, balanced directional accuracy where defined, and calibrated-probability quality where supported;
+- correlation between predicted and realized returns, including cross-asset rank correlation where defined;
+- the net results of one locked long/cash rule after declared costs and slippage;
+- the stability of those results by asset and through time.
 
-The null for each comparison is no improvement. Failure to reject is reported as insufficient evidence, not proof of equivalence.
+Price-level error, return prediction, direction prediction, volatility prediction, and plausible candle generation remain separate claims.
 
-## Outcomes
+## Hypotheses
 
-Primary forecast outcome:
+- **H1 — forecast accuracy:** Kronos reduces out-of-sample return loss relative to the declared baselines.
+- **H2 — direction:** Kronos direction predictions outperform chance and the declared baselines.
+- **H3 — economic value:** the locked Kronos signal improves net risk-adjusted results relative to cash, buy-and-hold, and equivalent baseline signals.
+- **H4 — stability:** any improvement is not confined to one asset, horizon, or short time segment.
 
-- Mean absolute error of the `h`-bar log-return forecast.
-
-Secondary forecast outcomes:
-
-- RMSE of horizon log returns.
-- MAE and RMSE of predicted close prices, labeled as price-level metrics.
-- MASE using only the training window for scaling.
-- Directional accuracy, balanced accuracy, precision, and recall when both classes occur.
-- Pearson and Spearman association, with undefined cases surfaced.
-- Error by horizon step, forecast origin, and deterministic regime.
-
-Primary economic outcome:
-
-- Net excess return of the locked strategy over its declared benchmark, accompanied by turnover, costs, volatility, Sharpe, Sortino, Calmar, maximum drawdown, and drawdown duration.
-
-No single metric may determine the conclusion.
+The null for a comparison is no improvement. Failure to reject is reported as insufficient evidence, not proof of equivalence.
 
 ## Comparison set
 
-The first comparison set is fixed before evaluation:
+Protocol v1 must declare exactly these model families before sealed evaluation:
 
-- Random walk with innovations estimated from the causal context.
-- Last observed value.
-- Causal moving average.
-- Exponential smoothing or ARIMA, selected by a training-only rule.
-- Regularized or linear regression.
-- Gradient-boosted trees.
-- Kronos using a pinned official model and tokenizer revision.
+- Kronos with pinned code, checkpoint, tokenizer, and file hashes;
+- last-value forecast;
+- random walk or drift;
+- causal moving average;
+- exponential smoothing or ARIMA;
+- one regularized linear model;
+- one gradient-boosted tree model.
 
-The official Kronos paper benchmarks a broader task set and reports strong RankIC results, but those claims are not imported as OpenAlpha findings. OpenAlpha performs an independent, post-cutoff, cost-aware evaluation.
+All models implement the same typed forecast-adapter contract. A deterministic fake is allowed only in automated tests and its outputs are always labeled synthetic.
 
-## Evaluation discipline
+## Temporal boundary
 
-- Evaluation data begins after June 2024 because the paper states that Kronos pretraining extends through that month.
-- Model and strategy hyperparameters are chosen on training/validation windows, never the final test observations.
-- Each forecast origin has an explicit information cutoff and an ex-ante trading calendar.
-- Overlapping horizon labels require a purge or dependence-aware inference.
-- Signals generated from a close cannot execute at that same close.
-- Costs are specified before viewing strategy results.
-- The one-asset vertical slice is an engineering and methodology demonstration, not evidence of universal alpha.
-- Additional models, assets, metrics, and parameter sweeps increase the hypothesis family and must be registered in the run manifest and corrected for multiplicity.
+Development is 2017-01-01 through 2022-12-31 and validation is 2023-01-01 through 2023-12-31. Because Kronos reports pretraining through June 2024, January through June 2024 is historical-replay quarantine. The candidate sealed test is 2024-07-01 through 2025-12-31 and may be frozen only after provider-availability and model-feasibility checks that do not inspect performance. Live evaluation begins with the first successfully persisted production forecast.
 
-## Interpretation categories
+## Interpretation rules
 
-Every conclusion must distinguish:
-
-- **Computed fact:** a value read from a verified run artifact.
-- **Statistical interpretation:** uncertainty and test result under declared assumptions.
-- **Economic interpretation:** magnitude after costs, turnover, and risk.
-- **Assumption:** a choice not established by the data.
-- **Limitation:** a reason the estimate may not generalize or identify causal skill.
-
-## Falsification and negative controls
-
-Required controls as the platform matures:
-
-- Shuffled or random-label signals.
-- Deliberately lagged and placebo features.
-- A zero-signal cash strategy.
-- Transaction-cost monotonicity checks.
-- Stability across windows and assets.
-- Parameter perturbations around the registered choice.
-- An untouched final segment after model/strategy selection.
+- Every Kronos metric appears beside declared baselines with sample counts and uncertainty.
+- All forecast origins are rolling, causal, and retained, including model failures.
+- A forecast is persisted before scoring; a later outcome is a new immutable record.
+- No sealed-test threshold tuning, favorable-date selection, or post-result protocol edit is permitted.
+- Signals formed at a close execute no earlier than the next permitted bar.
+- Numerical report claims are rendered from verified artifacts, never typed by hand.
 
 ## Sources
 
 - [Kronos paper](https://arxiv.org/html/2508.02739v1)
 - [Kronos official implementation](https://github.com/shiyu-coder/Kronos)
-

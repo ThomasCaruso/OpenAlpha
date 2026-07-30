@@ -1,64 +1,65 @@
 # Project Status
 
-Last updated: 2026-07-29
+Last updated: 2026-07-30
 
-## Completed
+## Product direction
 
-- Created and initialized the `open-alpha` Git repository.
-- Inspected the development environment.
-- Read the required official Kronos repository, paper, and Hugging Face model card.
-- Read the required official MLflow Tracking and Model Registry documentation.
-- Read the required official VectorBT documentation and license.
-- Defined the Phase 0 architecture, methodology, research question, threat model, data limitations, master plan, and ADR set.
-- Wrote and self-reviewed the complete Phase 1 vertical-slice implementation plan.
-- Established the reproducible Python/npm workspace, lock-enforced setup, environment verification, CI smoke workflow, and isolated feature worktree.
-- Implemented the v1 immutable experiment specification with strict typed model parameters, semantic finance validation, safe YAML/JSON loading, version gating, formal JSON Schema, canonical serialization, and stable SHA-256 experiment identity.
-- Added a valid post-cutoff SPY/Kronos example specification with no generated results.
-- Implemented atomic content-addressed artifact publication with portable path confinement, symlink/junction escape rejection, idempotent writes, conflict refusal, hash/size verification, and stable integrity errors.
-- Implemented immutable append-only run-state journals with validated lifecycle transitions, terminal-state enforcement, monotonic event time, and retry attempts that preserve prior history.
-- Implemented canonical completed-run manifests that require the full pre-report Phase 1 artifact inventory, verified JSON schema/media metadata, acyclic input lineage, matching experiment/Git/environment identity, and a non-failed methodology audit.
+OpenAlpha has pivoted to **Kronos Reality Check**, an evidence-first historical, sealed, and live evaluation of Kronos against simple baselines. The generalized quantitative-platform Phase 1 plan is stopped before any Yahoo adapter work and archived for history.
+
+## Preserved completed work
+
+- Commit `c037bd5efafd728cb4e0df961dd6a93889b0ce56` is preserved.
+- Reproducible Python/npm workspace and lock enforcement.
+- Immutable experiment-spec prototype with canonical identity.
+- Content-addressed artifact publication, path confinement, symlink/junction defenses, hash/size/media/schema verification, and acyclic lineage.
+- Immutable run-state journals and retry history.
+- Completed-run manifests with methodology, Git, environment, and artifact verification.
+- 220 passing tests at the preserved checkpoint, Ruff clean, and Pyright at zero errors/warnings.
+
+## Pivot decisions completed in this worktree
+
+- Added `docs/PIVOT.md` with the rejected scope, new question, preserved infrastructure, evidence classes, non-goals, and value definition.
+- Replaced the governing master plan, architecture, and methodology with CLI-first evidence-product documents.
+- Added `docs/DATA_POLICY.md`.
+- Removed Yahoo’s undocumented endpoint from all active plans.
+- Selected an authenticated provider-independent boundary with Alpaca as the first adapter and no fallback.
+- Declared SIP daily requests, explicit adjustment/as-of fields, environment credentials, local-only raw data, and no redistribution.
+- Archived the superseded generalized Phase 1 plan.
+- Added ADRs for the evidence product, Alpaca boundary, and CLI-first proof slice.
 
 ## Current work
 
-- Beginning the validated daily-equity snapshot pipeline: provider contracts, normalization, quality findings, provenance, and deterministic Parquet artifacts.
+The replacement test-first implementation plan is written for one real SPY forecast/outcome proof slice before any dashboard or service work. No proof-slice implementation has begun.
 
-## Blocked work
+## Pivot-planning verification
 
-No architectural blocker exists.
+Verified on 2026-07-30 from this worktree:
 
-Environment constraints that affect execution:
+- `uv sync --locked --group dev`: exit 0, 26 packages resolved and 25 checked;
+- `uv run pytest -q`: 220 passed;
+- `uv run ruff check .`: all checks passed;
+- `uv run pyright packages/research-core packages/experiment-spec`: 0 errors, 0 warnings, 0 informations;
+- `git diff --check`: no whitespace errors;
+- active-plan scans: 13 sequential tasks, no placeholder phrases, and no active Yahoo/no-key provider configuration.
 
-- Docker is not installed, so the local-first profile must work without containers.
-- No NVIDIA runtime is present; real Kronos inference must be verified on CPU and expose resource diagnostics.
-- The machine has approximately 16 GB RAM, 12 logical processors, and 261 GB free disk.
+## Verified provider facts
 
-## Verification performed
+- Alpaca documents `https://data.alpaca.markets/v2/stocks/bars` with explicit symbols, timeframe, start, end, adjustment, as-of, feed, pagination, and sort fields.
+- Authentication uses `APCA-API-KEY-ID` and `APCA-API-SECRET-KEY` headers sourced from `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY` environment variables.
+- SIP and IEX have materially different coverage; the protocol must pin one and cannot accept a fallback.
+- Alpaca states API market data cannot be redistributed.
 
-- Confirmed the repository began empty and was not previously a Git worktree.
-- Confirmed Git 2.49, Python 3.10/3.13, Node 22, npm 11, and uv 0.11 are available.
-- Confirmed the official Kronos implementation requires lowercase OHLC, accepts optional volume/amount, normalizes per causal input window, and produces stochastic autoregressive OHLCVA paths.
-- Confirmed the public base checkpoint is 102.3M parameters with a 512-bar context and MIT metadata.
-- Confirmed MLflow's current local/server storage behavior and database-backed Registry requirement.
-- Confirmed current VectorBT is Apache 2.0 with Commons Clause and therefore unsuitable as OpenAlpha's mandatory authoritative engine.
-- Verified lock-enforced `uv sync --locked --group dev` and `npm ci`.
-- Verified 163 experiment-spec tests, 15 workspace smoke tests, and 42 research-core tests: 220 total passing.
-- Verified Ruff reports no findings and Pyright reports zero errors or warnings.
-- Verified duplicate JSON/YAML keys, unsafe updates, non-finite values, invalid cross-field combinations, and externally invalid JSON Schema instances are rejected.
-- Verified the checked-in YAML and JSON round-trip to the same identity: `exp_8e72de5fcc485d3d512227f89f3d8e74e6f73bdfe6c90ddced158614d7ec6efb`.
-- Completed independent spec-compliance and code-quality reviews for Phase 1 Tasks 1 and 2 with no open Critical or Important findings.
-- Completed a production-readiness review for Phase 1 Task 3 and closed all Critical/Important findings before the final quality gate.
+## Known limitations and unresolved evidence
 
-## Known limitations
-
-- No data provider has yet been executed or licensed for redistribution.
-- No checkpoint has yet been downloaded or timed on this CPU-only machine.
-- No application, API, worker, report, or user interface exists yet.
-- No financial result has been computed.
-- The research-core contracts are not yet wired into a real data/model run.
-- Kronos training-data provenance is incomplete: the released checkpoint does not include reconstructable source-data hashes or a training run manifest.
-- Any one-ETF result will remain exploratory and cannot establish broad alpha.
-- Pydantic's deprecated v1 `copy(update=...)` compatibility method remains a minor defense-in-depth follow-up; the supported `model_copy(update=...)` path is blocked.
+- No Alpaca credentials are present or required for automated tests; no real provider request has run.
+- No raw market data is committed or publicly redistributable.
+- Protocol v1 is not yet frozen; candidate dates remain subject to availability and feasibility checks that do not inspect sealed performance.
+- January–June 2024 overlaps Kronos’s reported pretraining range and is replay-only, not clean sealed evidence.
+- No real Kronos checkpoint has been downloaded or timed on this CPU-only host.
+- No real forecast, outcome, metric, ledger chain, CLI proof slice, scoreboard, or report exists yet.
+- Modern adjusted bars do not provide a complete historical-vintage guarantee.
+- The existing experiment-spec contract is preserved but does not itself represent the new full research protocol.
 
 ## Exact next task
 
-Write failing property and contract tests for daily adjusted OHLCV normalization, duplicate/missing-session findings, provider provenance, deterministic Parquet snapshots, and content-addressed snapshot manifests.
+Implement the versioned research-protocol schema test-first, including canonical bytes/hash, immutable v1 locking, evidence classes, five-asset universe, paired Alpaca data representations, candidate periods, three horizons, declared models/metrics/statistics/strategy, and explicit validation that no sealed period overlaps the reported Kronos pretraining cutoff.

@@ -1,121 +1,53 @@
 # Data Limitations
 
-## Purpose
+`docs/DATA_POLICY.md` is the governing access and storage policy. This document records limitations that must accompany every result.
 
-Market data is an empirical input with legal, temporal, and quality limitations—not neutral truth. OpenAlpha records these limitations per snapshot and carries them into reports and the user interface.
+## Provider and entitlement limits
 
-## Free-provider limitations
+Alpaca is the first supported US equity and ETF provider. Access requires user-supplied environment credentials and the requested feed entitlement. SIP and IEX do not have equivalent venue coverage; the initial protocol pins SIP and fails explicitly if it is unavailable. Rate limits, outages, schema changes, corrections, and entitlement changes can prevent exact refetching.
 
-The Phase 1 public demonstration will use a no-paid-key equity adapter only after its terms and observable adjustment behavior are documented. Freely accessible data must not be described as institutional-grade, guaranteed complete, or point-in-time.
+Provider identity, feed, timeframe, start, end, adjustment, as-of behavior, retrieval timestamp, request identity, and response hash are recorded. A successful HTTP response is not accepted until schema, pagination, bounds, ordering, and quality checks pass.
 
-Common limitations include:
+## Modern-data and point-in-time limits
 
-- undocumented vendor corrections and backfills;
-- rate limits, outages, and schema changes;
-- ambiguous split/dividend adjustment;
-- rounded prices or volumes;
-- incomplete delisting and symbol-history coverage;
-- redistribution restrictions;
-- missing official exchange sequence/session metadata;
-- absence of bid/ask, auction, and trade-condition data.
+Historical bars retrieved today may include corrections, corporate-action adjustments, or symbol mappings that were not available in identical form at a historical forecast cutoff. Alpaca's `asof` parameter controls symbol mapping behavior; it does not prove complete historical-vintage reconstruction. Historical replay and sealed results disclose this residual limitation.
 
-The normalized snapshot preserves provider identity and retrieval time so later corrections cannot silently rewrite a completed run.
+## Paired representations
 
-## Adjustment and corporate actions
+The initial study requests two content-addressed views over the same sessions:
 
-Adjusted OHLC is provider-defined. Some vendors adjust close only; others back-adjust all price fields. Volume treatment may differ. An adjusted series is unsuitable for reconstructing historical executable prices unless the simulation policy accounts for how adjustments transformed the bars.
+- `adjustment=all` for model inputs and return targets, so splits, dividends, and supported spin-offs do not masquerade as forecastable returns;
+- `adjustment=raw` for hypothetical next-bar execution prices, so fills are expressed in observed price units.
 
-Every snapshot therefore records:
+This does not make daily OHLCV an execution tape. Corporate actions crossing a simulated holding period require an explicit accounting adjustment; ambiguous cases fail or are excluded under the locked protocol rather than silently repaired.
 
-- raw versus adjusted field status;
-- split and dividend handling;
-- whether all OHLC fields share one adjustment factor;
-- whether volume was inversely adjusted;
-- provider evidence or an explicit `unknown` classification.
+## Timestamp and calendar limits
 
-Unknown adjustment semantics produce a methodology warning.
+Provider timestamps, XNYS session labels, market timezone, early closes, holidays, halts, and missing sessions are distinct concepts. Future returned rows are never used to infer the schedule available at a forecast cutoff. Normalization stores provider timestamps and canonical session identities.
 
-## Survivorship and universe bias
+## Missing, stale, and revised observations
 
-A current ticker list evaluated historically excludes delisted, merged, renamed, or failed securities. One current ETF avoids cross-sectional constituent selection in Phase 1 but does not eliminate fund survival or launch-selection bias.
+Missing bars are not zeros and are not silently forward-filled. Quality artifacts distinguish expected closures, provider gaps, halts, unavailable fields, duplicates, zero-volume observations, stale runs, and insufficient context. Any repair creates a new derived snapshot and records its causal rule and lineage.
 
-Multi-asset phases require point-in-time universe membership where available and must label approximations.
+## Universe and contamination limits
 
-## Timestamp and calendar risk
+The five current ETFs avoid historical constituent selection but do not remove fund-survival or asset-selection bias. Kronos checkpoint provenance does not expose row-level pretraining data; evaluation after June 2024 reduces direct temporal overlap but cannot prove the absence of related information or learned market structure.
 
-- Provider dates may be timezone-naive.
-- Daily-bar labels can denote session date, open time, or close time.
-- Holidays, early closes, halts, and unscheduled closures may be absent or revised.
-- Constructing future timestamps from realized returned rows can leak knowledge of future missing sessions.
+## Execution limits
 
-OpenAlpha normalizes to a named exchange calendar and stores both provider timestamp semantics and normalized session identity.
+Daily bars do not reveal spread paths, auction mechanics, queue position, market impact, partial fills, or intrabar event order. Economic results are hypothetical, use a locked next-bar convention and fixed costs, and are not live-brokerage performance.
 
-## Missing and stale observations
+## Storage and redistribution
 
-Missing bars are not automatically zeros and are not silently forward-filled. The quality report distinguishes:
-
-- expected non-trading sessions;
-- provider gaps;
-- exchange halts;
-- unavailable fields;
-- zero-volume/stale-price runs;
-- newly listed or insufficient-history assets.
-
-Policies are feature-specific. A causal carry-forward may be valid for some as-of macro fields but not for missing market bars.
-
-## Outliers and bad ticks
-
-Large moves may be genuine, corporate-action artifacts, currency/unit errors, or bad data. OpenAlpha emits warnings using causal and cross-field checks but does not delete observations merely because they harm a result. Any repair creates a transformed snapshot with a new hash and an auditable rule.
-
-## Volume and amount
-
-Kronos accepts optional `volume` and `amount`. Its official predictor fills both with zero when volume is absent and synthesizes amount as volume times mean OHLC when amount alone is absent.
-
-OpenAlpha records whether amount is:
-
-- provider supplied;
-- causally derived and by what formula;
-- unavailable and represented by a declared sentinel policy.
-
-Synthetic amount must not be mislabeled as provider-reported turnover.
-
-## Foundation-model contamination
-
-The Kronos paper reports pretraining through June 2024 on roughly 12.11 billion bars from 45 global exchanges, but the released checkpoint does not include per-record provenance or dataset hashes. Evaluating after June 2024 reduces direct temporal overlap; it cannot establish that an asset or related market pattern was absent from pretraining.
-
-Any result is therefore an evaluation of a fixed released model under known cutoff information, not a proof of uncontaminated zero-shot generalization.
-
-## Revised macro and fundamental data
-
-Current FRED/SEC values may differ from what was known historically. These sources remain outside admissible model features until adapters preserve release/vintage/as-of timestamps and the evaluator performs as-of joins. Publication dates are not interchangeable with period dates.
-
-## Execution limits of OHLCV
-
-Daily OHLCV cannot identify:
-
-- intrabar event order;
-- queue position;
-- spread throughout the session;
-- market impact;
-- hidden liquidity;
-- exact partial-fill path;
-- whether a stop and target were hit in which order.
-
-Phase 1 therefore uses a conservative, explicit next-bar convention and sensitivity analysis. It does not claim exchange-level execution fidelity.
-
-## Legal and redistribution constraints
-
-Provider access does not imply redistribution rights. Raw data and demo snapshots require a documented license/terms review before inclusion in a public repository or hosted artifact store. When redistribution is not permitted, reproducibility uses a fetch recipe, snapshot hash, and user-local storage; reports may publish derived aggregates only where allowed.
+Raw provider requests and responses remain local, outside Git and public artifacts. Alpaca states that its API market data may not be redistributed. Public reproducibility therefore uses request recipes, normalized-schema descriptions, content hashes, code and protocol hashes, and permitted derived aggregates; another researcher must fetch their own licensed copy.
 
 ## Reviewer checklist
 
 A valid data-quality artifact answers:
 
-1. Who supplied the data and when?
-2. What exact bytes and normalized table were used?
-3. What calendar and timezone semantics apply?
-4. What was adjusted, repaired, derived, dropped, or unavailable?
-5. Which gaps, duplicates, stale runs, and outliers were detected?
-6. What point-in-time and survivorship guarantees are absent?
-7. May the snapshot be redistributed?
-
+1. Which provider, endpoint, feed, entitlement, and retrieval time produced the data?
+2. Which explicit request and raw response hashes identify the source bytes?
+3. Which timestamp, calendar, adjustment, as-of, and corporate-action semantics apply?
+4. Which rows or fields were missing, stale, duplicated, transformed, repaired, or excluded?
+5. Which point-in-time, survivorship, contamination, and execution guarantees remain absent?
+6. May the raw or derived output be redistributed?
