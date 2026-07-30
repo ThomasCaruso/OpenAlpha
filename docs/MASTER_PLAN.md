@@ -22,9 +22,9 @@ Status: complete in `c037bd5` and `27f0c69`.
 - immutable run journals;
 - verified completed-run manifests;
 - experiment identity prototype;
-- provider-independent documented market-data boundary;
+- provider-independent market-data boundary;
 - existing tests, Ruff, and Pyright;
-- no undocumented Yahoo dependency.
+- no hand-written dependency on an undocumented Yahoo endpoint.
 
 ## Stage 1 — Direction and experiment lock
 
@@ -51,7 +51,7 @@ Acceptance:
 
 For one historical SPY cutoff:
 
-1. fetch one causal context through Alpaca;
+1. fetch one causal context from Yahoo Finance through pinned yfinance with every request option explicit;
 2. run the seed-reproducibility probe and nine declared real Kronos requests;
 3. generate the last-value baseline;
 4. average only the three 512-context close paths and publish every path before outcome access;
@@ -61,6 +61,8 @@ For one historical SPY cutoff:
 8. verify artifacts, lifecycle, and manifest.
 
 Stop if real Kronos cannot operate within the locked feasibility boundary.
+
+Alpaca remains a later independent verification provider. No provider-independent empirical claim is permitted until a representative sample has been compared across separately sourced providers.
 
 ## Stage 3 — Development sample
 

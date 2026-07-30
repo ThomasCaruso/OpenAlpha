@@ -33,7 +33,7 @@ The unimplemented Reality Check design and proof-slice plan are archived under `
 Sentinel v0 is a development-only signal-discovery experiment:
 
 - assets: SPY and QQQ;
-- data: authenticated Alpaca SIP daily bars;
+- data: Yahoo Finance daily raw bars through pinned yfinance for the development proof;
 - horizon: five XNYS sessions;
 - sample: weekly chronological cutoffs from 2024-07-01 through 2026-06-30;
 - forecast models: real Kronos-mini and a zero-return last-value baseline;
@@ -58,7 +58,7 @@ No functioning infrastructure is redesigned:
 - verified manifests bind data, model, diagnostic, risk-model, and evaluation provenance;
 - path confinement protects artifact access;
 - existing tests, Ruff, and Pyright remain quality gates;
-- the provider-independent market-data boundary and rejection of undocumented Yahoo endpoints remain in force.
+- the provider-independent market-data boundary remains; Phase 2 uses an explicitly unofficial yfinance adapter rather than a hand-written endpoint, with Alpaca deferred to independent verification.
 
 ## Explicit non-goals
 

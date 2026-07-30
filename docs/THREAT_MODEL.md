@@ -9,7 +9,7 @@ Sentinel's primary risk is a false forecast-time reliability claim. Protected as
 ```mermaid
 flowchart LR
     Researcher --> Sentinel[Sentinel v0 process]
-    Sentinel -->|fixed authenticated request| Alpaca[Alpaca API]
+    Sentinel -->|pinned explicit request| Yahoo[Yahoo Finance via yfinance]
     Sentinel -->|pinned source and cache| Kronos[Kronos-mini]
     Sentinel --> Artifacts[(Confined content-addressed store)]
     Sentinel --> Journal[(Immutable lifecycle)]
@@ -34,11 +34,12 @@ Provider payloads, model files, timestamps, experiment YAML, cache paths, and re
 
 ## Provider and secret controls
 
-- Alpaca credentials are environment-only and redacted.
-- The host and historical-bars endpoint are fixed.
-- Feed, timeframe, dates, adjustment, as-of, sort, and pagination are explicit.
-- Raw responses are bounded, validated, hashed, and discarded.
-- No Yahoo or other provider fallback exists.
+- Phase 2 requires no market-data credential.
+- The yfinance version and every download argument are pinned; start/end semantics and the XNYS cutoff are enforced locally.
+- Automatic adjustment, back adjustment, and repair are disabled; Adj Close is excluded from model input.
+- Raw responses, complete histories, CSV exports, and yfinance caches remain outside Git and are not redistributed.
+- Provider/source/version, retrieval time, normalized-input hash, quality results, and corporate-action warnings are recorded.
+- No provider fallback exists. Alpaca is a separately invoked later verification adapter.
 
 ## Model supply chain
 
@@ -63,4 +64,4 @@ There is no frontend, public API/SDK, account system, live trading, arbitrary mo
 
 ## Residual risk
 
-Hashes prove identity, not truth. Adjusted history may be revised, seeds may not be bit-exact across hardware, Kronos pretraining provenance is incomplete, analogue similarity is not causal equivalence, and an apparently successful two-ETF holdout may not generalize.
+Hashes prove identity, not truth. The unofficial Yahoo/yfinance interface may change and is not point-in-time, raw history may be corrected, seeds may not be bit-exact across hardware, Kronos pretraining provenance is incomplete, analogue similarity is not causal equivalence, and an apparently successful two-ETF holdout may not generalize. Provider independence remains unproven until the later cross-provider check.

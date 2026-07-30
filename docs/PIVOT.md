@@ -18,7 +18,7 @@ The product predicts the predictor. It returns a reliability assessment, failure
 
 The original generalized quantitative platform was rejected because infrastructure breadth preceded empirical value. Commit `c037bd5` nevertheless produced valuable content-addressed artifacts, path confinement, immutable run journals, verified manifests, tests, Ruff, and Pyright configuration.
 
-Kronos Reality Check then focused the project on credible evaluation. Commit `27f0c69` preserved the provider-independent data boundary, removed dependence on undocumented Yahoo endpoints, and established causal forecasts, baselines, immutable outcomes, and honest evidence classes.
+Kronos Reality Check then focused the project on credible evaluation. Commit `27f0c69` preserved the provider-independent data boundary, rejected a hand-written dependency on an undocumented Yahoo endpoint, and established causal forecasts, baselines, immutable outcomes, and honest evidence classes.
 
 That benchmark remains necessary, but it is passive. It explains whether a forecast failed after resolution; it does not tell a developer whether to trust the forecast before the outcome. Sentinel makes that forecast-time reliability decision the product.
 
@@ -31,8 +31,9 @@ The unimplemented Reality Check design and plan are archived without rewriting h
 - Verified manifests bind data, model, diagnostic, risk-model, and evaluation provenance.
 - Path confinement protects artifact reads and publication.
 - Existing tests and static-analysis configuration remain mandatory.
-- Alpaca remains the first documented market-data provider through a provider-independent port.
-- There is no Yahoo adapter and no silent provider fallback.
+- Phase 2 uses pinned yfinance over Yahoo Finance's unofficial public interface for one small local development proof.
+- Alpaca remains the planned independent verification provider for later phases.
+- There is no silent provider fallback and no provider-independent evidence claim before cross-provider verification.
 
 ## Sentinel v0 value test
 

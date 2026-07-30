@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Produce one real, auditable SPY forecast origin that proves the causal Alpaca-to-Kronos-to-diagnostics-to-outcome chain without starting the development sample.
+**Goal:** Produce one real, auditable SPY forecast origin that proves the causal yfinance-to-Kronos-to-diagnostics-to-outcome chain without starting the development sample.
 
 **Architecture:** Add one internal `openalpha-sentinel` package with typed v0-only boundaries and pure diagnostic functions. Reuse `LocalArtifactStore`, `RunStateJournal`, path confinement, and manifest verification. Forecast creation and outcome resolution are separate commands so the creation path cannot read the future outcome. Real Kronos runs behind a typed subprocess boundary from pinned official source and Hub revisions in an isolated temporary cache/environment outside Git; deterministic synthetic providers exist only in tests.
 
@@ -12,7 +12,7 @@
 
 ## Scope lock
 
-This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff `2024-07-05`, with XNYS forecast sessions 2024-07-08 through 2024-07-12. It uses raw SIP OHLCV, context lengths 128/256/512, seeds 1729/2027/7919, `temperature=1.0`, `top_p=0.9`, and `sample_count=1`. Only the three 512-context close paths form the canonical timestamp-wise arithmetic mean; shorter paths are stress tests. It does not fit a Sentinel risk model, emit an action, inspect the holdout, add a public SDK/API, or begin the chronological development sample.
+This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff `2024-07-05`, with XNYS forecast sessions 2024-07-08 through 2024-07-12. It uses raw daily Yahoo Finance OHLCV through `yfinance==1.5.2`, context lengths 128/256/512, seeds 1729/2027/7919, `temperature=1.0`, `top_p=0.9`, and `sample_count=1`. Only the three 512-context close paths form the canonical timestamp-wise arithmetic mean; shorter paths are stress tests. It does not fit a Sentinel risk model, emit an action, inspect the holdout, add a public SDK/API, or begin the chronological development sample.
 
 ## Task 1: Create the narrow internal package and v0 contracts
 
@@ -47,18 +47,18 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 - [ ] Require exactly one of each Sentinel-origin kind and preserve all lineage, schema, canonical-JSON, state, dirty-tree, and artifact-integrity checks.
 - [ ] Run `uv run pytest packages/research-core/tests/test_manifest.py -q` and then the complete research-core tests.
 
-## Task 3: Implement the causal Alpaca context boundary
+## Task 3: Implement the causal yfinance context boundary
 
 **Files:**
 
 - Create: `packages/sentinel/src/openalpha_sentinel/market_data.py`
-- Create: `packages/sentinel/tests/fixtures/alpaca_spy_daily.synthetic.json`
+- Create: `packages/sentinel/tests/fixtures/yahoo_spy_daily.synthetic.json`
 - Create: `packages/sentinel/tests/test_market_data.py`
 
-- [ ] Write failing tests for environment-only credentials, fixed HTTPS host, explicit SIP/1Day/start/end/raw/as-of fields, bounded pagination, ascending XNYS sessions, exact cutoff, duplicate/missing/nonfinite bar rejection, OHLC inequalities, nonnegative volume, response hashing, retrieval timestamps, and secret redaction.
+- [ ] Write failing tests for the pinned client version; explicit `interval="1d"`, `auto_adjust=False`, `back_adjust=False`, `repair=False`, `actions=True`, `progress=False`, `threads=False`, and timeout; inclusive start/exclusive end; ascending XNYS sessions; exact local cutoff; duplicate/missing/nonfinite bar rejection; OHLC inequalities; nonnegative volume; normalized-input hashing; retrieval timestamps; and action warnings.
 - [ ] Mark the fixture metadata `synthetic: true`; never represent it as empirical market data.
-- [ ] Implement a minimal HTTP-client port and `AlpacaHistoricalBarsProvider`. Keep raw bytes in memory only long enough to validate and SHA-256 hash, then return normalized observations plus provenance rather than raw response payloads.
-- [ ] Make missing credentials, SIP entitlement, HTTP failure, malformed payload, and page-limit exhaustion typed failures. Do not fall back to IEX, Yahoo, or another provider.
+- [ ] Implement a minimal injected downloader port and `YFinanceHistoricalBarsProvider`. Do not depend on yfinance defaults. Return normalized observations plus provenance rather than response payloads or a reusable dataset.
+- [ ] Make client/version mismatch, provider/network failure, malformed data, missing sessions, and timeout typed failures. Do not fall back to Alpaca or another provider.
 - [ ] Implement a causal context constructor that returns only raw OHLCV sessions at or before `2024-07-05` for creation, with at least 512 observations, no amount field, and a separate outcome request for exactly 2024-07-08/09/10/11/12.
 - [ ] Run the market-data tests, Ruff, and Pyright.
 
@@ -77,7 +77,7 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 - [ ] Create an isolated inference environment outside Git. Try the repository Python 3.13 runtime only when compatible; otherwise use Python 3.11 behind the same typed subprocess contract. Do not add a service, queue, database, container, or daemon.
 - [ ] Resolve and load only the exact source revision `67b630e67f6a18c9e9be918d9b4337c960db1e9a`, model revision `f4e68697d9d5aed55cef5c96aabc3376bcad9f81`, and tokenizer revision `26966d0035065a0cae0ebad7af8ece35bc1fb51c`. Record repository names, downloaded filenames and SHA-256 values, package versions, Python/PyTorch/OS/device identity, cache path, and total cache size.
 - [ ] Keep the source checkout and Hugging Face cache outside the repository. Use safe fixed-revision loading without `trust_remote_code`, and reject any unsafe serialized format or unexpected file.
-- [ ] Run a synthetic OHLCV shape-validation inference before any Alpaca request and prove the response maps to exactly five declared sessions.
+- [ ] Run a synthetic OHLCV shape-validation inference before any Yahoo Finance request and prove the response maps to exactly five declared sessions.
 - [ ] Set Python, NumPy, PyTorch CPU, and applicable accelerator seeds before each request; use evaluation/inference mode. Probe A=512/1729, B=512/1729, C=512/2027, canonicalize every output, and record whether A/B hashes match and A/C ordinarily differ. Preserve mismatches without changing Kronos.
 
 ## Task 5: Build the nine-request ensemble and baseline
@@ -133,7 +133,7 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 - [ ] Write a failing reporting test that requires `DEVELOPMENT PROOF — NOT EMPIRICAL EVIDENCE`, cutoff/horizon, provider/feed/raw adjustment, model/tokenizer revisions, environment/device, probe result, nine individual returns, three 512 paths, canonical averaged path/return, context summaries, diagnostic availability, realized return, Kronos/baseline errors, direction result, closer model, runtime/latencies/cache, failures/retries, limitations, artifact hashes, and manifest verification.
 - [ ] Implement separate `create` and `resolve` subcommands in the internal script. `create` cannot import or call the outcome resolver; `resolve` requires the published creation record hash.
 - [ ] Render canonical JSON evidence and a human-readable Markdown audit from verified artifacts only. Store generated output under ignored `research/sentinel-v0/results/generated/` and `reports/generated/` paths.
-- [ ] Run `create` for SPY/2024-07-05 using the user's environment credentials and outside-Git cache, then run `resolve` for the five-session outcome ending 2024-07-12.
+- [ ] Run `create` for SPY/2024-07-05 using the pinned yfinance adapter and outside-Git caches, then run `resolve` for the five-session outcome ending 2024-07-12.
 - [ ] Verify the manifest and artifact hashes independently. Record exact requests, sample count, failures, latency, cache size, and whether seed replay was deterministic.
 
 ## Task 9: Stop at the Phase 2 decision gate
@@ -150,4 +150,4 @@ This plan implements Phase 2 only. The single origin is SPY at the weekly cutoff
 
 ## Stop conditions
 
-Stop and document a blocker if Alpaca credentials or SIP history are unavailable, 512 raw causal sessions cannot be retrieved, the pinned Kronos model/tokenizer cannot load, five output sessions cannot be mapped, outputs are non-finite, `sample_count=1` paths cannot be preserved, the forecast cannot be sealed before outcome access, memory/runtime is unreasonable, or real output would require a permanent deployment. A deterministic provider may keep automated tests passing, but it is never admissible as completion of this plan.
+Stop and document a blocker if valid Yahoo/yfinance history containing 512 raw causal sessions cannot be retrieved, the pinned Kronos model/tokenizer cannot load, five output sessions cannot be mapped, outputs are non-finite, `sample_count=1` paths cannot be preserved, the forecast cannot be sealed before outcome access, memory/runtime is unreasonable, or real output would require a permanent deployment. Do not silently switch providers. A deterministic provider may keep automated tests passing, but it is never admissible as completion of this plan.

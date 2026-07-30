@@ -11,7 +11,7 @@ The complete Sentinel v0 method is locked in `docs/SENTINEL_METHODOLOGY.md` and 
 Sentinel v0 is development-only signal discovery:
 
 - SPY and QQQ;
-- Alpaca SIP daily adjusted bars;
+- Yahoo Finance daily raw bars through pinned `yfinance==1.5.2`;
 - five-session horizon;
 - last XNYS session of each ISO week;
 - development: 2024-07-01 through 2025-06-30;
@@ -24,6 +24,8 @@ Protocol v1 remains unfrozen. The result is not a trading claim or scientific pu
 Real pinned Kronos-mini inference runs at context lengths 128, 256, and 512 under seeds 1729, 2027, and 7919. Every request uses temperature 1.0, top-p 0.9, and one generated path. The canonical forecast is the timestamp-wise arithmetic mean of only the three 512-context close paths; shorter contexts are stress tests. The raw last-value baseline predicts a flat path and zero five-session return.
 
 All nine forecasts and failures are persisted before outcome access.
+
+Every data request disables automatic/back adjustment and repair, includes corporate actions as audit metadata, and enforces the declared XNYS cutoff locally. This unofficial development source is not point-in-time or provider-independent; Alpaca remains a required later verification source before serious publication.
 
 ## Diagnostics
 

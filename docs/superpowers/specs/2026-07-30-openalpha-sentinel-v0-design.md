@@ -37,7 +37,7 @@ A preflight artifact freezes the exact ordered origin list before any diagnostic
 
 ### Market data boundary
 
-The existing provider-independent request contract remains. Alpaca is the first adapter, with explicit SIP, 1Day, start/end, `adjustment=raw`, cutoff-date as-of mapping, pagination, and environment credentials. Raw responses are hashed then discarded for v0. The raw close-to-close target avoids revised adjusted-history assumptions while explicitly omitting dividend return; no corporate-action engine is added.
+The existing provider-independent request contract remains. Phase 2 uses pinned `yfinance==1.5.2` over Yahoo Finance's unofficial public interface, with explicit daily interval, inclusive start, exclusive end, no automatic/back adjustment, no repair, corporate-action metadata, disabled progress/threads, timeout, and local XNYS cutoff enforcement. Raw responses and complete histories are not committed or redistributed. The raw close-to-close target avoids revised adjusted-price inputs while explicitly omitting dividend return; no corporate-action engine is added. Alpaca is retained for required later cross-provider verification before serious publication.
 
 ### Forecast provider
 
@@ -84,7 +84,7 @@ Outcome access is a separate resolver operation. A test spy must prove that no o
 
 ## Failure handling
 
-- Missing credentials or SIP entitlement stops real data acquisition.
+- Unavailable, malformed, or incomplete Yahoo/yfinance history stops real data acquisition; no provider fallback is allowed.
 - Missing hosted Kronos support selects the declared local-cache fallback, not fake output.
 - Incompatible Python/runtime, unsafe loading, uncontrolled seed behavior, or unreasonable resource use stops Phase 2 and produces a blocker report.
 - Missing diagnostics use development-fitted missingness handling; they are never replaced with favorable values.

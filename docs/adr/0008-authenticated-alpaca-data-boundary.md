@@ -1,6 +1,6 @@
 # ADR 0008: Authenticated Alpaca Data Boundary without Fallback
 
-- Status: Amended by ADR 0010
+- Status: Deferred for Phase 2 by ADR 0011; retained for later verification
 - Date: 2026-07-30
 
 ## Context

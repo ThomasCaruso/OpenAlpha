@@ -1,35 +1,31 @@
-schema_version: "sentinel-v0.2"
+schema_version: "sentinel-v0.3"
 experiment_id: "openalpha-sentinel-v0"
-status: "phase_2_amended_before_execution"
+status: "phase_2_yfinance_amended_before_execution"
 locked_on: "2026-07-30"
 claim_scope: "development_feasibility_only"
 amendment:
   amended_on: "2026-07-30"
-  supersedes_sha256: "c6459409e6b750217b4e81d09d461dc4b8cf303746d3efdcc8de80762e5a763c"
+  supersedes_sha256: "261e4bac51b9b3d6b68b6cf0128d406ca63cbf4bcd9735ccbda1aa04d1fa761a"
   changed_fields:
     - "schema_version"
     - "status"
-    - "market_data.request.adjustment"
-    - "market_data.representation"
-    - "market_data.return_target"
-    - "market_data.corporate_action_policy"
-    - "ensemble.primary_path_aggregation"
-    - "ensemble.primary_return_aggregation"
-    - "ensemble.canonical_forecast"
-    - "ensemble.stress_test_paths"
-    - "ensemble.reproducibility_probe"
-    - "baseline.path_rule"
-    - "targets.continuous_primary"
-    - "targets.secondary"
-    - "action_policy.use.output"
-    - "phase_2_origin"
-    - "analogue_policy"
-    - "phase_2_diagnostic_availability"
+    - "market_data.provider"
+    - "market_data.client"
+    - "market_data.client_version"
+    - "market_data.access_class"
+    - "market_data.intended_use"
+    - "market_data.redistribution"
+    - "market_data.request"
+    - "market_data.cutoff_policy"
+    - "market_data.outcome_request"
+    - "market_data.optional_verification_provider"
+    - "market_data.cross_provider_verification"
   methodological_reason: >-
-    Raw bars avoid assuming that a currently requested dividend-, split-, and
-    spin-off-adjusted history exactly represents information available at the
-    historical cutoff. The canonical forecast now isolates the declared
-    512-session inference context; shorter contexts are stress tests only.
+    The one-origin daily-bar feasibility proof does not justify an authenticated
+    institutional data integration. A pinned yfinance client provides a small,
+    credential-free local research input while preserving explicit raw-bar and
+    causal-cutoff controls. Strong conclusions remain prohibited until a
+    representative sample is independently verified with another provider.
 research_question: >-
   Can information available at forecast time predict the future error of a
   financial forecasting model, and can selective use, blending, or abstention
@@ -72,31 +68,85 @@ cutoffs:
     - "REAL_INFERENCE_FAILURE"
 
 market_data:
-  provider: "alpaca"
-  endpoint: "https://data.alpaca.markets/v2/stocks/bars"
-  credentials:
-    key_id_env: "APCA_API_KEY_ID"
-    secret_key_env: "APCA_API_SECRET_KEY"
+  provider: "yahoo_finance"
+  client: "yfinance"
+  client_version: "1.5.2"
+  underlying_data_source: "Yahoo Finance"
+  access_class: "unofficial_public_interface"
+  intended_use: "local_research_and_education"
+  redistribution: "prohibited_by_project_policy"
+  credentials_required: false
+  official_yahoo_integration: false
+  institutional_point_in_time_source: false
   request:
     symbols: ["SPY", "QQQ"]
-    feed: "sip"
-    timeframe: "1Day"
-    start: "2022-06-01"
-    end: "2026-07-08"
+    interval: "1d"
+    start_inclusive: "2022-06-01"
+    end_exclusive: "2024-07-06"
+    auto_adjust: false
+    back_adjust: false
+    repair: false
+    actions: true
+    progress: false
+    threads: false
+    timeout_seconds: 30.0
+    prepost: false
+    rounding: false
+    keepna: false
+    multi_level_index: false
     adjustment: "raw"
-    asof_policy: "forecast_cutoff_date"
-    sort: "asc"
-    page_limit: 10000
-    maximum_pages: 20
+    feed: "not_applicable"
+    project_retries: 0
+  cutoff_policy:
+    request_end_is_exclusive: true
+    final_eligible_input_session: "2024-07-05"
+    reject_post_cutoff_rows: true
+    require_exact_final_session: true
+    calendar: "XNYS"
+  outcome_request:
+    operation: "logically_separate_after_forecast_seal"
+    symbol: "SPY"
+    start_inclusive: "2024-07-06"
+    end_exclusive: "2024-07-13"
+    expected_sessions:
+      - "2024-07-08"
+      - "2024-07-09"
+      - "2024-07-10"
+      - "2024-07-11"
+      - "2024-07-12"
+    reuse_explicit_request_parameters: true
   fallback_provider: null
   raw_response_storage: "ephemeral_hash_then_discard"
   normalized_storage: "user_local_content_addressed_if_permitted"
-  redistribution: "forbidden_without_documented_permission"
+  cache_storage: "outside_git_only"
+  adj_close_as_model_input: false
+  action_columns_use: "audit_metadata_and_warnings_only"
   representation: "raw_ohlcv"
   return_target: "raw_five_session_close_to_close_log_return"
   corporate_action_policy: >-
     No corporate-action engine in v0; raw bars are used as delivered and
     dividend effects are recorded as a known return-target limitation.
+  limitations:
+    - "YFINANCE_IS_NOT_AN_OFFICIAL_YAHOO_INTEGRATION"
+    - "AVAILABILITY_AND_RESPONSE_BEHAVIOR_MAY_CHANGE"
+    - "NOT_AN_INSTITUTIONAL_POINT_IN_TIME_SOURCE"
+    - "RAW_DATA_MUST_NOT_BE_COMMITTED_OR_REDISTRIBUTED"
+    - "PROVIDER_INDEPENDENCE_NOT_ESTABLISHED"
+  optional_verification_provider:
+    provider: "alpaca"
+    phase_2_enabled: false
+    credentials: "user_environment_only"
+    role: "later_independent_verification"
+  cross_provider_verification:
+    phase_2_enabled: false
+    required_before_serious_publication: true
+    representative_sample_required: true
+    compare:
+      - "ROW_LEVEL_DIFFERENCES"
+      - "RETURN_DIFFERENCES"
+      - "FORECAST_DIFFERENCES"
+      - "DIAGNOSTIC_DIFFERENCES"
+      - "SENTINEL_CONCLUSION_CHANGES"
 
 forecast_provider:
   contract_version: "sentinel-forecast-provider-v0"

@@ -6,6 +6,7 @@ dependencies = ["openalpha-research-core"]
 
 [dependency-groups]
 dev = ["hypothesis>=6.0", "jsonschema>=4.23,<5", "openalpha-experiment-spec", "pyright>=1.1", "pytest>=8.0", "pytest-asyncio>=0.25", "ruff>=0.12"]
+sentinel-phase2 = ["yfinance==1.5.2"]
 
 [tool.uv.workspace]
 members = ["apps/api", "apps/worker", "packages/*"]

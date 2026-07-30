@@ -38,6 +38,9 @@ checkpoints/
 *.safetensors
 .huggingface/
 sentinel-cache/
+.yfinance/
+yfinance-cache/
+research/sentinel-v0/private/
 
 # Generated research artifacts
 artifacts/

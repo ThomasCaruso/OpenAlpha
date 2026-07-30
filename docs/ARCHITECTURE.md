@@ -41,7 +41,7 @@ Outcome data is inaccessible to the forecast/diagnostic operation. A separate re
 
 ### Market data
 
-The provider-independent historical-bars request remains unchanged in principle: symbols, feed, timeframe, start, end, adjustment, as-of behavior, sort, and pagination are explicit. Alpaca is the first adapter; credentials are environment-only and no fallback exists.
+The provider-independent historical-bars port remains unchanged in principle. Phase 2's first adapter is a pinned yfinance client over Yahoo Finance's unofficial public interface. Interval, inclusive start, exclusive end, raw adjustment behavior, repair, actions, threading, timeout, and local XNYS cutoff enforcement are explicit; no fallback exists. Alpaca remains an optional later adapter for independent verification.
 
 ### Forecast provider
 
@@ -75,14 +75,14 @@ The evaluator reports risk/error correlation, quintiles, coverage, direction, ba
 
 ## Error model
 
-Typed failures distinguish credentials, entitlement, provider response, data quality, insufficient history, model loading, inference resource, seed control, ensemble completeness, diagnostic availability, outcome timing, risk configuration, holdout mutation, artifact integrity, and report provenance.
+Typed failures distinguish provider availability or response, data quality, insufficient history, model loading, inference resource, seed control, ensemble completeness, diagnostic availability, outcome timing, risk configuration, holdout mutation, artifact integrity, and report provenance.
 
 Failures remain in counts. No fake output silently replaces a real model failure.
 
 ## Security and storage
 
-- Fixed HTTPS hosts and bounded requests.
-- Secrets excluded from URLs, logs, artifacts, exceptions, and Git.
+- Pinned client versions, bounded requests, explicit timeouts, and no silent provider fallback.
+- Secrets are not required by the Phase 2 adapter; future provider credentials remain excluded from URLs, logs, artifacts, exceptions, and Git.
 - Raw market responses are hashed then discarded in v0.
 - Restricted normalized contexts, if retained, remain in the user-local confined store.
 - Checkpoints and Hugging Face caches remain outside Git.

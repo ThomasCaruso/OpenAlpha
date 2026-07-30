@@ -4,30 +4,44 @@
 
 This policy governs market inputs and forecast-provider artifacts for Sentinel v0. Hashes prove byte identity, not data correctness, historical vintage, model validity, or redistribution rights.
 
-## Market-data provider
+## Phase 2 development provider
 
-Alpaca remains the first US equity/ETF provider because its historical-bars endpoint is authenticated and documented. The provider-independent boundary allows a future lawful provider without changing diagnostics or evaluation.
+Phase 2 uses Yahoo Finance data through the pinned open-source `yfinance==1.5.2` client. This is an unofficial public interface for local research and education, not an official Yahoo integration, authenticated institutional feed, or point-in-time market-data service. Availability, schemas, and response behavior may change without project control.
 
-The fixed endpoint is `https://data.alpaca.markets/v2/stocks/bars`. Credentials come only from `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`. Missing credentials, SIP entitlement, invalid responses, and rate limits fail explicitly. There is no Yahoo adapter and no provider fallback.
+The provider-independent market-data port remains. Alpaca is retained as an optional, separately sourced verification adapter for a later phase; it is not called during the single-origin Phase 2 proof. No adapter silently falls back to another provider.
 
-Every request records provider/adapter identity, symbols, SIP feed, 1Day timeframe, inclusive start/end, adjustment, cutoff-date `asof`, ascending sort, bounded pagination, retrieval time, and request/response hashes.
+Every Phase 2 download explicitly sets:
 
-## V0 representation
+- `interval="1d"`;
+- `auto_adjust=False`;
+- `back_adjust=False`;
+- `repair=False`;
+- `actions=True`;
+- `progress=False`;
+- `threads=False`;
+- `timeout=30.0`.
 
-Sentinel v0 uses `adjustment=raw` daily OHLCV bars for Kronos context, the last-value baseline, diagnostics, and return/path outcomes. The primary realized return is `log(raw close after five XNYS sessions / raw cutoff close)`.
+The request also explicitly sets start, exclusive end, `prepost=False`, `rounding=False`, `keepna=False`, and `multi_level_index=False`. The persisted provenance records provider, client and version, all request arguments, retrieval timestamp, normalized schema, row count, first/last session, normalized-input hash, quality checks, and corporate-action warnings.
 
-This choice avoids assuming that a currently requested split-, dividend-, and spin-off-adjusted history is identical to what was available at the historical cutoff. It also excludes dividend return and may expose split or other corporate-action discontinuities. V0 records those limitations and does not build a corporate-action engine.
+## Causal cutoff and representation
 
-V0 has no trading simulation. A later economic experiment would require explicit dividend and corporate-action accounting under a separately amended design.
+`yfinance` treats start as inclusive and end as exclusive. For the SPY 2024-07-05 forecast, creation requests history through an exclusive end of 2024-07-06, rejects any row after 2024-07-05, and requires the final XNYS input session to be exactly 2024-07-05. The logically separate resolver requests the five expected sessions through 2024-07-12 only after the forecast record is sealed.
 
-Daily timestamps are normalized to XNYS sessions while preserving provider UTC timestamps. `asof` controls symbol mapping; it is not a guarantee that today's historical response matches the vintage available at the historical cutoff.
+Sentinel v0 uses raw Open, High, Low, Close, and Volume. `Adj Close` is never a Kronos input. Price repair is disabled because it can alter observations using surrounding information. Dividend and split columns are audit metadata and warnings only.
 
-## Storage
+The primary realized return is `log(raw close after five XNYS sessions / raw cutoff close)`. This avoids treating a modern adjusted history as exact point-in-time truth, but it omits dividend return and may expose split or other corporate-action discontinuities. V0 records those limitations and does not build a corporate-action engine or make trading-return claims.
 
-- Raw Alpaca response bytes are validated, hashed, and discarded.
-- Normalized input is retained only when legally permitted and necessary, inside the user-local confined content-addressed store.
-- Git contains request recipes, provenance, hashes, configurations, forecasts, diagnostics, outcomes, and derived aggregate metrics—not restricted raw bars.
-- Tests use purpose-built fixtures marked synthetic and inadmissible as empirical evidence.
+## Storage and redistribution
+
+- Raw Yahoo response payloads, complete reusable historical datasets, yfinance caches, and CSV bar exports are never committed.
+- Project policy prohibits redistribution of raw downloaded data.
+- A compact normalized snapshot may exist only as a private local artifact outside Git when required for reproduction and permitted.
+- Git may contain request recipes, provenance, hashes, configurations, compact forecasts, diagnostics, outcomes, warnings, and derived metrics.
+- Tests use purpose-built fixtures marked synthetic and inadmissible as market evidence.
+
+## Cross-provider verification
+
+No cross-provider comparison is part of the one-origin Phase 2 proof. Before any serious Sentinel publication, a representative sample must be rerun through at least one independently sourced provider such as Alpaca. The report must compare row values, returns, forecasts, diagnostics, and whether the Sentinel conclusion changes. Until then, the project cannot claim provider-independent evidence.
 
 ## Model inference and weights
 
@@ -37,21 +51,15 @@ The source, model, and tokenizer revisions are pinned in `research/sentinel-v0/e
 
 No adapter may require arbitrary remote code, untrusted pickle/joblib loading, or a permanent paid deployment for v0. Real inference failures cannot be replaced with fake Kronos output.
 
-## Redistribution
-
-Alpaca states its API market data cannot be redistributed. Public reproducibility uses user-owned credentials, request metadata, hashes, code/configuration identity, and permitted derived aggregates. Any raw-data publication requires documented permission and a policy revision.
-
-Kronos source and released model/tokenizer pages state MIT licensing, but downstream publication still records exact source/model identities and license metadata.
-
 ## Reproducibility limitations
 
-A third party may reproduce code and request parameters yet receive corrected provider history, a changed access entitlement, or different hardware-dependent stochastic output. Sentinel records these limitations and never describes historical replay as a literal reconstruction of the information service available at the cutoff.
+A third party may reproduce code and request parameters yet receive corrected Yahoo history or different hardware-dependent stochastic output. yfinance is not an institutional point-in-time source. Sentinel records these limitations and never describes historical replay as a literal reconstruction of the data service available at the cutoff.
 
 ## Primary sources
 
+- [yfinance package and legal notice](https://pypi.org/project/yfinance/)
+- [yfinance download parameters](https://ranaroussi.github.io/yfinance/reference/api/yfinance.download.html)
 - [Alpaca historical stock bars](https://docs.alpaca.markets/us/reference/stockbars)
-- [Alpaca Market Data FAQ](https://docs.alpaca.markets/us/docs/market-data-faq)
-- [Alpaca redistribution policy](https://alpaca.markets/support/redistribute-alpaca-api)
 - [Official Kronos repository](https://github.com/shiyu-coder/Kronos)
 - [Kronos-mini model card](https://huggingface.co/NeoQuasar/Kronos-mini)
 - [Kronos-Tokenizer-2k model card](https://huggingface.co/NeoQuasar/Kronos-Tokenizer-2k)

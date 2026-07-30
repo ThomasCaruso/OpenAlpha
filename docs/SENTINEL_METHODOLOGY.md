@@ -15,7 +15,7 @@ Every forecast and diagnostic vector is persisted before its five-session outcom
 | Element | Decision |
 |---|---|
 | Assets | SPY, QQQ |
-| Frequency | Alpaca SIP `1Day` bars |
+| Frequency | Yahoo Finance raw `1d` bars through `yfinance==1.5.2` |
 | Forecast horizon | 5 XNYS sessions |
 | Development period | 2024-07-01 through 2025-06-30 |
 | Untouched holdout | 2025-07-01 through 2026-06-30 |
@@ -33,13 +33,15 @@ Development and holdout boundaries do not change after this commit. The prefligh
 
 ## Data boundary
 
-Sentinel v0 requests SPY and QQQ from Alpaca's documented historical-bars endpoint with explicit `feed=sip`, `timeframe=1Day`, inclusive start/end, `adjustment=raw`, `asof=<cutoff date>`, ascending sort, and bounded pagination. There is no provider fallback.
+Sentinel v0 requests SPY and QQQ from Yahoo Finance through the pinned open-source `yfinance==1.5.2` client. yfinance is not an official Yahoo integration or institutional point-in-time source. Each request explicitly sets `interval="1d"`, `auto_adjust=False`, `back_adjust=False`, `repair=False`, `actions=True`, `progress=False`, `threads=False`, `timeout=30.0`, `prepost=False`, `rounding=False`, `keepna=False`, and `multi_level_index=False`. There is no provider fallback.
 
-The retrieval window begins 2022-06-01, providing more than 512 eligible daily observations before the first cutoff, and ends 2026-07-08, allowing five-session outcomes for the final weekly cutoff. Context constructors still enforce each forecast's own cutoff.
+The Phase 2 creation request starts inclusively on 2022-06-01 and ends exclusively on 2024-07-06. Its constructor rejects post-cutoff rows and requires 2024-07-05 as the exact final XNYS session. Only after the immutable forecast is sealed may the separate resolver request 2024-07-06 through the exclusive end 2024-07-13 and accept exactly the declared five outcome sessions. Later development/holdout request windows will preserve the same per-origin causal rule.
 
-Raw provider responses are held only for request validation and hashing, then discarded. Credentials never enter artifacts. Normalized raw OHLCV input may be retained in user-local content-addressed storage only when terms permit and only as required to reproduce a request; Git stores hashes, provenance, parameters, predictions, outcomes, and aggregate metrics.
+Raw provider responses are ephemeral and never committed or redistributed. Complete reusable histories, yfinance caches, and CSV exports remain outside Git. Normalized raw OHLCV input may be retained only in a private user-local artifact when permitted and required; Git stores request parameters, client version, retrieval timestamp, schema, row count/range, normalized-input hash, quality results, corporate-action warnings, predictions, outcomes, and derived metrics.
 
-The primary outcome is the raw five-session close-to-close log return. This avoids treating a currently revised adjusted history as point-in-time truth, but it omits dividend return and can contain corporate-action discontinuities. Sentinel v0 does not add a corporate-action engine or make trading-return claims.
+Only Open, High, Low, Close, and Volume enter Kronos. Adj Close is excluded, and dividend/split columns are audit metadata only. The primary outcome is the raw five-session close-to-close log return. This avoids treating a currently revised adjusted history as point-in-time truth, but it omits dividend return and can contain corporate-action discontinuities. Sentinel v0 does not add a corporate-action engine or make trading-return claims.
+
+Phase 2 performs no cross-provider check. Before serious publication, a representative sample must be rerun through an independently sourced provider such as Alpaca, with row, return, forecast, diagnostic, and conclusion differences reported.
 
 ## Real Kronos inference boundary
 
@@ -253,7 +255,7 @@ The existing manifest artifact-kind vocabulary may carry Sentinel payloads where
 
 ## Failure and stop behavior
 
-- Missing Alpaca credentials, SIP entitlement, or real Kronos resources are explicit blockers.
+- Unavailable or invalid Yahoo/yfinance history and unavailable real Kronos resources are explicit blockers.
 - A real Kronos failure is persisted; no fake or baseline output silently replaces it.
 - If Python 3.13/Windows compatibility, deterministic seed control, raw-path capture, or latency makes real Kronos unreasonable, Phase 2 stops and records the evidence.
 - Provider responses, model weights, and caches are never committed.
@@ -264,5 +266,6 @@ The existing manifest artifact-kind vocabulary may carry Sentinel payloads where
 - [Official Kronos repository](https://github.com/shiyu-coder/Kronos)
 - [Kronos-mini model card](https://huggingface.co/NeoQuasar/Kronos-mini)
 - [Kronos-Tokenizer-2k model card](https://huggingface.co/NeoQuasar/Kronos-Tokenizer-2k)
+- [yfinance package and legal notice](https://pypi.org/project/yfinance/)
+- [yfinance download parameters](https://ranaroussi.github.io/yfinance/reference/api/yfinance.download.html)
 - [Alpaca historical bars](https://docs.alpaca.markets/us/reference/stockbars)
-- [Alpaca redistribution policy](https://alpaca.markets/support/redistribute-alpaca-api)

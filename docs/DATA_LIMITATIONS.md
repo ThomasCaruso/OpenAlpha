@@ -2,11 +2,13 @@
 
 ## Provider history
 
-Alpaca historical bars retrieved now may contain corrections, adjustments, and symbol mappings unavailable in identical form at a historical cutoff. `asof` addresses symbol identity, not complete point-in-time data vintage. Sentinel v0 therefore tests its method on a fixed retrieved historical representation, not a perfect reconstruction of the provider's past state.
+Phase 2 retrieves Yahoo Finance data through the unofficial open-source yfinance client. Yahoo does not sponsor or guarantee this integration, and availability, schemas, corrections, and response behavior may change. The source is not an institutional point-in-time archive. Sentinel v0 therefore tests a fixed retrieved representation, not a perfect reconstruction of what a market-data user saw at the historical cutoff.
+
+No cross-provider verification is performed for the single Phase 2 origin. Strong claims require a representative rerun through an independent source such as Alpaca and comparison of bars, returns, forecasts, diagnostics, and conclusions.
 
 ## Raw representation
 
-`adjustment=raw` avoids presenting a modern adjusted series as exact point-in-time history. Raw close-to-close return omits distributions, can contain corporate-action discontinuities, and is not a total shareholder return. Sentinel v0 performs no corporate-action reconstruction or execution simulation, so its results cannot support dividend, fill-price, or trading-profit claims.
+`auto_adjust=False`, `back_adjust=False`, and `repair=False` avoid using adjusted prices or yfinance repair as model inputs. `Adj Close` is excluded. Raw close-to-close return omits distributions, can contain corporate-action discontinuities, and is not total shareholder return. Dividend and split fields are warnings only; Sentinel v0 performs no corporate-action reconstruction or execution simulation.
 
 ## Universe and sample
 
@@ -42,4 +44,4 @@ The later year is untouched for configuration, but many diagnostics and outputs 
 
 ## Storage and reproducibility
 
-Raw data and model caches are not committed. Reproduction requires provider credentials, network availability, exact pinned code/model identities, and sufficient local resources. Hashing proves which artifacts were used, not that their sources were correct.
+Raw data and model caches are not committed. Reproduction requires network availability, the pinned yfinance/code/model identities, and sufficient local resources. Hashing proves which artifacts were used, not that their sources were correct.
