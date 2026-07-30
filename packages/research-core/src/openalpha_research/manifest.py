@@ -66,6 +66,11 @@ class MethodologyStatus(StrEnum):
     FAILED = "failed"
 
 
+class ManifestProfile(StrEnum):
+    LEGACY_RESEARCH_RUN = "legacy_research_run"
+    SENTINEL_ORIGIN = "sentinel_origin"
+
+
 class GitMetadata(FrozenModel):
     commit_sha: CommitSha
     dirty: bool
@@ -134,6 +139,7 @@ class ManifestArtifact(FrozenModel):
 
 class RunManifest(FrozenModel):
     schema_version: Literal["1.0"]
+    profile: ManifestProfile = ManifestProfile.LEGACY_RESEARCH_RUN
     run_id: Identifier
     attempt_id: Identifier
     experiment_id: ExperimentId
@@ -184,6 +190,22 @@ REQUIRED_COMPLETED_ARTIFACT_KINDS = frozenset(
         ArtifactKind.METHODOLOGY_AUDIT,
     }
 )
+REQUIRED_SENTINEL_ORIGIN_ARTIFACT_KINDS = frozenset(
+    {
+        ArtifactKind.CANONICAL_SPEC,
+        ArtifactKind.DATA_SNAPSHOT,
+        ArtifactKind.DATA_QUALITY,
+        ArtifactKind.FORECAST_ORIGINS,
+        ArtifactKind.FORECASTS,
+        ArtifactKind.DIAGNOSTICS,
+        ArtifactKind.FORECAST_METRICS,
+        ArtifactKind.METHODOLOGY_AUDIT,
+    }
+)
+REQUIRED_COMPLETED_ARTIFACT_KINDS_BY_PROFILE = {
+    ManifestProfile.LEGACY_RESEARCH_RUN: REQUIRED_COMPLETED_ARTIFACT_KINDS,
+    ManifestProfile.SENTINEL_ORIGIN: REQUIRED_SENTINEL_ORIGIN_ARTIFACT_KINDS,
+}
 MANIFEST_MEDIA_TYPE = "application/vnd.openalpha.run-manifest+json"
 
 
@@ -218,11 +240,12 @@ def publish_manifest(store: LocalArtifactStore, manifest: RunManifest) -> Artifa
     for artifact in manifest.artifacts:
         artifacts_by_kind.setdefault(artifact.kind, []).append(artifact)
 
-    missing_kinds = REQUIRED_COMPLETED_ARTIFACT_KINDS - artifacts_by_kind.keys()
+    required_kinds = REQUIRED_COMPLETED_ARTIFACT_KINDS_BY_PROFILE[manifest.profile]
+    missing_kinds = required_kinds - artifacts_by_kind.keys()
     if missing_kinds:
         missing = ", ".join(sorted(kind.value for kind in missing_kinds))
         raise ManifestIntegrityError(f"missing required artifact kinds: {missing}")
-    for unique_kind in REQUIRED_COMPLETED_ARTIFACT_KINDS:
+    for unique_kind in required_kinds:
         if len(artifacts_by_kind[unique_kind]) != 1:
             raise ManifestIntegrityError(
                 f"completed manifest requires exactly one {unique_kind.value} artifact"

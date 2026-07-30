@@ -9,6 +9,7 @@ This directory contains the locked development-only configuration for testing wh
 - `amendments/` preserves the reason and hashes for pre-execution changes.
 - `results/` is for compact derived evaluation artifacts and their provenance.
 - `reports/` is for human-readable artifact-grounded reports.
+- `reports/phase2-spy-2024-07-05.md` is the verified one-origin development audit; it is not empirical evidence.
 - Raw Yahoo responses, reusable normalized datasets, yfinance caches, model weights, and Hugging Face caches remain outside Git.
 - Phase 2 uses pinned yfinance only for local development; Alpaca remains a required later cross-provider check before serious publication.
 - Protocol v1 is not defined or frozen here.

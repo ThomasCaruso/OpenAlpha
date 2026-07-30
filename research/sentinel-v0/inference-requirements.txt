@@ -1,0 +1,8 @@
+# Isolated Python 3.11 Phase 2 environment; model/source pins live in experiment.yaml.
+torch==2.13.0
+numpy==2.2.6
+pandas==2.2.2
+einops==0.8.1
+huggingface_hub==0.33.1
+tqdm==4.67.1
+safetensors==0.6.2

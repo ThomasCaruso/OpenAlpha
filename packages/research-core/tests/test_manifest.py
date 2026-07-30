@@ -13,6 +13,7 @@ from openalpha_research.manifest import (
     EnvironmentMetadata,
     GitMetadata,
     ManifestArtifact,
+    ManifestProfile,
     MethodologyStatus,
     RunManifest,
     canonical_manifest_bytes,
@@ -103,6 +104,61 @@ def test_completed_manifest_requires_the_full_core_artifact_inventory(tmp_path: 
 
     with pytest.raises(ManifestIntegrityError, match="data_snapshot"):
         publish_manifest(store, _replace_manifest(manifest, artifacts=without_snapshot))
+
+
+def test_sentinel_origin_profile_requires_evidence_not_trading_artifacts(tmp_path: Path) -> None:
+    store = LocalArtifactStore(tmp_path)
+    legacy = _valid_manifest(store)
+    required = {
+        ArtifactKind.CANONICAL_SPEC,
+        ArtifactKind.DATA_SNAPSHOT,
+        ArtifactKind.DATA_QUALITY,
+        ArtifactKind.FORECAST_ORIGINS,
+        ArtifactKind.FORECASTS,
+        ArtifactKind.DIAGNOSTICS,
+        ArtifactKind.FORECAST_METRICS,
+        ArtifactKind.METHODOLOGY_AUDIT,
+    }
+    spec = next(
+        artifact for artifact in legacy.artifacts if artifact.kind is ArtifactKind.CANONICAL_SPEC
+    )
+    selected: list[ManifestArtifact] = []
+    for artifact in legacy.artifacts:
+        if artifact.kind not in required:
+            continue
+        payload = artifact.model_dump(mode="python")
+        payload["input_sha256"] = () if artifact is spec else (spec.ref.sha256,)
+        selected.append(ManifestArtifact.model_validate(payload))
+    diagnostics_ref = store.put_bytes(
+        b'{"kind":"diagnostics","schema_version":"1.0"}',
+        media_type="application/json",
+    )
+    selected.append(
+        _artifact(
+            ArtifactKind.DIAGNOSTICS,
+            diagnostics_ref,
+            experiment_id=legacy.experiment_id,
+            input_sha256=(spec.ref.sha256,),
+        )
+    )
+    manifest = _replace_manifest(
+        legacy,
+        profile=ManifestProfile.SENTINEL_ORIGIN,
+        artifacts=tuple(selected),
+    )
+
+    published = publish_manifest(store, manifest)
+
+    assert store.verify(published)
+    assert all(
+        artifact.kind
+        not in {
+            ArtifactKind.ORDERS,
+            ArtifactKind.FILLS,
+            ArtifactKind.ACCOUNTING_LEDGER,
+        }
+        for artifact in manifest.artifacts
+    )
 
 
 @pytest.mark.parametrize("state", (RunState.RUNNING, RunState.FAILED, RunState.INVALID))

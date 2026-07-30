@@ -40,7 +40,7 @@ The worktree now defines:
 - research workspace and experiment YAML;
 - archived unimplemented Kronos Reality Check plan and design.
 
-No Sentinel package or experiment implementation has begun.
+Phase 1 remains locked. Phase 2 added one narrow internal package and completed only the single predeclared SPY origin described below; the SPY/QQQ development sample has not begun.
 
 ## Verified provider and model facts
 
@@ -53,24 +53,25 @@ No Sentinel package or experiment implementation has begun.
 - Current feasibility pins are source `67b630e67f6a18c9e9be918d9b4337c960db1e9a`, model `f4e68697d9d5aed55cef5c96aabc3376bcad9f81`, and tokenizer `26966d0035065a0cae0ebad7af8ece35bc1fb51c`.
 - Reported Hub storage is 16,440,776 model bytes plus 15,842,376 tokenizer bytes.
 
-## Unresolved real-inference questions
+## Resolved Phase 2 operational questions
 
-- Whether the pinned official source and PyTorch dependencies run correctly on this Python 3.13 Windows CPU host.
-- Whether seed control produces reproducible independent paths through the official predictor.
-- Whether `sample_count=1` exposes the raw path needed for disagreement diagnostics without hidden averaging.
-- Actual median and tail latency for nine requests at 128/256/512 contexts.
-- Exact downloaded file hashes and total transient cache footprint.
-- Whether Yahoo/yfinance returns a complete, valid 512-session causal SPY context under the pinned request.
-- Whether a documented ephemeral hosted alternative is cheaper than local execution if the host is too slow.
-
-These are Phase 2 feasibility questions, not permission to substitute fake output.
+- Python 3.11.15 and PyTorch 2.13.0+cpu loaded the pinned source/model/tokenizer on this Windows CPU host.
+- Every Sentinel call used `sample_count=1` and retained its individual path.
+- Resetting Python, NumPy, PyTorch CPU, and accelerator RNGs produced identical A/B hashes for context 512/seed 1729; seed 2027 produced a different hash.
+- The nine official calls completed in 163.56 to 680.03 ms of provider-measured inference time per path.
+- The exact model/tokenizer filenames and hashes are recorded below and in the audit.
+- The Hugging Face cache footprint was 32,283,678 bytes outside Git.
+- yfinance returned 526 complete XNYS sessions from 2022-06-01 through 2024-07-05.
+- The official Kronos predictor accepts OHLCV from Sentinel but internally derives an `amount` feature. Sentinel did not request, manufacture, persist, or redistribute a provider amount column. This behavior is a disclosed model-wrapper limitation.
 
 ## Evidence status
 
 - Protocol v1 is unfrozen and its implementation task is paused.
-- No Yahoo Finance or Alpaca request has run in this repository.
-- No model weights have been downloaded into Git or the worktree.
-- No real Kronos forecast, Sentinel diagnostic, outcome, risk model, holdout result, or empirical Sentinel claim exists.
+- One real, historical, development-only SPY forecast origin has completed.
+- Model weights and caches exist only under `C:\Users\Tommy\.cache\openalpha-sentinel\phase2`, outside Git and the worktree.
+- Yahoo response frames were ephemeral. No raw response, reusable market dataset, CSV export, or yfinance cache is tracked.
+- A real Kronos forecast, causal diagnostic vector, separately resolved outcome, append-only ledger, completed journal, and verified manifest now exist for this one origin.
+- No Sentinel risk model, action, development sample, holdout result, provider-independent result, or empirical Sentinel efficacy claim exists.
 
 ## Phase 2 pre-execution amendment
 
@@ -134,6 +135,100 @@ Pre-execution yfinance amendment verification on 2026-07-30:
 
 These checks verify only the pre-execution provider amendment. They are not market-data, inference, or Sentinel-performance evidence.
 
+## Phase 2 one-origin result
+
+**Claim boundary: DEVELOPMENT PROOF — NOT EMPIRICAL EVIDENCE.**
+
+The `create` command fetched only causal history, ran the seed probe and official nine paths, computed diagnostics, and sealed the forecast. An independent reload verified the creation seal before the separately imported `resolve` operation requested any outcome row.
+
+### Causal data
+
+- Provider/client: Yahoo Finance through `yfinance==1.5.2`.
+- Explicit request: SPY, `interval=1d`, start 2022-06-01 inclusive, end 2024-07-06 exclusive, `auto_adjust=false`, `back_adjust=false`, `repair=false`, `actions=true`, `progress=false`, `threads=false`, timeout 30.0 seconds.
+- Validated rows: 526 complete XNYS sessions.
+- First/final session: 2022-06-01 / 2024-07-05.
+- Normalized input SHA-256: `f09446b7f7d541907401ca133580eac205c99acb5e27d84bf922943cc4d57bbe`.
+- Nine dividends were recorded as warnings. Adj Close was not an input.
+
+### Model environment and files
+
+- Source: `shiyu-coder/Kronos@67b630e67f6a18c9e9be918d9b4337c960db1e9a`.
+- Model: `NeoQuasar/Kronos-mini@f4e68697d9d5aed55cef5c96aabc3376bcad9f81`.
+- Tokenizer: `NeoQuasar/Kronos-Tokenizer-2k@26966d0035065a0cae0ebad7af8ece35bc1fb51c`.
+- Environment: Python 3.11.15, PyTorch 2.13.0+cpu, NumPy 2.2.6, pandas 2.2.2, CPU, Windows `10.0.26200`.
+- Model `config.json`: 225 bytes, SHA-256 `70daca2cb11e3a979dd6b8ac12ee08e2aace877acf28f5b8dfb4fe5609736201`.
+- Model `model.safetensors`: 16,440,776 bytes, SHA-256 `a7d5f37e2e9fbd9891f7d7d4f72574512dd1f704fee14223e0a8cd0fbf54197c`.
+- Tokenizer `config.json`: 301 bytes, SHA-256 `0b30a443affb03e05a876a083857de9164f899feb7b4d261da02c485c9a3e3b6`.
+- Tokenizer `model.safetensors`: 15,842,376 bytes, SHA-256 `b97ec46b3b72160509e289183eaf7bdf5f0dac5bb9b49522f6d46638a99a8717`.
+- Hugging Face cache path: `C:\Users\Tommy\.cache\openalpha-sentinel\phase2\hf`; 32,283,678 bytes.
+
+### Reproducibility and official paths
+
+- Probe A (512/1729): `fdf503bcb82d38f361c8a1231818e0b1fd1284cd3015344fefad7ba47dea97ed`.
+- Probe B (512/1729): `fdf503bcb82d38f361c8a1231818e0b1fd1284cd3015344fefad7ba47dea97ed`.
+- Probe C (512/2027): `68d31144b7b53c8f67a2aeb0d54c5a294d5ca9cb894f5a5e6f9ea5172f7f00be`.
+- A/B matched; C differed. Exact seeded replay is supported in this recorded environment.
+
+| Context | Seed | Predicted raw log return | Inference ms |
+|---:|---:|---:|---:|
+| 128 | 1729 | -0.0001255688084 | 166.4748 |
+| 128 | 2027 | -0.01352307375 | 163.5625 |
+| 128 | 7919 | 0.001245479525 | 192.6445 |
+| 256 | 1729 | -0.01867061848 | 309.1686 |
+| 256 | 2027 | -0.003944726966 | 339.8556 |
+| 256 | 7919 | 0.01707839656 | 305.6819 |
+| 512 | 1729 | -0.01764257167 | 472.4725 |
+| 512 | 2027 | -0.01301144592 | 512.3851 |
+| 512 | 7919 | -0.01833364695 | 680.0327 |
+
+Seven of nine official paths contained at least one OHLC ordering inconsistency. These finite model outputs were preserved without clipping or repair and marked `MODEL_OUTPUT_OHLC_INCONSISTENCY`. The first pre-seal attempt incorrectly rejected three such probe paths; it created no seal and accessed no outcome. That implementation failure and one retry remain disclosed in the forecast and report.
+
+### Canonical forecast and diagnostics
+
+- Canonical averaged 512-context close path: `[544.7853800456, 543.5544026693, 545.7588500977, 546.9165649414, 545.6582438151]`.
+- Canonical predicted raw log return: `-0.01632642835274094`.
+- Total creation runtime: 12.9268844 seconds.
+- Available diagnostics: directional agreement 0.7777778; return dispersion 120.3766301 bp; path dispersion 2.1476472; context direction agreement 1.0; context return spread 122.1420031 bp; baseline disagreement 163.2642835 bp; recent annualized volatility 0.05933293; volatility change 0.55166611; trend strength 0.53844384; gap/outlier score 1.97526236; analogue distance 0.96619730; analogue outcome dispersion 0.02605027; horizon path divergence -0.0002239166.
+- `RECENT_MODEL_ERROR`: `not_computable / NO_PRIOR_RESOLVED_FORECASTS`.
+- `UNCERTAINTY_MISCALIBRATION`: `not_computable / NO_PRIOR_CALIBRATION_SAMPLE`.
+- No USE, BLEND, REPAIR, ABSTAIN, reliability score, failure probability, or failure reason was emitted.
+
+### Separate outcome
+
+- Outcome sessions: 2024-07-08 through 2024-07-12, validated against XNYS.
+- Outcome normalized-input SHA-256: `2f21b5e9eeab9a2d02bc4484a27bfdd075d9f2cbb31ee9bd2939cf9499ad9635`.
+- Realized raw log return: `0.00959962794302243`.
+- Kronos absolute return error: `0.02592605629576337`.
+- Flat-baseline absolute return error: `0.00959962794302243`.
+- Direction correct: false.
+- Closer model at this origin: `BASELINE`.
+- Canonical close-path MAE: `12.443314615885424`.
+
+This one negative result does not establish whether Kronos or Sentinel works. It demonstrates only that the real, causal, auditable chain operates and preserves an unfavorable model result.
+
+### Artifact chain
+
+- Forecast ID / creation seal: `973d9d0e30327f88dfe2a0ccd7da2d36fbf23f37407578249a60fc50d77b7021`.
+- Forecast artifact: `2d65affb6e16bb152a82ffac43a98deca9b57d13699a8a117fa5558c08d99945`.
+- Diagnostics artifact: `1a9a8d3c2074daea16b052e3dd638397447eb3008576b710b8a20da75a385962`.
+- Outcome artifact: `50ab72351e9c3928a35574dfbbaa03fd370cccd19e29bb39cd10c6cfd519875e`.
+- Methodology audit: `ea8e2c4b5789f969c066adabaf685823528190b2399986a52ec91162f7f1dabf`.
+- Completed manifest: `f17c148f18e61078e97fa0507d4d7e8d6eafbf667245ed5b7d10688b549b9286`.
+- Independent creation and complete-chain verification: true.
+- Private confined store: `C:\Users\Tommy\.cache\openalpha-sentinel\phase2\run-spy-20240705\artifacts`.
+- Human-readable audit: `research/sentinel-v0/reports/phase2-spy-2024-07-05.md`.
+
+### Final Phase 2 verification
+
+- `uv sync --locked --group dev --group sentinel-phase2` — exit 0; resolved 56 packages and checked 55.
+- `uv run pytest -q` — exit 0; 249 passed in 7.48 seconds.
+- `uv run ruff check .` — exit 0; `All checks passed!`
+- `uv run pyright packages/research-core packages/experiment-spec packages/sentinel scripts/run_sentinel_v0_origin.py` — exit 0; 0 errors, 0 warnings, 0 informations.
+- `git diff --check` — exit 0.
+- Forbidden tracked artifact scan — exit 0; no model/checkpoint, CSV, yfinance cache, generated-report, or generated-result file is tracked.
+- Generated report ignore check — exit 0; the local generated copy is ignored.
+- Offline evidence verification — exit 0; the creation seal and resolved chain verify, the resolved descriptor embeds the same creation evidence, and the tracked audit matches the artifact-generated report after normalizing platform line endings.
+
 ## Exact next task
 
-Implement the minimal `ForecastProvider` and causal yfinance raw-market-context contracts test-first, validate a synthetic five-session inference shape, then run the 512/1729 replay probe and one real SPY 2024-07-05 nine-path origin. Seal the three-path 512-context canonical mean and diagnostics before separately resolving 2024-07-08 through 2024-07-12. Do not emit an action, switch providers, or begin the development sample; stop on any declared data, model, sealing, or infrastructure blocker.
+Phase 2 is complete and stops at this single origin. Do not begin the approximately 208-origin development/holdout experiment. The next possible implementation task is to review the Phase 2 evidence—especially widespread model-output OHLC inconsistencies and the official predictor's internal amount derivation—then explicitly decide whether Phase 3 should proceed unchanged or requires a pre-development experiment amendment.

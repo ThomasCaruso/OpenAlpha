@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openalpha-sentinel"
+version = "0.1.0"
+description = "Narrow Sentinel v0 forecast reliability experiment"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "exchange-calendars==4.13.2",
+  "numpy>=2.5,<3",
+  "openalpha-research-core",
+  "pandas>=3.0,<4",
+  "pydantic>=2.11,<3",
+  "yfinance==1.5.2",
+]
+
+[tool.uv.sources]
+openalpha-research-core = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openalpha_sentinel"]
