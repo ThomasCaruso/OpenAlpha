@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: reportMissingImports=false
 import argparse
 import contextlib
 import hashlib
@@ -109,8 +110,7 @@ def _run_batch(
         "official_predictor_derives_amount": True,
     }
     responses = [
-        _forecast_one(request, model, tokenizer, device, np, pd, torch)
-        for request in requests
+        _forecast_one(request, model, tokenizer, device, np, pd, torch) for request in requests
     ]
     return {"status": "success", "environment": environment, "responses": responses}
 
@@ -124,15 +124,18 @@ def _forecast_one(
     pd: Any,
     torch: Any,
 ) -> dict[str, Any]:
-    request_id = "req_" + hashlib.sha256(
-        json.dumps(
-            request,
-            allow_nan=False,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
+    request_id = (
+        "req_"
+        + hashlib.sha256(
+            json.dumps(
+                request,
+                allow_nan=False,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+    )
     started = time.perf_counter()
     shared = {
         "provider_id": "kronos-local",
@@ -181,7 +184,12 @@ def _forecast_one(
         required = ("open", "high", "low", "close", "volume")
         if len(predicted) != 5 or any(column not in predicted.columns for column in required):
             raise ValueError("Kronos output cannot map to five declared sessions")
-        values = predicted.loc[:, list(required)].to_numpy(dtype=float)
+        values = _extract_predicted_ohlcv(
+            predicted,
+            request["forecast_sessions"],
+            np,
+            pd,
+        )
         if not np.isfinite(values).all():
             raise ValueError("Kronos output contains non-finite values")
         path = []
@@ -214,6 +222,30 @@ def _forecast_one(
                 "message": f"{type(error).__name__}: {error}",
             },
         }
+
+
+def _extract_predicted_ohlcv(
+    predicted: Any,
+    expected_sessions: tuple[str, ...] | list[str],
+    np: Any,
+    pd: Any,
+) -> Any:
+    required = ("open", "high", "low", "close", "volume")
+    if len(predicted) != len(expected_sessions):
+        raise ValueError("Kronos output horizon length mismatch")
+    missing = tuple(column for column in required if column not in predicted.columns)
+    if missing:
+        raise ValueError(f"Kronos output missing named columns: {missing}")
+    expected = tuple(pd.Timestamp(session).date().isoformat() for session in expected_sessions)
+    observed = tuple(pd.Timestamp(value).date().isoformat() for value in predicted.index)
+    if len(observed) != len(set(observed)) or observed != expected:
+        raise ValueError(
+            f"Kronos output timestamp mismatch: expected={expected}, observed={observed}"
+        )
+    values = predicted.loc[:, list(required)].to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("Kronos output contains non-finite values")
+    return values
 
 
 def _validate_batch(payload: object) -> None:

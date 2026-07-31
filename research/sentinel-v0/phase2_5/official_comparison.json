@@ -1,0 +1,260 @@
+{
+    "claim_boundary":  "DEVELOPMENT AUDIT - NOT EMPIRICAL EVIDENCE",
+    "column_mapping":  {
+                           "multiindex_survived_normalization":  false,
+                           "official_derived_field":  "amount=volume*mean(open,high,low,close)",
+                           "official_expected":  [
+                                                     "open",
+                                                     "high",
+                                                     "low",
+                                                     "close",
+                                                     "volume",
+                                                     "amount"
+                                                 ],
+                           "openalpha_input":  [
+                                                   "open",
+                                                   "high",
+                                                   "low",
+                                                   "close",
+                                                   "volume"
+                                               ],
+                           "openalpha_output_named_selection":  [
+                                                                    "open",
+                                                                    "high",
+                                                                    "low",
+                                                                    "close",
+                                                                    "volume"
+                                                                ]
+                       },
+    "comparison":  {
+                       "direct_equals_provider":  true,
+                       "direct_equals_sealed":  true,
+                       "direct_path_sha256":  "2155d9da024b0d0b878a029cca4a180520f59b67acab879eea98e6499cc7fe2c",
+                       "exact_comparison_permitted":  true,
+                       "first_direct_provider_difference":  null,
+                       "first_direct_sealed_difference":  null,
+                       "limitation":  null,
+                       "observed_input_sha256":  "f09446b7f7d541907401ca133580eac205c99acb5e27d84bf922943cc4d57bbe",
+                       "provider_equals_sealed":  true,
+                       "provider_path_sha256":  "2155d9da024b0d0b878a029cca4a180520f59b67acab879eea98e6499cc7fe2c",
+                       "sealed_input_sha256":  "f09446b7f7d541907401ca133580eac205c99acb5e27d84bf922943cc4d57bbe",
+                       "sealed_path_sha256":  "2155d9da024b0d0b878a029cca4a180520f59b67acab879eea98e6499cc7fe2c"
+                   },
+    "execution_attempts":  [
+                               {
+                                   "attempt":  1,
+                                   "failure":  "INTRADAY_EXPECTED_TIMESTAMPS_NOT_CONVERTED_TO_STRICT_DATETIME",
+                                   "outcome_accessed":  false,
+                                   "status":  "not_sealed"
+                               },
+                               {
+                                   "attempt":  2,
+                                   "outcome_accessed":  false,
+                                   "status":  "sealed"
+                               }
+                           ],
+    "golden_direct_violations":  [
+                                     {
+                                         "code":  "HIGH_BELOW_OPEN",
+                                         "existed_before_outcome":  true,
+                                         "normalized_severity":  0.0003010225426899874,
+                                         "observed_gap":  0.0032901763916015625,
+                                         "path_id":  "golden-direct",
+                                         "step":  3,
+                                         "timestamp":  "2024-07-03T10:05:00Z"
+                                     }
+                                 ],
+    "official_direct_violations":  [
+                                       {
+                                           "code":  "HIGH_BELOW_OPEN",
+                                           "existed_before_outcome":  true,
+                                           "normalized_severity":  0.003996270807514112,
+                                           "observed_gap":  2.21649169921875,
+                                           "path_id":  "official-direct-512-1729",
+                                           "step":  1,
+                                           "timestamp":  "2024-07-08"
+                                       },
+                                       {
+                                           "code":  "HIGH_BELOW_CLOSE",
+                                           "existed_before_outcome":  true,
+                                           "normalized_severity":  0.006861833022237159,
+                                           "observed_gap":  3.80584716796875,
+                                           "path_id":  "official-direct-512-1729",
+                                           "step":  1,
+                                           "timestamp":  "2024-07-08"
+                                       },
+                                       {
+                                           "code":  "HIGH_BELOW_LOW",
+                                           "existed_before_outcome":  true,
+                                           "normalized_severity":  0.0016076420274534946,
+                                           "observed_gap":  0.89166259765625,
+                                           "path_id":  "official-direct-512-1729",
+                                           "step":  1,
+                                           "timestamp":  "2024-07-08"
+                                       },
+                                       {
+                                           "code":  "HIGH_BELOW_CLOSE",
+                                           "existed_before_outcome":  true,
+                                           "normalized_severity":  0.0009580485653371294,
+                                           "observed_gap":  0.5313720703125,
+                                           "path_id":  "official-direct-512-1729",
+                                           "step":  2,
+                                           "timestamp":  "2024-07-09"
+                                       },
+                                       {
+                                           "code":  "HIGH_BELOW_CLOSE",
+                                           "existed_before_outcome":  true,
+                                           "normalized_severity":  0.002188787728526936,
+                                           "observed_gap":  1.2139892578125,
+                                           "path_id":  "official-direct-512-1729",
+                                           "step":  3,
+                                           "timestamp":  "2024-07-10"
+                                       },
+                                       {
+                                           "code":  "HIGH_BELOW_CLOSE",
+                                           "existed_before_outcome":  true,
+                                           "normalized_severity":  0.0014159442786805473,
+                                           "observed_gap":  0.78533935546875,
+                                           "path_id":  "official-direct-512-1729",
+                                           "step":  4,
+                                           "timestamp":  "2024-07-11"
+                                       },
+                                       {
+                                           "code":  "HIGH_BELOW_OPEN",
+                                           "existed_before_outcome":  true,
+                                           "normalized_severity":  0.0005735526214722167,
+                                           "observed_gap":  0.318115234375,
+                                           "path_id":  "official-direct-512-1729",
+                                           "step":  5,
+                                           "timestamp":  "2024-07-12"
+                                       },
+                                       {
+                                           "code":  "HIGH_BELOW_CLOSE",
+                                           "existed_before_outcome":  true,
+                                           "normalized_severity":  0.001379739594784853,
+                                           "observed_gap":  0.7652587890625,
+                                           "path_id":  "official-direct-512-1729",
+                                           "step":  5,
+                                           "timestamp":  "2024-07-12"
+                                       }
+                                   ],
+    "private_receipt_sha256":  "c9a5fc1994b496921144713daf68fd0fbf3c8a91630a4879c51a11b99599bbd7",
+    "provider_environment":  {
+                                 "cache_path":  "C:\\Users\\Tommy\\.cache\\openalpha-sentinel\\phase2\\hf",
+                                 "cache_size_bytes":  32283678,
+                                 "device":  "cpu",
+                                 "downloaded_files":  [
+                                                          {
+                                                              "relative_path":  "config.json",
+                                                              "repository":  "NeoQuasar/Kronos-mini",
+                                                              "revision":  "f4e68697d9d5aed55cef5c96aabc3376bcad9f81",
+                                                              "sha256":  "70daca2cb11e3a979dd6b8ac12ee08e2aace877acf28f5b8dfb4fe5609736201",
+                                                              "size_bytes":  225
+                                                          },
+                                                          {
+                                                              "relative_path":  "model.safetensors",
+                                                              "repository":  "NeoQuasar/Kronos-mini",
+                                                              "revision":  "f4e68697d9d5aed55cef5c96aabc3376bcad9f81",
+                                                              "sha256":  "a7d5f37e2e9fbd9891f7d7d4f72574512dd1f704fee14223e0a8cd0fbf54197c",
+                                                              "size_bytes":  16440776
+                                                          },
+                                                          {
+                                                              "relative_path":  "config.json",
+                                                              "repository":  "NeoQuasar/Kronos-Tokenizer-2k",
+                                                              "revision":  "26966d0035065a0cae0ebad7af8ece35bc1fb51c",
+                                                              "sha256":  "0b30a443affb03e05a876a083857de9164f899feb7b4d261da02c485c9a3e3b6",
+                                                              "size_bytes":  301
+                                                          },
+                                                          {
+                                                              "relative_path":  "model.safetensors",
+                                                              "repository":  "NeoQuasar/Kronos-Tokenizer-2k",
+                                                              "revision":  "26966d0035065a0cae0ebad7af8ece35bc1fb51c",
+                                                              "sha256":  "b97ec46b3b72160509e289183eaf7bdf5f0dac5bb9b49522f6d46638a99a8717",
+                                                              "size_bytes":  15842376
+                                                          }
+                                                      ],
+                                 "numpy_version":  "2.2.6",
+                                 "official_predictor_derives_amount":  true,
+                                 "operating_system":  "Windows-10-10.0.26200-SP0",
+                                 "pandas_version":  "2.2.2",
+                                 "python_version":  "3.11.15",
+                                 "torch_version":  "2.13.0+cpu"
+                             },
+    "schema_version":  "sentinel-phase2_5-official-comparison-v0",
+    "timestamp_alignment":  {
+                                "cutoff":  "2024-07-05",
+                                "first_output_maps_to":  "2024-07-08T00:00:00+00:00",
+                                "forecast_sessions":  [
+                                                          "2024-07-08",
+                                                          "2024-07-09",
+                                                          "2024-07-10",
+                                                          "2024-07-11",
+                                                          "2024-07-12"
+                                                      ],
+                                "last_output_maps_to":  "2024-07-12T00:00:00+00:00"
+                            },
+    "validity":  {
+                     "golden_direct":  {
+                                           "candle_count":  5,
+                                           "code_counts":  {
+                                                               "HIGH_BELOW_OPEN":  1
+                                                           },
+                                           "earliest_invalid_horizon_step":  3,
+                                           "expected_candle_count":  5,
+                                           "invalid_candle_count":  1,
+                                           "max_normalized_severity":  0.0003010225426899874,
+                                           "mean_normalized_severity":  0.0003010225426899874,
+                                           "path_id":  "golden-direct",
+                                           "valid":  false,
+                                           "violation_count":  1
+                                       },
+                     "official_direct":  {
+                                             "candle_count":  5,
+                                             "code_counts":  {
+                                                                 "HIGH_BELOW_CLOSE":  5,
+                                                                 "HIGH_BELOW_LOW":  1,
+                                                                 "HIGH_BELOW_OPEN":  2
+                                                             },
+                                             "earliest_invalid_horizon_step":  1,
+                                             "expected_candle_count":  5,
+                                             "invalid_candle_count":  5,
+                                             "max_normalized_severity":  0.006861833022237159,
+                                             "mean_normalized_severity":  0.002372727330750806,
+                                             "path_id":  "official-direct-512-1729",
+                                             "valid":  false,
+                                             "violation_count":  8
+                                         },
+                     "openalpha_provider":  {
+                                                "candle_count":  5,
+                                                "code_counts":  {
+                                                                    "HIGH_BELOW_CLOSE":  5,
+                                                                    "HIGH_BELOW_LOW":  1,
+                                                                    "HIGH_BELOW_OPEN":  2
+                                                                },
+                                                "earliest_invalid_horizon_step":  1,
+                                                "expected_candle_count":  5,
+                                                "invalid_candle_count":  5,
+                                                "max_normalized_severity":  0.006861833022237159,
+                                                "mean_normalized_severity":  0.002372727330750806,
+                                                "path_id":  "openalpha-provider-512-1729",
+                                                "valid":  false,
+                                                "violation_count":  8
+                                            },
+                     "sealed_phase2":  {
+                                           "candle_count":  5,
+                                           "code_counts":  {
+                                                               "HIGH_BELOW_CLOSE":  5,
+                                                               "HIGH_BELOW_LOW":  1,
+                                                               "HIGH_BELOW_OPEN":  2
+                                                           },
+                                           "earliest_invalid_horizon_step":  1,
+                                           "expected_candle_count":  5,
+                                           "invalid_candle_count":  5,
+                                           "max_normalized_severity":  0.006861833022237159,
+                                           "mean_normalized_severity":  0.002372727330750806,
+                                           "path_id":  "sealed-phase2-512-1729",
+                                           "valid":  false,
+                                           "violation_count":  8
+                                       }
+                 }
+}

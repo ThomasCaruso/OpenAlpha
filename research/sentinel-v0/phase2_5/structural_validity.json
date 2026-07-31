@@ -1,0 +1,594 @@
+{
+    "averaged_and_internal_paths":  {
+                                        "official-internal-sample-count-3":  {
+                                                                                 "candle_count":  5,
+                                                                                 "code_counts":  {
+                                                                                                     "HIGH_BELOW_CLOSE":  5,
+                                                                                                     "HIGH_BELOW_LOW":  3,
+                                                                                                     "HIGH_BELOW_OPEN":  4
+                                                                                                 },
+                                                                                 "earliest_invalid_horizon_step":  1,
+                                                                                 "expected_candle_count":  5,
+                                                                                 "invalid_candle_count":  5,
+                                                                                 "max_normalized_severity":  0.00905766360720581,
+                                                                                 "mean_normalized_severity":  0.0031972183945031094,
+                                                                                 "path_id":  "official-internal-sample-count-3",
+                                                                                 "valid":  false,
+                                                                                 "violation_count":  12
+                                                                             },
+                                        "official-internal-sample-count-5":  {
+                                                                                 "candle_count":  5,
+                                                                                 "code_counts":  {
+                                                                                                     "HIGH_BELOW_CLOSE":  4,
+                                                                                                     "HIGH_BELOW_LOW":  2,
+                                                                                                     "HIGH_BELOW_OPEN":  4,
+                                                                                                     "LOW_ABOVE_OPEN":  1
+                                                                                                 },
+                                                                                 "earliest_invalid_horizon_step":  1,
+                                                                                 "expected_candle_count":  5,
+                                                                                 "invalid_candle_count":  5,
+                                                                                 "max_normalized_severity":  0.010076126675457032,
+                                                                                 "mean_normalized_severity":  0.0033625537845639432,
+                                                                                 "path_id":  "official-internal-sample-count-5",
+                                                                                 "valid":  false,
+                                                                                 "violation_count":  11
+                                                                             },
+                                        "offline-all-nine-average":  {
+                                                                         "candle_count":  5,
+                                                                         "code_counts":  {
+                                                                                             "HIGH_BELOW_CLOSE":  4
+                                                                                         },
+                                                                         "earliest_invalid_horizon_step":  1,
+                                                                         "expected_candle_count":  5,
+                                                                         "invalid_candle_count":  4,
+                                                                         "max_normalized_severity":  0.002056000539365286,
+                                                                         "mean_normalized_severity":  0.0013718072109018627,
+                                                                         "path_id":  "offline-all-nine-average",
+                                                                         "valid":  false,
+                                                                         "violation_count":  4
+                                                                     },
+                                        "offline-current-512-average":  {
+                                                                            "candle_count":  5,
+                                                                            "code_counts":  {
+                                                                                                "HIGH_BELOW_CLOSE":  5,
+                                                                                                "HIGH_BELOW_OPEN":  2
+                                                                                            },
+                                                                            "earliest_invalid_horizon_step":  1,
+                                                                            "expected_candle_count":  5,
+                                                                            "invalid_candle_count":  5,
+                                                                            "max_normalized_severity":  0.005662713349947002,
+                                                                            "mean_normalized_severity":  0.00339926295878508,
+                                                                            "path_id":  "offline-current-512-average",
+                                                                            "valid":  false,
+                                                                            "violation_count":  7
+                                                                        },
+                                        "offline-sealed-512-average":  {
+                                                                           "candle_count":  5,
+                                                                           "code_counts":  {
+                                                                                               "HIGH_BELOW_CLOSE":  5,
+                                                                                               "HIGH_BELOW_OPEN":  2
+                                                                                           },
+                                                                           "earliest_invalid_horizon_step":  1,
+                                                                           "expected_candle_count":  5,
+                                                                           "invalid_candle_count":  5,
+                                                                           "max_normalized_severity":  0.005662713349947002,
+                                                                           "mean_normalized_severity":  0.00339926295878508,
+                                                                           "path_id":  "offline-sealed-512-average",
+                                                                           "valid":  false,
+                                                                           "violation_count":  7
+                                                                       }
+                                    },
+    "claim_boundary":  "DEVELOPMENT AUDIT - NOT EMPIRICAL EVIDENCE",
+    "individual_sealed_paths":  {
+                                    "sealed-128-1729":  {
+                                                            "candle_count":  5,
+                                                            "code_counts":  {
+
+                                                                            },
+                                                            "earliest_invalid_horizon_step":  null,
+                                                            "expected_candle_count":  5,
+                                                            "invalid_candle_count":  0,
+                                                            "max_normalized_severity":  null,
+                                                            "mean_normalized_severity":  null,
+                                                            "path_id":  "sealed-128-1729",
+                                                            "valid":  true,
+                                                            "violation_count":  0
+                                                        },
+                                    "sealed-128-2027":  {
+                                                            "candle_count":  5,
+                                                            "code_counts":  {
+                                                                                "HIGH_BELOW_CLOSE":  1
+                                                                            },
+                                                            "earliest_invalid_horizon_step":  3,
+                                                            "expected_candle_count":  5,
+                                                            "invalid_candle_count":  1,
+                                                            "max_normalized_severity":  0.0007290456863494697,
+                                                            "mean_normalized_severity":  0.0007290456863494697,
+                                                            "path_id":  "sealed-128-2027",
+                                                            "valid":  false,
+                                                            "violation_count":  1
+                                                        },
+                                    "sealed-128-7919":  {
+                                                            "candle_count":  5,
+                                                            "code_counts":  {
+
+                                                                            },
+                                                            "earliest_invalid_horizon_step":  null,
+                                                            "expected_candle_count":  5,
+                                                            "invalid_candle_count":  0,
+                                                            "max_normalized_severity":  null,
+                                                            "mean_normalized_severity":  null,
+                                                            "path_id":  "sealed-128-7919",
+                                                            "valid":  true,
+                                                            "violation_count":  0
+                                                        },
+                                    "sealed-256-1729":  {
+                                                            "candle_count":  5,
+                                                            "code_counts":  {
+                                                                                "HIGH_BELOW_CLOSE":  2,
+                                                                                "HIGH_BELOW_LOW":  1,
+                                                                                "HIGH_BELOW_OPEN":  1
+                                                                            },
+                                                            "earliest_invalid_horizon_step":  1,
+                                                            "expected_candle_count":  5,
+                                                            "invalid_candle_count":  2,
+                                                            "max_normalized_severity":  0.0038359357788331793,
+                                                            "mean_normalized_severity":  0.002202213173618956,
+                                                            "path_id":  "sealed-256-1729",
+                                                            "valid":  false,
+                                                            "violation_count":  4
+                                                        },
+                                    "sealed-256-2027":  {
+                                                            "candle_count":  5,
+                                                            "code_counts":  {
+                                                                                "HIGH_BELOW_CLOSE":  5,
+                                                                                "HIGH_BELOW_LOW":  3,
+                                                                                "HIGH_BELOW_OPEN":  2,
+                                                                                "LOW_ABOVE_OPEN":  1
+                                                                            },
+                                                            "earliest_invalid_horizon_step":  1,
+                                                            "expected_candle_count":  5,
+                                                            "invalid_candle_count":  5,
+                                                            "max_normalized_severity":  0.008577758967482032,
+                                                            "mean_normalized_severity":  0.0033801409175533413,
+                                                            "path_id":  "sealed-256-2027",
+                                                            "valid":  false,
+                                                            "violation_count":  11
+                                                        },
+                                    "sealed-256-7919":  {
+                                                            "candle_count":  5,
+                                                            "code_counts":  {
+                                                                                "HIGH_BELOW_CLOSE":  3,
+                                                                                "HIGH_BELOW_LOW":  1,
+                                                                                "HIGH_BELOW_OPEN":  1,
+                                                                                "LOW_ABOVE_OPEN":  1
+                                                                            },
+                                                            "earliest_invalid_horizon_step":  2,
+                                                            "expected_candle_count":  5,
+                                                            "invalid_candle_count":  3,
+                                                            "max_normalized_severity":  0.005547569983433881,
+                                                            "mean_normalized_severity":  0.0019490371571568663,
+                                                            "path_id":  "sealed-256-7919",
+                                                            "valid":  false,
+                                                            "violation_count":  6
+                                                        },
+                                    "sealed-512-1729":  {
+                                                            "candle_count":  5,
+                                                            "code_counts":  {
+                                                                                "HIGH_BELOW_CLOSE":  5,
+                                                                                "HIGH_BELOW_LOW":  1,
+                                                                                "HIGH_BELOW_OPEN":  2
+                                                                            },
+                                                            "earliest_invalid_horizon_step":  1,
+                                                            "expected_candle_count":  5,
+                                                            "invalid_candle_count":  5,
+                                                            "max_normalized_severity":  0.006861833022237159,
+                                                            "mean_normalized_severity":  0.002372727330750806,
+                                                            "path_id":  "sealed-512-1729",
+                                                            "valid":  false,
+                                                            "violation_count":  8
+                                                        },
+                                    "sealed-512-2027":  {
+                                                            "candle_count":  5,
+                                                            "code_counts":  {
+                                                                                "HIGH_BELOW_CLOSE":  5,
+                                                                                "HIGH_BELOW_LOW":  4,
+                                                                                "HIGH_BELOW_OPEN":  4,
+                                                                                "LOW_ABOVE_OPEN":  2
+                                                                            },
+                                                            "earliest_invalid_horizon_step":  1,
+                                                            "expected_candle_count":  5,
+                                                            "invalid_candle_count":  5,
+                                                            "max_normalized_severity":  0.014086593240486476,
+                                                            "mean_normalized_severity":  0.005305060959957473,
+                                                            "path_id":  "sealed-512-2027",
+                                                            "valid":  false,
+                                                            "violation_count":  15
+                                                        },
+                                    "sealed-512-7919":  {
+                                                            "candle_count":  5,
+                                                            "code_counts":  {
+                                                                                "HIGH_BELOW_CLOSE":  3,
+                                                                                "HIGH_BELOW_LOW":  1,
+                                                                                "HIGH_BELOW_OPEN":  2,
+                                                                                "LOW_ABOVE_OPEN":  1
+                                                                            },
+                                                            "earliest_invalid_horizon_step":  1,
+                                                            "expected_candle_count":  5,
+                                                            "invalid_candle_count":  3,
+                                                            "max_normalized_severity":  0.00896929776778866,
+                                                            "mean_normalized_severity":  0.003338785573224217,
+                                                            "path_id":  "sealed-512-7919",
+                                                            "valid":  false,
+                                                            "violation_count":  7
+                                                        }
+                                },
+    "repeatability":  {
+                          "all_exactly_repeatable":  true,
+                          "pairs":  [
+                                        {
+                                            "a_path_sha256":  "5c6c579f5192bb58cb4893b9c6f51ceccb9b6b3590e801634e9c9676893c53c2",
+                                            "b_path_sha256":  "5c6c579f5192bb58cb4893b9c6f51ceccb9b6b3590e801634e9c9676893c53c2",
+                                            "exact_output_match":  true,
+                                            "exact_violation_match":  true,
+                                            "sealed_output_match":  true,
+                                            "seed":  1729,
+                                            "violation_signature":  {
+                                                                        "candle_count":  5,
+                                                                        "earliest_invalid_horizon_step":  1,
+                                                                        "expected_candle_count":  5,
+                                                                        "invalid_candle_count":  5,
+                                                                        "valid":  false,
+                                                                        "violations":  [
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.003996270807514112,
+                                                                                               "observed_gap":  2.21649169921875,
+                                                                                               "step":  1,
+                                                                                               "timestamp":  "2024-07-08"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.006861833022237159,
+                                                                                               "observed_gap":  3.80584716796875,
+                                                                                               "step":  1,
+                                                                                               "timestamp":  "2024-07-08"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_LOW",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.0016076420274534946,
+                                                                                               "observed_gap":  0.89166259765625,
+                                                                                               "step":  1,
+                                                                                               "timestamp":  "2024-07-08"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.0009580485653371294,
+                                                                                               "observed_gap":  0.5313720703125,
+                                                                                               "step":  2,
+                                                                                               "timestamp":  "2024-07-09"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.002188787728526936,
+                                                                                               "observed_gap":  1.2139892578125,
+                                                                                               "step":  3,
+                                                                                               "timestamp":  "2024-07-10"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.0014159442786805473,
+                                                                                               "observed_gap":  0.78533935546875,
+                                                                                               "step":  4,
+                                                                                               "timestamp":  "2024-07-11"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.0005735526214722167,
+                                                                                               "observed_gap":  0.318115234375,
+                                                                                               "step":  5,
+                                                                                               "timestamp":  "2024-07-12"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.001379739594784853,
+                                                                                               "observed_gap":  0.7652587890625,
+                                                                                               "step":  5,
+                                                                                               "timestamp":  "2024-07-12"
+                                                                                           }
+                                                                                       ]
+                                                                    }
+                                        },
+                                        {
+                                            "a_path_sha256":  "0bdda8988da5c0c7180c7b7687009cef96026d79440fcebcb07d0a50504a085b",
+                                            "b_path_sha256":  "0bdda8988da5c0c7180c7b7687009cef96026d79440fcebcb07d0a50504a085b",
+                                            "exact_output_match":  true,
+                                            "exact_violation_match":  true,
+                                            "sealed_output_match":  true,
+                                            "seed":  2027,
+                                            "violation_signature":  {
+                                                                        "candle_count":  5,
+                                                                        "earliest_invalid_horizon_step":  1,
+                                                                        "expected_candle_count":  5,
+                                                                        "invalid_candle_count":  5,
+                                                                        "valid":  false,
+                                                                        "violations":  [
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.003996270807514112,
+                                                                                               "observed_gap":  2.21649169921875,
+                                                                                               "step":  1,
+                                                                                               "timestamp":  "2024-07-08"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.006861833022237159,
+                                                                                               "observed_gap":  3.80584716796875,
+                                                                                               "step":  1,
+                                                                                               "timestamp":  "2024-07-08"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_LOW",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.0016076420274534946,
+                                                                                               "observed_gap":  0.89166259765625,
+                                                                                               "step":  1,
+                                                                                               "timestamp":  "2024-07-08"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.001139402118711307,
+                                                                                               "observed_gap":  0.6319580078125,
+                                                                                               "step":  2,
+                                                                                               "timestamp":  "2024-07-09"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.0004081555397238012,
+                                                                                               "observed_gap":  0.22637939453125,
+                                                                                               "step":  3,
+                                                                                               "timestamp":  "2024-07-10"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.014086593240486476,
+                                                                                               "observed_gap":  7.81298828125,
+                                                                                               "step":  3,
+                                                                                               "timestamp":  "2024-07-10"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_LOW",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.00723466423512048,
+                                                                                               "observed_gap":  4.01263427734375,
+                                                                                               "step":  3,
+                                                                                               "timestamp":  "2024-07-10"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "LOW_ABOVE_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.006826508695396679,
+                                                                                               "observed_gap":  3.7862548828125,
+                                                                                               "step":  3,
+                                                                                               "timestamp":  "2024-07-10"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.0030557193386493695,
+                                                                                               "observed_gap":  1.69482421875,
+                                                                                               "step":  4,
+                                                                                               "timestamp":  "2024-07-11"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.01280226234156049,
+                                                                                               "observed_gap":  7.10064697265625,
+                                                                                               "step":  4,
+                                                                                               "timestamp":  "2024-07-11"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_LOW",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.0065516172049059655,
+                                                                                               "observed_gap":  3.6337890625,
+                                                                                               "step":  4,
+                                                                                               "timestamp":  "2024-07-11"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "LOW_ABOVE_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.0034958978662565964,
+                                                                                               "observed_gap":  1.93896484375,
+                                                                                               "step":  4,
+                                                                                               "timestamp":  "2024-07-11"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.002829907753986862,
+                                                                                               "observed_gap":  1.569580078125,
+                                                                                               "step":  5,
+                                                                                               "timestamp":  "2024-07-12"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.007965690724844182,
+                                                                                               "observed_gap":  4.4180908203125,
+                                                                                               "step":  5,
+                                                                                               "timestamp":  "2024-07-12"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_LOW",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.0007137494825151185,
+                                                                                               "observed_gap":  0.3958740234375,
+                                                                                               "step":  5,
+                                                                                               "timestamp":  "2024-07-12"
+                                                                                           }
+                                                                                       ]
+                                                                    }
+                                        },
+                                        {
+                                            "a_path_sha256":  "9331786b8d8f73347bbc5ee4dbd222358b4e4ab88e7c6057c73a33d0607ad44e",
+                                            "b_path_sha256":  "9331786b8d8f73347bbc5ee4dbd222358b4e4ab88e7c6057c73a33d0607ad44e",
+                                            "exact_output_match":  true,
+                                            "exact_violation_match":  true,
+                                            "sealed_output_match":  true,
+                                            "seed":  7919,
+                                            "violation_signature":  {
+                                                                        "candle_count":  5,
+                                                                        "earliest_invalid_horizon_step":  1,
+                                                                        "expected_candle_count":  5,
+                                                                        "invalid_candle_count":  3,
+                                                                        "valid":  false,
+                                                                        "violations":  [
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.003264474005367097,
+                                                                                               "observed_gap":  1.81060791015625,
+                                                                                               "step":  1,
+                                                                                               "timestamp":  "2024-07-08"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.003857724615949737,
+                                                                                               "observed_gap":  2.1396484375,
+                                                                                               "step":  2,
+                                                                                               "timestamp":  "2024-07-09"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.00896929776778866,
+                                                                                               "observed_gap":  4.9747314453125,
+                                                                                               "step":  2,
+                                                                                               "timestamp":  "2024-07-09"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_LOW",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.00437075268987596,
+                                                                                               "observed_gap":  2.4241943359375,
+                                                                                               "step":  2,
+                                                                                               "timestamp":  "2024-07-09"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "LOW_ABOVE_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.000513028073926223,
+                                                                                               "observed_gap":  0.2845458984375,
+                                                                                               "step":  2,
+                                                                                               "timestamp":  "2024-07-09"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_OPEN",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  0.002350553337422592,
+                                                                                               "observed_gap":  1.3037109375,
+                                                                                               "step":  3,
+                                                                                               "timestamp":  "2024-07-10"
+                                                                                           },
+                                                                                           {
+                                                                                               "code":  "HIGH_BELOW_CLOSE",
+                                                                                               "existed_before_outcome":  true,
+                                                                                               "normalized_severity":  4.5668522239249794E-05,
+                                                                                               "observed_gap":  0.02532958984375,
+                                                                                               "step":  3,
+                                                                                               "timestamp":  "2024-07-10"
+                                                                                           }
+                                                                                       ]
+                                                                    }
+                                        }
+                                    ]
+                      },
+    "schema_version":  "sentinel-phase2_5-structural-validity-v0",
+    "sealed_nine_summary":  {
+                                "values":  [
+                                               {
+                                                   "name":  "INVALID_PATH_FRACTION",
+                                                   "status":  "available",
+                                                   "units":  "fraction",
+                                                   "value":  0.7777777777777778
+                                               },
+                                               {
+                                                   "name":  "INVALID_CANDLE_FRACTION",
+                                                   "status":  "available",
+                                                   "units":  "fraction",
+                                                   "value":  0.5333333333333333
+                                               },
+                                               {
+                                                   "name":  "TOTAL_CONSTRAINT_VIOLATIONS",
+                                                   "status":  "available",
+                                                   "units":  "count",
+                                                   "value":  52
+                                               },
+                                               {
+                                                   "name":  "MAX_CONSTRAINT_VIOLATION_SEVERITY",
+                                                   "status":  "available",
+                                                   "units":  "cutoff_close_fraction",
+                                                   "value":  0.014086593240486476
+                                               },
+                                               {
+                                                   "name":  "MEAN_CONSTRAINT_VIOLATION_SEVERITY",
+                                                   "status":  "available",
+                                                   "units":  "cutoff_close_fraction",
+                                                   "value":  0.003468132759130602
+                                               },
+                                               {
+                                                   "name":  "EARLIEST_INVALID_HORIZON_STEP",
+                                                   "status":  "available",
+                                                   "units":  "one_based_step",
+                                                   "value":  1
+                                               },
+                                               {
+                                                   "name":  "HIGH_LOW_INVERSION_COUNT",
+                                                   "status":  "available",
+                                                   "units":  "count",
+                                                   "value":  11
+                                               },
+                                               {
+                                                   "name":  "HIGH_BELOW_BODY_COUNT",
+                                                   "status":  "available",
+                                                   "units":  "count",
+                                                   "value":  36
+                                               },
+                                               {
+                                                   "name":  "LOW_ABOVE_BODY_COUNT",
+                                                   "status":  "available",
+                                                   "units":  "count",
+                                                   "value":  5
+                                               },
+                                               {
+                                                   "name":  "NONFINITE_OUTPUT_COUNT",
+                                                   "status":  "available",
+                                                   "units":  "count",
+                                                   "value":  0
+                                               },
+                                               {
+                                                   "name":  "NONPOSITIVE_PRICE_COUNT",
+                                                   "status":  "available",
+                                                   "units":  "count",
+                                                   "value":  0
+                                               }
+                                           ]
+                            },
+    "severity_denominator":  "final observed cutoff close for price violations"
+}

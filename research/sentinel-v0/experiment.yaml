@@ -1,31 +1,24 @@
-schema_version: "sentinel-v0.3"
+schema_version: "sentinel-v0.4"
 experiment_id: "openalpha-sentinel-v0"
-status: "phase_2_yfinance_amended_before_execution"
+status: "phase_2_5_structural_validity_amended_before_development_sample"
 locked_on: "2026-07-30"
 claim_scope: "development_feasibility_only"
 amendment:
   amended_on: "2026-07-30"
-  supersedes_sha256: "261e4bac51b9b3d6b68b6cf0128d406ca63cbf4bcd9735ccbda1aa04d1fa761a"
+  supersedes_sha256: "587bc36ac1dd941c66d9e94c92d7b26a33faeb8e7e7a38883762f0cb54897950"
   changed_fields:
     - "schema_version"
     - "status"
-    - "market_data.provider"
-    - "market_data.client"
-    - "market_data.client_version"
-    - "market_data.access_class"
-    - "market_data.intended_use"
-    - "market_data.redistribution"
-    - "market_data.request"
-    - "market_data.cutoff_policy"
-    - "market_data.outcome_request"
-    - "market_data.optional_verification_provider"
-    - "market_data.cross_provider_verification"
+    - "amendment"
+    - "diagnostics"
+    - "expected_error_correlation_signs"
+    - "structural_validity"
   methodological_reason: >-
-    The one-origin daily-bar feasibility proof does not justify an authenticated
-    institutional data integration. A pinned yfinance client provides a small,
-    credential-free local research input while preserving explicit raw-bar and
-    causal-cutoff controls. Strong conclusions remain prohibited until a
-    representative sample is independently verified with another provider.
+    Phase 2.5 established before any risk-model fit or holdout inspection that
+    the pinned official Kronos predictor can return reproducible OHLC-ordering
+    violations. Structural validity is therefore locked as a candidate
+    development diagnostic and runtime gate. Raw outputs remain immutable;
+    projection is optional, separate, and never substituted silently.
 research_question: >-
   Can information available at forecast time predict the future error of a
   financial forecasting model, and can selective use, blending, or abstention
@@ -271,6 +264,17 @@ diagnostics:
   - "ANALOGUE_OUTCOME_DISPERSION"
   - "RECENT_MODEL_ERROR"
   - "HORIZON_PATH_DIVERGENCE"
+  - "INVALID_PATH_FRACTION"
+  - "INVALID_CANDLE_FRACTION"
+  - "TOTAL_CONSTRAINT_VIOLATIONS"
+  - "MAX_CONSTRAINT_VIOLATION_SEVERITY"
+  - "MEAN_CONSTRAINT_VIOLATION_SEVERITY"
+  - "EARLIEST_INVALID_HORIZON_STEP"
+  - "HIGH_LOW_INVERSION_COUNT"
+  - "HIGH_BELOW_BODY_COUNT"
+  - "LOW_ABOVE_BODY_COUNT"
+  - "NONFINITE_OUTPUT_COUNT"
+  - "NONPOSITIVE_PRICE_COUNT"
 diagnostic_definition_source: "docs/SENTINEL_METHODOLOGY.md"
 expected_error_correlation_signs:
   DIRECTIONAL_AGREEMENT: "negative"
@@ -287,6 +291,46 @@ expected_error_correlation_signs:
   ANALOGUE_OUTCOME_DISPERSION: "positive"
   RECENT_MODEL_ERROR: "positive"
   HORIZON_PATH_DIVERGENCE: "positive"
+  INVALID_PATH_FRACTION: "positive"
+  INVALID_CANDLE_FRACTION: "positive"
+  TOTAL_CONSTRAINT_VIOLATIONS: "positive"
+  MAX_CONSTRAINT_VIOLATION_SEVERITY: "positive"
+  MEAN_CONSTRAINT_VIOLATION_SEVERITY: "positive"
+  EARLIEST_INVALID_HORIZON_STEP: "negative"
+  HIGH_LOW_INVERSION_COUNT: "positive"
+  HIGH_BELOW_BODY_COUNT: "positive"
+  LOW_ABOVE_BODY_COUNT: "positive"
+  NONFINITE_OUTPUT_COUNT: null
+  NONPOSITIVE_PRICE_COUNT: null
+
+structural_validity:
+  status: "locked_before_development_sample_and_holdout"
+  discovery_phase: "phase_2_development_origin"
+  audit_conclusion: "OFFICIAL_RAW_PATH_STRUCTURAL_INVALIDITY_CONFIRMED"
+  report: "docs/SENTINEL_STRUCTURAL_VALIDITY.md"
+  price_severity_denominator: "final_observed_raw_close_at_cutoff"
+  validate:
+    - "FINITE_OHLC"
+    - "POSITIVE_OHLC"
+    - "HIGH_AT_LEAST_OPEN_CLOSE_LOW"
+    - "LOW_AT_MOST_OPEN_CLOSE_HIGH"
+    - "NONNEGATIVE_PREDICTED_VOLUME"
+    - "EXACT_EXPECTED_TIMESTAMPS"
+    - "NO_DUPLICATE_TIMESTAMPS"
+    - "EXACT_HORIZON_LENGTH"
+  raw_output_policy: "preserve_without_silent_mutation"
+  projection_policy: "CONSTRAINT_PROJECTION_V0_optional_separate_artifact_only"
+  gate:
+    nonfinite_nonpositive_or_alignment_failure: "persist_provider_failure_and_block_use"
+    finite_ohlc_ordering_failure: "mark_structurally_invalid_and_retain_for_development_evaluation"
+    silent_baseline_substitution: false
+    silent_projection_substitution: false
+  statistical_expectation: >-
+    Larger invalid fractions, violation counts, and severity are expected to
+    associate with larger future Kronos error; an earlier first invalid step is
+    expected to associate with larger error. Nonfinite and nonpositive counts
+    are runtime gates, not eligible predictors, because such forecasts may not
+    have a defensible scoreable return.
 
 targets:
   continuous_primary: "absolute_raw_five_session_close_to_close_log_return_error"

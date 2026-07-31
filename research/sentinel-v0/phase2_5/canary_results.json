@@ -1,0 +1,1421 @@
+{
+    "aggregate_structural_validity":  {
+                                          "values":  [
+                                                         {
+                                                             "name":  "INVALID_PATH_FRACTION",
+                                                             "status":  "available",
+                                                             "units":  "fraction",
+                                                             "value":  0.6666666666666666
+                                                         },
+                                                         {
+                                                             "name":  "INVALID_CANDLE_FRACTION",
+                                                             "status":  "available",
+                                                             "units":  "fraction",
+                                                             "value":  0.34444444444444444
+                                                         },
+                                                         {
+                                                             "name":  "TOTAL_CONSTRAINT_VIOLATIONS",
+                                                             "status":  "available",
+                                                             "units":  "count",
+                                                             "value":  53
+                                                         },
+                                                         {
+                                                             "name":  "MAX_CONSTRAINT_VIOLATION_SEVERITY",
+                                                             "status":  "available",
+                                                             "units":  "cutoff_close_fraction",
+                                                             "value":  0.013736201728620955
+                                                         },
+                                                         {
+                                                             "name":  "MEAN_CONSTRAINT_VIOLATION_SEVERITY",
+                                                             "status":  "available",
+                                                             "units":  "cutoff_close_fraction",
+                                                             "value":  0.003732516287119839
+                                                         },
+                                                         {
+                                                             "name":  "EARLIEST_INVALID_HORIZON_STEP",
+                                                             "status":  "available",
+                                                             "units":  "one_based_step",
+                                                             "value":  1
+                                                         },
+                                                         {
+                                                             "name":  "HIGH_LOW_INVERSION_COUNT",
+                                                             "status":  "available",
+                                                             "units":  "count",
+                                                             "value":  8
+                                                         },
+                                                         {
+                                                             "name":  "HIGH_BELOW_BODY_COUNT",
+                                                             "status":  "available",
+                                                             "units":  "count",
+                                                             "value":  38
+                                                         },
+                                                         {
+                                                             "name":  "LOW_ABOVE_BODY_COUNT",
+                                                             "status":  "available",
+                                                             "units":  "count",
+                                                             "value":  7
+                                                         },
+                                                         {
+                                                             "name":  "NONFINITE_OUTPUT_COUNT",
+                                                             "status":  "available",
+                                                             "units":  "count",
+                                                             "value":  0
+                                                         },
+                                                         {
+                                                             "name":  "NONPOSITIVE_PRICE_COUNT",
+                                                             "status":  "available",
+                                                             "units":  "count",
+                                                             "value":  0
+                                                         }
+                                                     ]
+                                      },
+    "claim_boundary":  "SIX-ORIGIN RECURRENCE CANARY - NOT FREQUENCY OR CORRELATION EVIDENCE",
+    "forecast_receipt_sha256":  "435940afb200f0ccdf68bd73b80cb0a8fa1afa5a6e0018d6870e80e2d8c8b6ef",
+    "forecast_sealed_before_outcome_access":  true,
+    "invalid_path_count":  12,
+    "limitations":  [
+                        "ONLY_SIX_ORIGINS",
+                        "NO_CORRELATION_CLAIM",
+                        "NO_POPULATION_FREQUENCY_CLAIM",
+                        "UNOFFICIAL_YAHOO_INTERFACE",
+                        "NO_CROSS_PROVIDER_VERIFICATION"
+                    ],
+    "origins":  [
+                    {
+                        "baseline_absolute_error":  0.002638840851576691,
+                        "canonical_model_closer":  false,
+                        "canonical_predicted_log_return":  -0.0268389629686279,
+                        "cutoff":  "2024-09-27",
+                        "forecast_sessions":  [
+                                                  "2024-09-30",
+                                                  "2024-10-01",
+                                                  "2024-10-02",
+                                                  "2024-10-03",
+                                                  "2024-10-04"
+                                              ],
+                        "inference_runtime_ms":  2868.663299974287,
+                        "input_sha256":  "37bce081cc7666da99ba22e2604ed02c09b0ca9e78023e55b7536fc57b08cd22",
+                        "kronos_absolute_error":  0.029477803820204592,
+                        "outcome_provider":  {
+                                                 "access_class":  "unofficial_public_interface",
+                                                 "adjustment":  "raw",
+                                                 "client":  "yfinance",
+                                                 "client_version":  "1.5.2",
+                                                 "corporate_action_warnings":  [
+
+                                                                               ],
+                                                 "first_session":  "2024-09-30",
+                                                 "last_session":  "2024-10-04",
+                                                 "normalized_input_sha256":  "37b4b97c6c619a09ad49bc74d6604abbb5c454df22ab93dd2a49cbb337de0029",
+                                                 "provider":  "yahoo_finance",
+                                                 "retrieved_at":  "2026-07-31T00:43:39.903520Z",
+                                                 "row_count":  5
+                                             },
+                        "outcome_sha256":  "37b4b97c6c619a09ad49bc74d6604abbb5c454df22ab93dd2a49cbb337de0029",
+                        "paths":  [
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_OPEN":  1
+                                                          },
+                                          "earliest_invalid_horizon_step":  3,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  1,
+                                          "max_normalized_severity":  0.004524208359660466,
+                                          "mean_normalized_severity":  0.004524208359660466,
+                                          "path_id":  "SPY-2024-09-27-1729",
+                                          "valid":  false,
+                                          "violation_count":  1
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_CLOSE":  4,
+                                                              "HIGH_BELOW_LOW":  3,
+                                                              "HIGH_BELOW_OPEN":  3,
+                                                              "LOW_ABOVE_OPEN":  2
+                                                          },
+                                          "earliest_invalid_horizon_step":  1,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  5,
+                                          "max_normalized_severity":  0.012415085650227855,
+                                          "mean_normalized_severity":  0.005017116730699096,
+                                          "path_id":  "SPY-2024-09-27-2027",
+                                          "valid":  false,
+                                          "violation_count":  12
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_CLOSE":  4,
+                                                              "HIGH_BELOW_LOW":  2,
+                                                              "HIGH_BELOW_OPEN":  3,
+                                                              "LOW_ABOVE_OPEN":  1
+                                                          },
+                                          "earliest_invalid_horizon_step":  1,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  4,
+                                          "max_normalized_severity":  0.007852321123951775,
+                                          "mean_normalized_severity":  0.0030631112113642645,
+                                          "path_id":  "SPY-2024-09-27-7919",
+                                          "valid":  false,
+                                          "violation_count":  10
+                                      }
+                                  ],
+                        "provider":  {
+                                         "access_class":  "unofficial_public_interface",
+                                         "adjustment":  "raw",
+                                         "client":  "yfinance",
+                                         "client_version":  "1.5.2",
+                                         "corporate_action_warnings":  [
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-06-17",
+                                                                               "value":  1.577
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-09-16",
+                                                                               "value":  1.596
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-12-16",
+                                                                               "value":  1.781
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-03-17",
+                                                                               "value":  1.506
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-06-16",
+                                                                               "value":  1.638
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-09-15",
+                                                                               "value":  1.583
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-12-15",
+                                                                               "value":  1.906
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-03-15",
+                                                                               "value":  1.595
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-06-21",
+                                                                               "value":  1.759
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-09-20",
+                                                                               "value":  1.746
+                                                                           }
+                                                                       ],
+                                         "first_session":  "2022-06-01",
+                                         "last_session":  "2024-09-27",
+                                         "normalized_input_sha256":  "37bce081cc7666da99ba22e2604ed02c09b0ca9e78023e55b7536fc57b08cd22",
+                                         "provider":  "yahoo_finance",
+                                         "retrieved_at":  "2026-07-31T00:43:11.661202Z",
+                                         "row_count":  585
+                                     },
+                        "realized_raw_log_return":  0.002638840851576691,
+                        "structural_validity":  {
+                                                    "values":  [
+                                                                   {
+                                                                       "name":  "INVALID_PATH_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  1.0
+                                                                   },
+                                                                   {
+                                                                       "name":  "INVALID_CANDLE_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  0.6666666666666666
+                                                                   },
+                                                                   {
+                                                                       "name":  "TOTAL_CONSTRAINT_VIOLATIONS",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  23
+                                                                   },
+                                                                   {
+                                                                       "name":  "MAX_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "available",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  0.012415085650227855
+                                                                   },
+                                                                   {
+                                                                       "name":  "MEAN_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "available",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  0.004146118314856186
+                                                                   },
+                                                                   {
+                                                                       "name":  "EARLIEST_INVALID_HORIZON_STEP",
+                                                                       "status":  "available",
+                                                                       "units":  "one_based_step",
+                                                                       "value":  1
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_LOW_INVERSION_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  5
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_BELOW_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  15
+                                                                   },
+                                                                   {
+                                                                       "name":  "LOW_ABOVE_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  3
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONFINITE_OUTPUT_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONPOSITIVE_PRICE_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   }
+                                                               ]
+                                                },
+                        "symbol":  "SPY"
+                    },
+                    {
+                        "baseline_absolute_error":  0.0017462111548035742,
+                        "canonical_model_closer":  false,
+                        "canonical_predicted_log_return":  -0.027743834792083345,
+                        "cutoff":  "2025-01-31",
+                        "forecast_sessions":  [
+                                                  "2025-02-03",
+                                                  "2025-02-04",
+                                                  "2025-02-05",
+                                                  "2025-02-06",
+                                                  "2025-02-07"
+                                              ],
+                        "inference_runtime_ms":  1091.107500018552,
+                        "input_sha256":  "8f2fafdcea0213c5007238048239092a24d0618c5aea8f1d139395d413bcd084",
+                        "kronos_absolute_error":  0.02599762363727977,
+                        "outcome_provider":  {
+                                                 "access_class":  "unofficial_public_interface",
+                                                 "adjustment":  "raw",
+                                                 "client":  "yfinance",
+                                                 "client_version":  "1.5.2",
+                                                 "corporate_action_warnings":  [
+
+                                                                               ],
+                                                 "first_session":  "2025-02-03",
+                                                 "last_session":  "2025-02-07",
+                                                 "normalized_input_sha256":  "ed8ccd7a83ae8762d3aaae9bec70c4dab5b9b04d01cc9d9a4a9ae1dfb53a953f",
+                                                 "provider":  "yahoo_finance",
+                                                 "retrieved_at":  "2026-07-31T00:43:40.895827Z",
+                                                 "row_count":  5
+                                             },
+                        "outcome_sha256":  "ed8ccd7a83ae8762d3aaae9bec70c4dab5b9b04d01cc9d9a4a9ae1dfb53a953f",
+                        "paths":  [
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_OPEN":  3
+                                                          },
+                                          "earliest_invalid_horizon_step":  1,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  3,
+                                          "max_normalized_severity":  0.0008512995502432553,
+                                          "mean_normalized_severity":  0.00044055816610158455,
+                                          "path_id":  "SPY-2025-01-31-1729",
+                                          "valid":  false,
+                                          "violation_count":  3
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_CLOSE":  3,
+                                                              "HIGH_BELOW_LOW":  1,
+                                                              "HIGH_BELOW_OPEN":  3
+                                                          },
+                                          "earliest_invalid_horizon_step":  1,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  5,
+                                          "max_normalized_severity":  0.0065829166674695565,
+                                          "mean_normalized_severity":  0.0033864359402159326,
+                                          "path_id":  "SPY-2025-01-31-2027",
+                                          "valid":  false,
+                                          "violation_count":  7
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_OPEN":  1
+                                                          },
+                                          "earliest_invalid_horizon_step":  5,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  1,
+                                          "max_normalized_severity":  0.0009042395508659594,
+                                          "mean_normalized_severity":  0.0009042395508659594,
+                                          "path_id":  "SPY-2025-01-31-7919",
+                                          "valid":  false,
+                                          "violation_count":  1
+                                      }
+                                  ],
+                        "provider":  {
+                                         "access_class":  "unofficial_public_interface",
+                                         "adjustment":  "raw",
+                                         "client":  "yfinance",
+                                         "client_version":  "1.5.2",
+                                         "corporate_action_warnings":  [
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-06-17",
+                                                                               "value":  1.577
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-09-16",
+                                                                               "value":  1.596
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-12-16",
+                                                                               "value":  1.781
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-03-17",
+                                                                               "value":  1.506
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-06-16",
+                                                                               "value":  1.638
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-09-15",
+                                                                               "value":  1.583
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-12-15",
+                                                                               "value":  1.906
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-03-15",
+                                                                               "value":  1.595
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-06-21",
+                                                                               "value":  1.759
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-09-20",
+                                                                               "value":  1.746
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-12-20",
+                                                                               "value":  1.966
+                                                                           }
+                                                                       ],
+                                         "first_session":  "2022-06-01",
+                                         "last_session":  "2025-01-31",
+                                         "normalized_input_sha256":  "8f2fafdcea0213c5007238048239092a24d0618c5aea8f1d139395d413bcd084",
+                                         "provider":  "yahoo_finance",
+                                         "retrieved_at":  "2026-07-31T00:43:12.795387Z",
+                                         "row_count":  670
+                                     },
+                        "realized_raw_log_return":  -0.0017462111548035742,
+                        "structural_validity":  {
+                                                    "values":  [
+                                                                   {
+                                                                       "name":  "INVALID_PATH_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  1.0
+                                                                   },
+                                                                   {
+                                                                       "name":  "INVALID_CANDLE_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  0.6
+                                                                   },
+                                                                   {
+                                                                       "name":  "TOTAL_CONSTRAINT_VIOLATIONS",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  11
+                                                                   },
+                                                                   {
+                                                                       "name":  "MAX_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "available",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  0.0065829166674695565
+                                                                   },
+                                                                   {
+                                                                       "name":  "MEAN_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "available",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  0.0023573605118802038
+                                                                   },
+                                                                   {
+                                                                       "name":  "EARLIEST_INVALID_HORIZON_STEP",
+                                                                       "status":  "available",
+                                                                       "units":  "one_based_step",
+                                                                       "value":  1
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_LOW_INVERSION_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  1
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_BELOW_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  10
+                                                                   },
+                                                                   {
+                                                                       "name":  "LOW_ABOVE_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONFINITE_OUTPUT_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONPOSITIVE_PRICE_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   }
+                                                               ]
+                                                },
+                        "symbol":  "SPY"
+                    },
+                    {
+                        "baseline_absolute_error":  0.016407189520368317,
+                        "canonical_model_closer":  true,
+                        "canonical_predicted_log_return":  0.005103645457898812,
+                        "cutoff":  "2025-05-30",
+                        "forecast_sessions":  [
+                                                  "2025-06-02",
+                                                  "2025-06-03",
+                                                  "2025-06-04",
+                                                  "2025-06-05",
+                                                  "2025-06-06"
+                                              ],
+                        "inference_runtime_ms":  1011.6836999950465,
+                        "input_sha256":  "88a5fd18d0dc3f27db98bcce68bc2038d7a04fcf81f0cd6c21cae96834defd32",
+                        "kronos_absolute_error":  0.011303544062469504,
+                        "outcome_provider":  {
+                                                 "access_class":  "unofficial_public_interface",
+                                                 "adjustment":  "raw",
+                                                 "client":  "yfinance",
+                                                 "client_version":  "1.5.2",
+                                                 "corporate_action_warnings":  [
+
+                                                                               ],
+                                                 "first_session":  "2025-06-02",
+                                                 "last_session":  "2025-06-06",
+                                                 "normalized_input_sha256":  "da0af9baa605c082129cdf8b89d1e5a004a9750486cf1a8593ace52374c3aa16",
+                                                 "provider":  "yahoo_finance",
+                                                 "retrieved_at":  "2026-07-31T00:43:41.284971Z",
+                                                 "row_count":  5
+                                             },
+                        "outcome_sha256":  "da0af9baa605c082129cdf8b89d1e5a004a9750486cf1a8593ace52374c3aa16",
+                        "paths":  [
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+
+                                                          },
+                                          "earliest_invalid_horizon_step":  null,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  0,
+                                          "max_normalized_severity":  null,
+                                          "mean_normalized_severity":  null,
+                                          "path_id":  "SPY-2025-05-30-1729",
+                                          "valid":  true,
+                                          "violation_count":  0
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_CLOSE":  1
+                                                          },
+                                          "earliest_invalid_horizon_step":  3,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  1,
+                                          "max_normalized_severity":  0.0009619361582575007,
+                                          "mean_normalized_severity":  0.0009619361582575007,
+                                          "path_id":  "SPY-2025-05-30-2027",
+                                          "valid":  false,
+                                          "violation_count":  1
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_CLOSE":  1,
+                                                              "LOW_ABOVE_OPEN":  1
+                                                          },
+                                          "earliest_invalid_horizon_step":  4,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  1,
+                                          "max_normalized_severity":  0.006067270704720498,
+                                          "mean_normalized_severity":  0.004395403086355957,
+                                          "path_id":  "SPY-2025-05-30-7919",
+                                          "valid":  false,
+                                          "violation_count":  2
+                                      }
+                                  ],
+                        "provider":  {
+                                         "access_class":  "unofficial_public_interface",
+                                         "adjustment":  "raw",
+                                         "client":  "yfinance",
+                                         "client_version":  "1.5.2",
+                                         "corporate_action_warnings":  [
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-06-17",
+                                                                               "value":  1.577
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-09-16",
+                                                                               "value":  1.596
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-12-16",
+                                                                               "value":  1.781
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-03-17",
+                                                                               "value":  1.506
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-06-16",
+                                                                               "value":  1.638
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-09-15",
+                                                                               "value":  1.583
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-12-15",
+                                                                               "value":  1.906
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-03-15",
+                                                                               "value":  1.595
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-06-21",
+                                                                               "value":  1.759
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-09-20",
+                                                                               "value":  1.746
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-12-20",
+                                                                               "value":  1.966
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2025-03-21",
+                                                                               "value":  1.696
+                                                                           }
+                                                                       ],
+                                         "first_session":  "2022-06-01",
+                                         "last_session":  "2025-05-30",
+                                         "normalized_input_sha256":  "88a5fd18d0dc3f27db98bcce68bc2038d7a04fcf81f0cd6c21cae96834defd32",
+                                         "provider":  "yahoo_finance",
+                                         "retrieved_at":  "2026-07-31T00:43:13.327572Z",
+                                         "row_count":  752
+                                     },
+                        "realized_raw_log_return":  0.016407189520368317,
+                        "structural_validity":  {
+                                                    "values":  [
+                                                                   {
+                                                                       "name":  "INVALID_PATH_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  0.6666666666666666
+                                                                   },
+                                                                   {
+                                                                       "name":  "INVALID_CANDLE_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  0.13333333333333333
+                                                                   },
+                                                                   {
+                                                                       "name":  "TOTAL_CONSTRAINT_VIOLATIONS",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  3
+                                                                   },
+                                                                   {
+                                                                       "name":  "MAX_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "available",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  0.006067270704720498
+                                                                   },
+                                                                   {
+                                                                       "name":  "MEAN_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "available",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  0.0032509141103231384
+                                                                   },
+                                                                   {
+                                                                       "name":  "EARLIEST_INVALID_HORIZON_STEP",
+                                                                       "status":  "available",
+                                                                       "units":  "one_based_step",
+                                                                       "value":  3
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_LOW_INVERSION_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_BELOW_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  2
+                                                                   },
+                                                                   {
+                                                                       "name":  "LOW_ABOVE_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  1
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONFINITE_OUTPUT_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONPOSITIVE_PRICE_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   }
+                                                               ]
+                                                },
+                        "symbol":  "SPY"
+                    },
+                    {
+                        "baseline_absolute_error":  0.0011703622634855013,
+                        "canonical_model_closer":  false,
+                        "canonical_predicted_log_return":  -0.04462065016832548,
+                        "cutoff":  "2024-09-27",
+                        "forecast_sessions":  [
+                                                  "2024-09-30",
+                                                  "2024-10-01",
+                                                  "2024-10-02",
+                                                  "2024-10-03",
+                                                  "2024-10-04"
+                                              ],
+                        "inference_runtime_ms":  1189.0760000096634,
+                        "input_sha256":  "5de64c13934166291c83b5153fc08d8f71776de48bf75674685bea5a9c662715",
+                        "kronos_absolute_error":  0.04579101243181098,
+                        "outcome_provider":  {
+                                                 "access_class":  "unofficial_public_interface",
+                                                 "adjustment":  "raw",
+                                                 "client":  "yfinance",
+                                                 "client_version":  "1.5.2",
+                                                 "corporate_action_warnings":  [
+
+                                                                               ],
+                                                 "first_session":  "2024-09-30",
+                                                 "last_session":  "2024-10-04",
+                                                 "normalized_input_sha256":  "4b8fa388ec5ff633b608eb008604c8b0e3cb4fcf1ab3473b9ccc454f9eea1cc8",
+                                                 "provider":  "yahoo_finance",
+                                                 "retrieved_at":  "2026-07-31T00:43:41.675633Z",
+                                                 "row_count":  5
+                                             },
+                        "outcome_sha256":  "4b8fa388ec5ff633b608eb008604c8b0e3cb4fcf1ab3473b9ccc454f9eea1cc8",
+                        "paths":  [
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+
+                                                          },
+                                          "earliest_invalid_horizon_step":  null,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  0,
+                                          "max_normalized_severity":  null,
+                                          "mean_normalized_severity":  null,
+                                          "path_id":  "QQQ-2024-09-27-1729",
+                                          "valid":  true,
+                                          "violation_count":  0
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_CLOSE":  2,
+                                                              "HIGH_BELOW_LOW":  1,
+                                                              "HIGH_BELOW_OPEN":  2,
+                                                              "LOW_ABOVE_CLOSE":  1,
+                                                              "LOW_ABOVE_OPEN":  1
+                                                          },
+                                          "earliest_invalid_horizon_step":  1,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  3,
+                                          "max_normalized_severity":  0.013736201728620955,
+                                          "mean_normalized_severity":  0.00629727504024048,
+                                          "path_id":  "QQQ-2024-09-27-2027",
+                                          "valid":  false,
+                                          "violation_count":  7
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_CLOSE":  1,
+                                                              "HIGH_BELOW_LOW":  1,
+                                                              "HIGH_BELOW_OPEN":  1,
+                                                              "LOW_ABOVE_OPEN":  1
+                                                          },
+                                          "earliest_invalid_horizon_step":  4,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  2,
+                                          "max_normalized_severity":  0.012010665446841295,
+                                          "mean_normalized_severity":  0.003845559675141243,
+                                          "path_id":  "QQQ-2024-09-27-7919",
+                                          "valid":  false,
+                                          "violation_count":  4
+                                      }
+                                  ],
+                        "provider":  {
+                                         "access_class":  "unofficial_public_interface",
+                                         "adjustment":  "raw",
+                                         "client":  "yfinance",
+                                         "client_version":  "1.5.2",
+                                         "corporate_action_warnings":  [
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-06-21",
+                                                                               "value":  0.527
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-09-19",
+                                                                               "value":  0.519
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-12-19",
+                                                                               "value":  0.655
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-03-20",
+                                                                               "value":  0.472
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-06-20",
+                                                                               "value":  0.504
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-09-18",
+                                                                               "value":  0.536
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-12-18",
+                                                                               "value":  0.808
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-12-27",
+                                                                               "value":  0.216
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-03-18",
+                                                                               "value":  0.573
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-06-24",
+                                                                               "value":  0.762
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-09-23",
+                                                                               "value":  0.677
+                                                                           }
+                                                                       ],
+                                         "first_session":  "2022-06-01",
+                                         "last_session":  "2024-09-27",
+                                         "normalized_input_sha256":  "5de64c13934166291c83b5153fc08d8f71776de48bf75674685bea5a9c662715",
+                                         "provider":  "yahoo_finance",
+                                         "retrieved_at":  "2026-07-31T00:43:13.911831Z",
+                                         "row_count":  585
+                                     },
+                        "realized_raw_log_return":  0.0011703622634855013,
+                        "structural_validity":  {
+                                                    "values":  [
+                                                                   {
+                                                                       "name":  "INVALID_PATH_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  0.6666666666666666
+                                                                   },
+                                                                   {
+                                                                       "name":  "INVALID_CANDLE_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  0.3333333333333333
+                                                                   },
+                                                                   {
+                                                                       "name":  "TOTAL_CONSTRAINT_VIOLATIONS",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  11
+                                                                   },
+                                                                   {
+                                                                       "name":  "MAX_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "available",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  0.013736201728620955
+                                                                   },
+                                                                   {
+                                                                       "name":  "MEAN_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "available",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  0.005405742180204394
+                                                                   },
+                                                                   {
+                                                                       "name":  "EARLIEST_INVALID_HORIZON_STEP",
+                                                                       "status":  "available",
+                                                                       "units":  "one_based_step",
+                                                                       "value":  1
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_LOW_INVERSION_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  2
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_BELOW_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  6
+                                                                   },
+                                                                   {
+                                                                       "name":  "LOW_ABOVE_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  3
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONFINITE_OUTPUT_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONPOSITIVE_PRICE_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   }
+                                                               ]
+                                                },
+                        "symbol":  "QQQ"
+                    },
+                    {
+                        "baseline_absolute_error":  0.0012055089075953286,
+                        "canonical_model_closer":  false,
+                        "canonical_predicted_log_return":  -0.024506428029146266,
+                        "cutoff":  "2025-01-31",
+                        "forecast_sessions":  [
+                                                  "2025-02-03",
+                                                  "2025-02-04",
+                                                  "2025-02-05",
+                                                  "2025-02-06",
+                                                  "2025-02-07"
+                                              ],
+                        "inference_runtime_ms":  1256.501500000013,
+                        "input_sha256":  "0392f55e61bb8923842ac1dce416d003589918ca2faa67491651c61fcf4df229",
+                        "kronos_absolute_error":  0.025711936936741595,
+                        "outcome_provider":  {
+                                                 "access_class":  "unofficial_public_interface",
+                                                 "adjustment":  "raw",
+                                                 "client":  "yfinance",
+                                                 "client_version":  "1.5.2",
+                                                 "corporate_action_warnings":  [
+
+                                                                               ],
+                                                 "first_session":  "2025-02-03",
+                                                 "last_session":  "2025-02-07",
+                                                 "normalized_input_sha256":  "76a93a8fc85de7b3b88fb64c34c4b71204e3dc6af4009c0ffbc8cd77cf9bec9b",
+                                                 "provider":  "yahoo_finance",
+                                                 "retrieved_at":  "2026-07-31T00:43:42.071838Z",
+                                                 "row_count":  5
+                                             },
+                        "outcome_sha256":  "76a93a8fc85de7b3b88fb64c34c4b71204e3dc6af4009c0ffbc8cd77cf9bec9b",
+                        "paths":  [
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+
+                                                          },
+                                          "earliest_invalid_horizon_step":  null,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  0,
+                                          "max_normalized_severity":  null,
+                                          "mean_normalized_severity":  null,
+                                          "path_id":  "QQQ-2025-01-31-1729",
+                                          "valid":  true,
+                                          "violation_count":  0
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_CLOSE":  2,
+                                                              "HIGH_BELOW_OPEN":  2
+                                                          },
+                                          "earliest_invalid_horizon_step":  2,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  4,
+                                          "max_normalized_severity":  0.0027733373969683305,
+                                          "mean_normalized_severity":  0.001797580025893987,
+                                          "path_id":  "QQQ-2025-01-31-2027",
+                                          "valid":  false,
+                                          "violation_count":  4
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+                                                              "HIGH_BELOW_OPEN":  1
+                                                          },
+                                          "earliest_invalid_horizon_step":  5,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  1,
+                                          "max_normalized_severity":  0.00012544992818327587,
+                                          "mean_normalized_severity":  0.00012544992818327587,
+                                          "path_id":  "QQQ-2025-01-31-7919",
+                                          "valid":  false,
+                                          "violation_count":  1
+                                      }
+                                  ],
+                        "provider":  {
+                                         "access_class":  "unofficial_public_interface",
+                                         "adjustment":  "raw",
+                                         "client":  "yfinance",
+                                         "client_version":  "1.5.2",
+                                         "corporate_action_warnings":  [
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-06-21",
+                                                                               "value":  0.527
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-09-19",
+                                                                               "value":  0.519
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-12-19",
+                                                                               "value":  0.655
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-03-20",
+                                                                               "value":  0.472
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-06-20",
+                                                                               "value":  0.504
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-09-18",
+                                                                               "value":  0.536
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-12-18",
+                                                                               "value":  0.808
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-12-27",
+                                                                               "value":  0.216
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-03-18",
+                                                                               "value":  0.573
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-06-24",
+                                                                               "value":  0.762
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-09-23",
+                                                                               "value":  0.677
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-12-23",
+                                                                               "value":  0.835
+                                                                           }
+                                                                       ],
+                                         "first_session":  "2022-06-01",
+                                         "last_session":  "2025-01-31",
+                                         "normalized_input_sha256":  "0392f55e61bb8923842ac1dce416d003589918ca2faa67491651c61fcf4df229",
+                                         "provider":  "yahoo_finance",
+                                         "retrieved_at":  "2026-07-31T00:43:14.438387Z",
+                                         "row_count":  670
+                                     },
+                        "realized_raw_log_return":  0.0012055089075953286,
+                        "structural_validity":  {
+                                                    "values":  [
+                                                                   {
+                                                                       "name":  "INVALID_PATH_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  0.6666666666666666
+                                                                   },
+                                                                   {
+                                                                       "name":  "INVALID_CANDLE_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  0.3333333333333333
+                                                                   },
+                                                                   {
+                                                                       "name":  "TOTAL_CONSTRAINT_VIOLATIONS",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  5
+                                                                   },
+                                                                   {
+                                                                       "name":  "MAX_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "available",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  0.0027733373969683305
+                                                                   },
+                                                                   {
+                                                                       "name":  "MEAN_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "available",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  0.0014631540063518448
+                                                                   },
+                                                                   {
+                                                                       "name":  "EARLIEST_INVALID_HORIZON_STEP",
+                                                                       "status":  "available",
+                                                                       "units":  "one_based_step",
+                                                                       "value":  2
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_LOW_INVERSION_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_BELOW_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  5
+                                                                   },
+                                                                   {
+                                                                       "name":  "LOW_ABOVE_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONFINITE_OUTPUT_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONPOSITIVE_PRICE_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   }
+                                                               ]
+                                                },
+                        "symbol":  "QQQ"
+                    },
+                    {
+                        "baseline_absolute_error":  0.02061024096675889,
+                        "canonical_model_closer":  false,
+                        "canonical_predicted_log_return":  -0.004243116486669452,
+                        "cutoff":  "2025-05-30",
+                        "forecast_sessions":  [
+                                                  "2025-06-02",
+                                                  "2025-06-03",
+                                                  "2025-06-04",
+                                                  "2025-06-05",
+                                                  "2025-06-06"
+                                              ],
+                        "inference_runtime_ms":  1413.5406000132207,
+                        "input_sha256":  "e98821219139660127274c7deb02a42a6101437203df1ff60837f32bd300a3bb",
+                        "kronos_absolute_error":  0.024853357453428343,
+                        "outcome_provider":  {
+                                                 "access_class":  "unofficial_public_interface",
+                                                 "adjustment":  "raw",
+                                                 "client":  "yfinance",
+                                                 "client_version":  "1.5.2",
+                                                 "corporate_action_warnings":  [
+
+                                                                               ],
+                                                 "first_session":  "2025-06-02",
+                                                 "last_session":  "2025-06-06",
+                                                 "normalized_input_sha256":  "1e4b0c811cf23c7864bc579cc92f016c2cccc6f4d30e43c67923e77510c0a409",
+                                                 "provider":  "yahoo_finance",
+                                                 "retrieved_at":  "2026-07-31T00:43:42.531872Z",
+                                                 "row_count":  5
+                                             },
+                        "outcome_sha256":  "1e4b0c811cf23c7864bc579cc92f016c2cccc6f4d30e43c67923e77510c0a409",
+                        "paths":  [
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+
+                                                          },
+                                          "earliest_invalid_horizon_step":  null,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  0,
+                                          "max_normalized_severity":  null,
+                                          "mean_normalized_severity":  null,
+                                          "path_id":  "QQQ-2025-05-30-1729",
+                                          "valid":  true,
+                                          "violation_count":  0
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+
+                                                          },
+                                          "earliest_invalid_horizon_step":  null,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  0,
+                                          "max_normalized_severity":  null,
+                                          "mean_normalized_severity":  null,
+                                          "path_id":  "QQQ-2025-05-30-2027",
+                                          "valid":  true,
+                                          "violation_count":  0
+                                      },
+                                      {
+                                          "candle_count":  5,
+                                          "code_counts":  {
+
+                                                          },
+                                          "earliest_invalid_horizon_step":  null,
+                                          "expected_candle_count":  5,
+                                          "invalid_candle_count":  0,
+                                          "max_normalized_severity":  null,
+                                          "mean_normalized_severity":  null,
+                                          "path_id":  "QQQ-2025-05-30-7919",
+                                          "valid":  true,
+                                          "violation_count":  0
+                                      }
+                                  ],
+                        "provider":  {
+                                         "access_class":  "unofficial_public_interface",
+                                         "adjustment":  "raw",
+                                         "client":  "yfinance",
+                                         "client_version":  "1.5.2",
+                                         "corporate_action_warnings":  [
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-06-21",
+                                                                               "value":  0.527
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-09-19",
+                                                                               "value":  0.519
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2022-12-19",
+                                                                               "value":  0.655
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-03-20",
+                                                                               "value":  0.472
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-06-20",
+                                                                               "value":  0.504
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-09-18",
+                                                                               "value":  0.536
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-12-18",
+                                                                               "value":  0.808
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2023-12-27",
+                                                                               "value":  0.216
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-03-18",
+                                                                               "value":  0.573
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-06-24",
+                                                                               "value":  0.762
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-09-23",
+                                                                               "value":  0.677
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2024-12-23",
+                                                                               "value":  0.835
+                                                                           },
+                                                                           {
+                                                                               "kind":  "DIVIDEND",
+                                                                               "session":  "2025-03-24",
+                                                                               "value":  0.716
+                                                                           }
+                                                                       ],
+                                         "first_session":  "2022-06-01",
+                                         "last_session":  "2025-05-30",
+                                         "normalized_input_sha256":  "e98821219139660127274c7deb02a42a6101437203df1ff60837f32bd300a3bb",
+                                         "provider":  "yahoo_finance",
+                                         "retrieved_at":  "2026-07-31T00:43:14.798816Z",
+                                         "row_count":  752
+                                     },
+                        "realized_raw_log_return":  0.02061024096675889,
+                        "structural_validity":  {
+                                                    "values":  [
+                                                                   {
+                                                                       "name":  "INVALID_PATH_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  0.0
+                                                                   },
+                                                                   {
+                                                                       "name":  "INVALID_CANDLE_FRACTION",
+                                                                       "status":  "available",
+                                                                       "units":  "fraction",
+                                                                       "value":  0.0
+                                                                   },
+                                                                   {
+                                                                       "name":  "TOTAL_CONSTRAINT_VIOLATIONS",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "MAX_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "not_computable",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  null
+                                                                   },
+                                                                   {
+                                                                       "name":  "MEAN_CONSTRAINT_VIOLATION_SEVERITY",
+                                                                       "status":  "not_computable",
+                                                                       "units":  "cutoff_close_fraction",
+                                                                       "value":  null
+                                                                   },
+                                                                   {
+                                                                       "name":  "EARLIEST_INVALID_HORIZON_STEP",
+                                                                       "status":  "not_computable",
+                                                                       "units":  "one_based_step",
+                                                                       "value":  null
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_LOW_INVERSION_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "HIGH_BELOW_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "LOW_ABOVE_BODY_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONFINITE_OUTPUT_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   },
+                                                                   {
+                                                                       "name":  "NONPOSITIVE_PRICE_COUNT",
+                                                                       "status":  "available",
+                                                                       "units":  "count",
+                                                                       "value":  0
+                                                                   }
+                                                               ]
+                                                },
+                        "symbol":  "QQQ"
+                    }
+                ],
+    "schema_version":  "sentinel-phase2_5-canary-results-v0",
+    "total_path_count":  18
+}

@@ -1,0 +1,666 @@
+{
+    "claim_boundary":  "POST-PROCESSING MEASUREMENT - NOT IMPROVED ACCURACY",
+    "invariants":  {
+                       "close_unchanged":  true,
+                       "implied_return_unchanged":  true,
+                       "open_unchanged":  true
+                   },
+    "method":  "CONSTRAINT_PROJECTION_V0",
+    "paths":  {
+                  "official-internal-sample-count-3":  {
+                                                           "adjustments":  [
+                                                                               {
+                                                                                   "absolute_adjustment":  3.958740234375,
+                                                                                   "field":  "high",
+                                                                                   "normalized_adjustment":  0.007137494825151185,
+                                                                                   "original_value":  546.323974609375,
+                                                                                   "projected_value":  550.28271484375,
+                                                                                   "step":  1,
+                                                                                   "timestamp":  "2024-07-08T00:00:00Z"
+                                                                               },
+                                                                               {
+                                                                                   "absolute_adjustment":  4.58905029296875,
+                                                                                   "field":  "high",
+                                                                                   "normalized_adjustment":  0.008273925738801143,
+                                                                                   "original_value":  549.2610473632812,
+                                                                                   "projected_value":  553.85009765625,
+                                                                                   "step":  2,
+                                                                                   "timestamp":  "2024-07-09T00:00:00Z"
+                                                                               },
+                                                                               {
+                                                                                   "absolute_adjustment":  5.02374267578125,
+                                                                                   "field":  "high",
+                                                                                   "normalized_adjustment":  0.00905766360720581,
+                                                                                   "original_value":  551.9484252929688,
+                                                                                   "projected_value":  556.97216796875,
+                                                                                   "step":  3,
+                                                                                   "timestamp":  "2024-07-10T00:00:00Z"
+                                                                               },
+                                                                               {
+                                                                                   "absolute_adjustment":  1.07818603515625,
+                                                                                   "field":  "high",
+                                                                                   "normalized_adjustment":  0.001943938422545416,
+                                                                                   "original_value":  559.4659423828125,
+                                                                                   "projected_value":  560.5441284179688,
+                                                                                   "step":  4,
+                                                                                   "timestamp":  "2024-07-11T00:00:00Z"
+                                                                               },
+                                                                               {
+                                                                                   "absolute_adjustment":  1.61767578125,
+                                                                                   "field":  "high",
+                                                                                   "normalized_adjustment":  0.002916622923925486,
+                                                                                   "original_value":  550.500244140625,
+                                                                                   "projected_value":  552.117919921875,
+                                                                                   "step":  5,
+                                                                                   "timestamp":  "2024-07-12T00:00:00Z"
+                                                                               }
+                                                                           ],
+                                                           "close_path_volatility_after":  0.009084644195067083,
+                                                           "close_path_volatility_before":  0.009084644195067083,
+                                                           "max_normalized_adjustment":  0.00905766360720581,
+                                                           "mean_range_after":  4.922900390625,
+                                                           "mean_range_before":  1.66942138671875,
+                                                           "method":  "CONSTRAINT_PROJECTION_V0",
+                                                           "original_log_return":  -0.004938874356399413,
+                                                           "projected_log_return":  -0.004938874356399413,
+                                                           "return_unchanged":  true,
+                                                           "total_absolute_adjustment":  16.26739501953125
+                                                       },
+                  "official-internal-sample-count-5":  {
+                                                           "adjustments":  [
+                                                                               {
+                                                                                   "absolute_adjustment":  5.588623046875,
+                                                                                   "field":  "high",
+                                                                                   "normalized_adjustment":  0.010076126675457032,
+                                                                                   "original_value":  545.677978515625,
+                                                                                   "projected_value":  551.2666015625,
+                                                                                   "step":  1,
+                                                                                   "timestamp":  "2024-07-08T00:00:00Z"
+                                                                               },
+                                                                               {
+                                                                                   "absolute_adjustment":  0.56024169921875,
+                                                                                   "field":  "low",
+                                                                                   "normalized_adjustment":  0.001010099676226684,
+                                                                                   "original_value":  548.5504760742188,
+                                                                                   "projected_value":  547.990234375,
+                                                                                   "step":  1,
+                                                                                   "timestamp":  "2024-07-08T00:00:00Z"
+                                                                               },
+                                                                               {
+                                                                                   "absolute_adjustment":  3.7325439453125,
+                                                                                   "field":  "high",
+                                                                                   "normalized_adjustment":  0.006729669419323089,
+                                                                                   "original_value":  545.3798828125,
+                                                                                   "projected_value":  549.1124267578125,
+                                                                                   "step":  2,
+                                                                                   "timestamp":  "2024-07-09T00:00:00Z"
+                                                                               },
+                                                                               {
+                                                                                   "absolute_adjustment":  2.20037841796875,
+                                                                                   "field":  "high",
+                                                                                   "normalized_adjustment":  0.003967219024692035,
+                                                                                   "original_value":  545.74853515625,
+                                                                                   "projected_value":  547.9489135742188,
+                                                                                   "step":  3,
+                                                                                   "timestamp":  "2024-07-10T00:00:00Z"
+                                                                               },
+                                                                               {
+                                                                                   "absolute_adjustment":  0.129638671875,
+                                                                                   "field":  "high",
+                                                                                   "normalized_adjustment":  0.0002337347981594375,
+                                                                                   "original_value":  544.4812622070312,
+                                                                                   "projected_value":  544.6109008789062,
+                                                                                   "step":  4,
+                                                                                   "timestamp":  "2024-07-11T00:00:00Z"
+                                                                               },
+                                                                               {
+                                                                                   "absolute_adjustment":  0.3310546875,
+                                                                                   "field":  "high",
+                                                                                   "normalized_adjustment":  0.0005968820834353997,
+                                                                                   "original_value":  542.937255859375,
+                                                                                   "projected_value":  543.268310546875,
+                                                                                   "step":  5,
+                                                                                   "timestamp":  "2024-07-12T00:00:00Z"
+                                                                               }
+                                                                           ],
+                                                           "close_path_volatility_after":  0.00203504186127203,
+                                                           "close_path_volatility_before":  0.00203504186127203,
+                                                           "max_normalized_adjustment":  0.010076126675457032,
+                                                           "mean_range_after":  4.1997802734375,
+                                                           "mean_range_before":  1.6912841796875,
+                                                           "method":  "CONSTRAINT_PROJECTION_V0",
+                                                           "original_log_return":  -0.020715956913841403,
+                                                           "projected_log_return":  -0.020715956913841403,
+                                                           "return_unchanged":  true,
+                                                           "total_absolute_adjustment":  12.54248046875
+                                                       },
+                  "offline-all-nine-average":  {
+                                                   "adjustments":  [
+                                                                       {
+                                                                           "absolute_adjustment":  1.1403401692707575,
+                                                                           "field":  "high",
+                                                                           "normalized_adjustment":  0.002056000539365286,
+                                                                           "original_value":  549.5747409396702,
+                                                                           "projected_value":  550.7150811089409,
+                                                                           "step":  1,
+                                                                           "timestamp":  "2024-07-08T00:00:00Z"
+                                                                       },
+                                                                       {
+                                                                           "absolute_adjustment":  0.32586669921875,
+                                                                           "field":  "high",
+                                                                           "normalized_adjustment":  0.0005875282897237461,
+                                                                           "original_value":  550.493394639757,
+                                                                           "projected_value":  550.8192613389757,
+                                                                           "step":  2,
+                                                                           "timestamp":  "2024-07-09T00:00:00Z"
+                                                                       },
+                                                                       {
+                                                                           "absolute_adjustment":  1.074781629774293,
+                                                                           "field":  "high",
+                                                                           "normalized_adjustment":  0.0019378003775215368,
+                                                                           "original_value":  551.3571031358507,
+                                                                           "projected_value":  552.431884765625,
+                                                                           "step":  3,
+                                                                           "timestamp":  "2024-07-10T00:00:00Z"
+                                                                       },
+                                                                       {
+                                                                           "absolute_adjustment":  0.5024481879339646,
+                                                                           "field":  "high",
+                                                                           "normalized_adjustment":  0.0009058996369968816,
+                                                                           "original_value":  551.3731892903646,
+                                                                           "projected_value":  551.8756374782986,
+                                                                           "step":  4,
+                                                                           "timestamp":  "2024-07-11T00:00:00Z"
+                                                                       }
+                                                                   ],
+                                                   "close_path_volatility_after":  0.0033107159928209735,
+                                                   "close_path_volatility_before":  0.0033107159928209735,
+                                                   "max_normalized_adjustment":  0.002056000539365286,
+                                                   "mean_range_after":  3.734440104166606,
+                                                   "mean_range_before":  3.125752766927053,
+                                                   "method":  "CONSTRAINT_PROJECTION_V0",
+                                                   "original_log_return":  -0.0073718017248424654,
+                                                   "projected_log_return":  -0.0073718017248424654,
+                                                   "return_unchanged":  true,
+                                                   "total_absolute_adjustment":  3.043436686197765
+                                               },
+                  "offline-current-512-average":  {
+                                                      "adjustments":  [
+                                                                          {
+                                                                              "absolute_adjustment":  3.1407674153645075,
+                                                                              "field":  "high",
+                                                                              "normalized_adjustment":  0.005662713349947002,
+                                                                              "original_value":  541.6446126302084,
+                                                                              "projected_value":  544.7853800455729,
+                                                                              "step":  1,
+                                                                              "timestamp":  "2024-07-08T00:00:00Z"
+                                                                          },
+                                                                          {
+                                                                              "absolute_adjustment":  2.0460205078125,
+                                                                              "field":  "high",
+                                                                              "normalized_adjustment":  0.0036889161506123654,
+                                                                              "original_value":  541.5083821614584,
+                                                                              "projected_value":  543.5544026692709,
+                                                                              "step":  2,
+                                                                              "timestamp":  "2024-07-09T00:00:00Z"
+                                                                          },
+                                                                          {
+                                                                              "absolute_adjustment":  3.0174357096353788,
+                                                                              "field":  "high",
+                                                                              "normalized_adjustment":  0.005440349830417485,
+                                                                              "original_value":  542.7414143880209,
+                                                                              "projected_value":  545.7588500976562,
+                                                                              "step":  3,
+                                                                              "timestamp":  "2024-07-10T00:00:00Z"
+                                                                          },
+                                                                          {
+                                                                              "absolute_adjustment":  2.2580769856771212,
+                                                                              "field":  "high",
+                                                                              "normalized_adjustment":  0.004071247883383277,
+                                                                              "original_value":  544.6584879557291,
+                                                                              "projected_value":  546.9165649414062,
+                                                                              "step":  4,
+                                                                              "timestamp":  "2024-07-11T00:00:00Z"
+                                                                          },
+                                                                          {
+                                                                              "absolute_adjustment":  1.6375732421875,
+                                                                              "field":  "high",
+                                                                              "normalized_adjustment":  0.0029524974739254745,
+                                                                              "original_value":  544.0206705729166,
+                                                                              "projected_value":  545.6582438151041,
+                                                                              "step":  5,
+                                                                              "timestamp":  "2024-07-12T00:00:00Z"
+                                                                          }
+                                                                      ],
+                                                      "close_path_volatility_after":  0.007737889107442484,
+                                                      "close_path_volatility_before":  0.007737889107442484,
+                                                      "max_normalized_adjustment":  0.005662713349947002,
+                                                      "mean_range_after":  4.245747884114576,
+                                                      "mean_range_before":  1.8257731119791742,
+                                                      "method":  "CONSTRAINT_PROJECTION_V0",
+                                                      "original_log_return":  -0.01632642835274094,
+                                                      "projected_log_return":  -0.01632642835274094,
+                                                      "return_unchanged":  true,
+                                                      "total_absolute_adjustment":  12.099873860677008
+                                                  },
+                  "offline-sealed-512-average":  {
+                                                     "adjustments":  [
+                                                                         {
+                                                                             "absolute_adjustment":  3.1407674153645075,
+                                                                             "field":  "high",
+                                                                             "normalized_adjustment":  0.005662713349947002,
+                                                                             "original_value":  541.6446126302084,
+                                                                             "projected_value":  544.7853800455729,
+                                                                             "step":  1,
+                                                                             "timestamp":  "2024-07-08T00:00:00Z"
+                                                                         },
+                                                                         {
+                                                                             "absolute_adjustment":  2.0460205078125,
+                                                                             "field":  "high",
+                                                                             "normalized_adjustment":  0.0036889161506123654,
+                                                                             "original_value":  541.5083821614584,
+                                                                             "projected_value":  543.5544026692709,
+                                                                             "step":  2,
+                                                                             "timestamp":  "2024-07-09T00:00:00Z"
+                                                                         },
+                                                                         {
+                                                                             "absolute_adjustment":  3.0174357096353788,
+                                                                             "field":  "high",
+                                                                             "normalized_adjustment":  0.005440349830417485,
+                                                                             "original_value":  542.7414143880209,
+                                                                             "projected_value":  545.7588500976562,
+                                                                             "step":  3,
+                                                                             "timestamp":  "2024-07-10T00:00:00Z"
+                                                                         },
+                                                                         {
+                                                                             "absolute_adjustment":  2.2580769856771212,
+                                                                             "field":  "high",
+                                                                             "normalized_adjustment":  0.004071247883383277,
+                                                                             "original_value":  544.6584879557291,
+                                                                             "projected_value":  546.9165649414062,
+                                                                             "step":  4,
+                                                                             "timestamp":  "2024-07-11T00:00:00Z"
+                                                                         },
+                                                                         {
+                                                                             "absolute_adjustment":  1.6375732421875,
+                                                                             "field":  "high",
+                                                                             "normalized_adjustment":  0.0029524974739254745,
+                                                                             "original_value":  544.0206705729166,
+                                                                             "projected_value":  545.6582438151041,
+                                                                             "step":  5,
+                                                                             "timestamp":  "2024-07-12T00:00:00Z"
+                                                                         }
+                                                                     ],
+                                                     "close_path_volatility_after":  0.007737889107442484,
+                                                     "close_path_volatility_before":  0.007737889107442484,
+                                                     "max_normalized_adjustment":  0.005662713349947002,
+                                                     "mean_range_after":  4.245747884114576,
+                                                     "mean_range_before":  1.8257731119791742,
+                                                     "method":  "CONSTRAINT_PROJECTION_V0",
+                                                     "original_log_return":  -0.01632642835274094,
+                                                     "projected_log_return":  -0.01632642835274094,
+                                                     "return_unchanged":  true,
+                                                     "total_absolute_adjustment":  12.099873860677008
+                                                 },
+                  "sealed-128-2027":  {
+                                          "adjustments":  [
+                                                              {
+                                                                  "absolute_adjustment":  0.40435791015625,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.0007290456863494697,
+                                                                  "original_value":  561.624755859375,
+                                                                  "projected_value":  562.0291137695312,
+                                                                  "step":  3,
+                                                                  "timestamp":  "2024-07-10T00:00:00Z"
+                                                              }
+                                                          ],
+                                          "close_path_volatility_after":  0.01123099478824266,
+                                          "close_path_volatility_before":  0.01123099478824266,
+                                          "max_normalized_adjustment":  0.0007290456863494697,
+                                          "mean_range_after":  6.28756103515625,
+                                          "mean_range_before":  6.206689453125,
+                                          "method":  "CONSTRAINT_PROJECTION_V0",
+                                          "original_log_return":  -0.013523073752791468,
+                                          "projected_log_return":  -0.013523073752791468,
+                                          "return_unchanged":  true,
+                                          "total_absolute_adjustment":  0.40435791015625
+                                      },
+                  "sealed-256-1729":  {
+                                          "adjustments":  [
+                                                              {
+                                                                  "absolute_adjustment":  2.1275634765625,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.0038359357788331793,
+                                                                  "original_value":  547.09130859375,
+                                                                  "projected_value":  549.2188720703125,
+                                                                  "step":  1,
+                                                                  "timestamp":  "2024-07-08T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  0.11114501953125,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.00020039127469319006,
+                                                                  "original_value":  549.7484130859375,
+                                                                  "projected_value":  549.8595581054688,
+                                                                  "step":  2,
+                                                                  "timestamp":  "2024-07-09T00:00:00Z"
+                                                              }
+                                                          ],
+                                          "close_path_volatility_after":  0.0037586172941381883,
+                                          "close_path_volatility_before":  0.0037586172941381883,
+                                          "max_normalized_adjustment":  0.0038359357788331793,
+                                          "mean_range_after":  3.3873779296875,
+                                          "mean_range_before":  2.93963623046875,
+                                          "method":  "CONSTRAINT_PROJECTION_V0",
+                                          "original_log_return":  -0.0186706184798981,
+                                          "projected_log_return":  -0.0186706184798981,
+                                          "return_unchanged":  true,
+                                          "total_absolute_adjustment":  2.23870849609375
+                                      },
+                  "sealed-256-2027":  {
+                                          "adjustments":  [
+                                                              {
+                                                                  "absolute_adjustment":  2.1275634765625,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.0038359357788331793,
+                                                                  "original_value":  547.09130859375,
+                                                                  "projected_value":  549.2188720703125,
+                                                                  "step":  1,
+                                                                  "timestamp":  "2024-07-08T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  0.23992919921875,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.0004325854480060023,
+                                                                  "original_value":  546.9501342773438,
+                                                                  "projected_value":  547.1900634765625,
+                                                                  "step":  2,
+                                                                  "timestamp":  "2024-07-09T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  4.757568359375,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.008577758967482032,
+                                                                  "original_value":  548.9229736328125,
+                                                                  "projected_value":  553.6805419921875,
+                                                                  "step":  3,
+                                                                  "timestamp":  "2024-07-10T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  2.18963623046875,
+                                                                  "field":  "low",
+                                                                  "normalized_adjustment":  0.003947851169477316,
+                                                                  "original_value":  550.0791625976562,
+                                                                  "projected_value":  547.8895263671875,
+                                                                  "step":  3,
+                                                                  "timestamp":  "2024-07-10T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  2.4207763671875,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.004364590190489459,
+                                                                  "original_value":  546.7904052734375,
+                                                                  "projected_value":  549.211181640625,
+                                                                  "step":  4,
+                                                                  "timestamp":  "2024-07-11T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  2.5557861328125,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.004608008916256255,
+                                                                  "original_value":  549.900634765625,
+                                                                  "projected_value":  552.4564208984375,
+                                                                  "step":  5,
+                                                                  "timestamp":  "2024-07-12T00:00:00Z"
+                                                              }
+                                                          ],
+                                          "close_path_volatility_after":  0.008324693469442219,
+                                          "close_path_volatility_before":  0.008324693469442219,
+                                          "max_normalized_adjustment":  0.008577758967482032,
+                                          "mean_range_after":  2.83299560546875,
+                                          "mean_range_before":  -0.02525634765625,
+                                          "method":  "CONSTRAINT_PROJECTION_V0",
+                                          "original_log_return":  -0.003944726965853326,
+                                          "projected_log_return":  -0.003944726965853326,
+                                          "return_unchanged":  true,
+                                          "total_absolute_adjustment":  14.291259765625
+                                      },
+                  "sealed-256-7919":  {
+                                          "adjustments":  [
+                                                              {
+                                                                  "absolute_adjustment":  1.02734375,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.001852271244171211,
+                                                                  "original_value":  561.0076293945312,
+                                                                  "projected_value":  562.0349731445312,
+                                                                  "step":  2,
+                                                                  "timestamp":  "2024-07-09T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  3.076904296875,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.005547569983433881,
+                                                                  "original_value":  560.762451171875,
+                                                                  "projected_value":  563.83935546875,
+                                                                  "step":  4,
+                                                                  "timestamp":  "2024-07-11T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  0.20526123046875,
+                                                                  "field":  "low",
+                                                                  "normalized_adjustment":  0.00037008009708577606,
+                                                                  "original_value":  561.3138427734375,
+                                                                  "projected_value":  561.1085815429688,
+                                                                  "step":  4,
+                                                                  "timestamp":  "2024-07-11T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  1.279052734375,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.002306095306134262,
+                                                                  "original_value":  562.9146728515625,
+                                                                  "projected_value":  564.1937255859375,
+                                                                  "step":  5,
+                                                                  "timestamp":  "2024-07-12T00:00:00Z"
+                                                              }
+                                                          ],
+                                          "close_path_volatility_after":  0.007336204225617295,
+                                          "close_path_volatility_before":  0.007336204225617295,
+                                          "max_normalized_adjustment":  0.005547569983433881,
+                                          "mean_range_after":  4.872802734375,
+                                          "mean_range_before":  3.75509033203125,
+                                          "method":  "CONSTRAINT_PROJECTION_V0",
+                                          "original_log_return":  0.017078396557065768,
+                                          "projected_log_return":  0.017078396557065768,
+                                          "return_unchanged":  true,
+                                          "total_absolute_adjustment":  5.58856201171875
+                                      },
+                  "sealed-512-1729":  {
+                                          "adjustments":  [
+                                                              {
+                                                                  "absolute_adjustment":  3.80584716796875,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.006861833022237159,
+                                                                  "original_value":  538.7051391601562,
+                                                                  "projected_value":  542.510986328125,
+                                                                  "step":  1,
+                                                                  "timestamp":  "2024-07-08T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  0.5313720703125,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.0009580485653371294,
+                                                                  "original_value":  537.3673095703125,
+                                                                  "projected_value":  537.898681640625,
+                                                                  "step":  2,
+                                                                  "timestamp":  "2024-07-09T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  1.2139892578125,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.002188787728526936,
+                                                                  "original_value":  541.2953491210938,
+                                                                  "projected_value":  542.5093383789062,
+                                                                  "step":  3,
+                                                                  "timestamp":  "2024-07-10T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  0.78533935546875,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.0014159442786805473,
+                                                                  "original_value":  543.5010375976562,
+                                                                  "projected_value":  544.286376953125,
+                                                                  "step":  4,
+                                                                  "timestamp":  "2024-07-11T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  0.7652587890625,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.001379739594784853,
+                                                                  "original_value":  544.17529296875,
+                                                                  "projected_value":  544.9405517578125,
+                                                                  "step":  5,
+                                                                  "timestamp":  "2024-07-12T00:00:00Z"
+                                                              }
+                                                          ],
+                                          "close_path_volatility_after":  0.010812272041902144,
+                                          "close_path_volatility_before":  0.010812272041902144,
+                                          "max_normalized_adjustment":  0.006861833022237159,
+                                          "mean_range_after":  4.8908935546875,
+                                          "mean_range_before":  3.4705322265625,
+                                          "method":  "CONSTRAINT_PROJECTION_V0",
+                                          "original_log_return":  -0.017642571674750484,
+                                          "projected_log_return":  -0.017642571674750484,
+                                          "return_unchanged":  true,
+                                          "total_absolute_adjustment":  7.101806640625
+                                      },
+                  "sealed-512-2027":  {
+                                          "adjustments":  [
+                                                              {
+                                                                  "absolute_adjustment":  3.80584716796875,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.006861833022237159,
+                                                                  "original_value":  538.7051391601562,
+                                                                  "projected_value":  542.510986328125,
+                                                                  "step":  1,
+                                                                  "timestamp":  "2024-07-08T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  0.6319580078125,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.001139402118711307,
+                                                                  "original_value":  536.0458984375,
+                                                                  "projected_value":  536.6778564453125,
+                                                                  "step":  2,
+                                                                  "timestamp":  "2024-07-09T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  7.81298828125,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.014086593240486476,
+                                                                  "original_value":  537.5906982421875,
+                                                                  "projected_value":  545.4036865234375,
+                                                                  "step":  3,
+                                                                  "timestamp":  "2024-07-10T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  3.7862548828125,
+                                                                  "field":  "low",
+                                                                  "normalized_adjustment":  0.006826508695396679,
+                                                                  "original_value":  541.6033325195312,
+                                                                  "projected_value":  537.8170776367188,
+                                                                  "step":  3,
+                                                                  "timestamp":  "2024-07-10T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  7.10064697265625,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.01280226234156049,
+                                                                  "original_value":  541.8504638671875,
+                                                                  "projected_value":  548.9511108398438,
+                                                                  "step":  4,
+                                                                  "timestamp":  "2024-07-11T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  1.93896484375,
+                                                                  "field":  "low",
+                                                                  "normalized_adjustment":  0.0034958978662565964,
+                                                                  "original_value":  545.4842529296875,
+                                                                  "projected_value":  543.5452880859375,
+                                                                  "step":  4,
+                                                                  "timestamp":  "2024-07-11T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  4.4180908203125,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.007965690724844182,
+                                                                  "original_value":  543.052001953125,
+                                                                  "projected_value":  547.4700927734375,
+                                                                  "step":  5,
+                                                                  "timestamp":  "2024-07-12T00:00:00Z"
+                                                              }
+                                                          ],
+                                          "close_path_volatility_after":  0.013276642140043891,
+                                          "close_path_volatility_before":  0.013276642140043891,
+                                          "max_normalized_adjustment":  0.014086593240486476,
+                                          "mean_range_after":  4.476220703125,
+                                          "mean_range_before":  -1.4227294921875,
+                                          "method":  "CONSTRAINT_PROJECTION_V0",
+                                          "original_log_return":  -0.013011445917641693,
+                                          "projected_log_return":  -0.013011445917641693,
+                                          "return_unchanged":  true,
+                                          "total_absolute_adjustment":  29.4947509765625
+                                      },
+                  "sealed-512-7919":  {
+                                          "adjustments":  [
+                                                              {
+                                                                  "absolute_adjustment":  1.81060791015625,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.003264474005367097,
+                                                                  "original_value":  547.5235595703125,
+                                                                  "projected_value":  549.3341674804688,
+                                                                  "step":  1,
+                                                                  "timestamp":  "2024-07-08T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  4.9747314453125,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.00896929776778866,
+                                                                  "original_value":  551.1119384765625,
+                                                                  "projected_value":  556.086669921875,
+                                                                  "step":  2,
+                                                                  "timestamp":  "2024-07-09T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  0.2845458984375,
+                                                                  "field":  "low",
+                                                                  "normalized_adjustment":  0.000513028073926223,
+                                                                  "original_value":  553.5361328125,
+                                                                  "projected_value":  553.2515869140625,
+                                                                  "step":  2,
+                                                                  "timestamp":  "2024-07-09T00:00:00Z"
+                                                              },
+                                                              {
+                                                                  "absolute_adjustment":  1.3037109375,
+                                                                  "field":  "high",
+                                                                  "normalized_adjustment":  0.002350553337422592,
+                                                                  "original_value":  549.3381958007812,
+                                                                  "projected_value":  550.6419067382812,
+                                                                  "step":  3,
+                                                                  "timestamp":  "2024-07-10T00:00:00Z"
+                                                              }
+                                                          ],
+                                          "close_path_volatility_after":  0.008519812985682461,
+                                          "close_path_volatility_before":  0.008519812985682461,
+                                          "max_normalized_adjustment":  0.00896929776778866,
+                                          "mean_range_after":  5.10423583984375,
+                                          "mean_range_before":  3.4295166015625,
+                                          "method":  "CONSTRAINT_PROJECTION_V0",
+                                          "original_log_return":  -0.018333646949458295,
+                                          "projected_log_return":  -0.018333646949458295,
+                                          "return_unchanged":  true,
+                                          "total_absolute_adjustment":  8.37359619140625
+                                      }
+              },
+    "schema_version":  "sentinel-phase2_5-constraint-projection-v0"
+}

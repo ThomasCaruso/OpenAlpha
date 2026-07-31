@@ -1,7 +1,7 @@
 # OpenAlpha Sentinel Direction
 
 - Decision date: 2026-07-30
-- Status: final product direction; Phase 1 design only
+- Status: final product direction; Phase 2.5 integration audit complete
 - Preserved commits: `c037bd5`, `27f0c69`
 
 ## Product
@@ -43,6 +43,8 @@ Sentinel v0 is a development-only signal-discovery experiment:
 
 The earlier half is development data. The later half is untouched holdout data. Sentinel v0 is not a publication, production service, SDK, trading strategy, or public model-performance claim.
 
+Phase 2.5 confirmed that the pinned official Kronos predictor can emit reproducible finite candles that violate OHLC ordering. OpenAlpha did not introduce the violations. Eleven structural-validity measures are therefore locked as candidate development diagnostics, and every raw path is subject to a mandatory validity gate. This is an integration finding only; whether the measures predict future error remains untested.
+
 ## Definition of value
 
 The next measure of value is whether pre-outcome diagnostics predict later forecast failure. Sentinel v0 is useful only if the locked holdout shows that higher risk corresponds to higher Kronos error and that selective acceptance or blending reduces error at declared coverage levels.
@@ -68,8 +70,9 @@ Sentinel v0 does not include a frontend, accounts, database, live trading, portf
 
 1. Lock this direction, experiment configuration, targets, continuation criteria, and minimal contracts.
 2. Prove one real SPY context-to-diagnostic-to-outcome chain.
-3. Run the chronological development sample and freeze the risk model/action policy.
-4. Run the untouched holdout once and generate the go/no-go decision.
-5. Decide whether any broader product surface is justified.
+3. Audit the official integration and lock structural validity before scaling.
+4. Run the chronological development sample and freeze the risk model/action policy.
+5. Run the untouched holdout once and generate the go/no-go decision.
+6. Decide whether any broader product surface is justified.
 
 Protocol v1 remains unfrozen until after the Sentinel v0 decision.

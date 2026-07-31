@@ -151,6 +151,32 @@ At the first origin, `RECENT_MODEL_ERROR` is `not_computable` with reason `NO_PR
 
 Expected univariate associations with future absolute error are locked as follows: directional and context-direction agreement are negative; return/path dispersion, context spread, baseline disagreement, recent volatility, volatility change, gap/outlier score, analogue distance, analogue outcome dispersion, recent model error, and horizon path divergence are positive. Trend strength has no preregistered sign and is ineligible to satisfy S5 by itself. These signs are research expectations, not assumptions used to calculate the diagnostics.
 
+### Structural-validity amendment
+
+Phase 2.5 traced the pinned official predictor and established, before development-model fitting or holdout inspection, that finite official raw paths can violate candle ordering. The direct official path, OpenAlpha provider response, and sealed Phase 2 path were numerically identical. The original Phase 2 record remains immutable.
+
+Every generated path is validated without mutation. Each candle must have finite positive open, high, low, and close; high must be at least open, close, and low; low must be at most open, close, and high; predicted volume, when present, must be nonnegative. A path must contain each expected timestamp exactly once, contain no duplicates, and have the exact declared horizon. Each violation records path ID, zero-based horizon step, timestamp, code, observed gap, and normalized severity.
+
+Price-related severity is absolute constraint gap divided by the final observed raw close at the cutoff. The denominator is causal and shared by all paths at an origin.
+
+The following eleven candidate diagnostics are locked before the development sample:
+
+1. **INVALID_PATH_FRACTION:** paths with at least one violation divided by paths evaluated.
+2. **INVALID_CANDLE_FRACTION:** candles with at least one violation divided by candles evaluated.
+3. **TOTAL_CONSTRAINT_VIOLATIONS:** count of all structured violations.
+4. **MAX_CONSTRAINT_VIOLATION_SEVERITY:** maximum normalized price-gap severity, or zero only when a fully computed path set has no price constraint violation.
+5. **MEAN_CONSTRAINT_VIOLATION_SEVERITY:** mean normalized price-gap severity over price violations, or zero only for a fully computed violation-free path set.
+6. **EARLIEST_INVALID_HORIZON_STEP:** earliest zero-based invalid step; explicitly not computable when there is no invalid candle.
+7. **HIGH_LOW_INVERSION_COUNT:** count where predicted high is below predicted low.
+8. **HIGH_BELOW_BODY_COUNT:** count of high below predicted open or close.
+9. **LOW_ABOVE_BODY_COUNT:** count of low above predicted open or close.
+10. **NONFINITE_OUTPUT_COUNT:** count of nonfinite output fields.
+11. **NONPOSITIVE_PRICE_COUNT:** count of open, high, low, or close values at or below zero.
+
+Larger fractions, counts, and severities are expected to associate positively with future Kronos error. Earlier invalidity is expected to associate with larger error, so EARLIEST_INVALID_HORIZON_STEP has a negative expected sign. NONFINITE_OUTPUT_COUNT and NONPOSITIVE_PRICE_COUNT are runtime gates and are ineligible for S5 because an affected forecast may not be scoreable.
+
+Nonfinite or nonpositive prices, timestamp misalignment, duplicates, and wrong horizon length block use and persist a typed failure. Finite OHLC-ordering failures are marked structurally invalid but retained for development error analysis. The baseline is never substituted silently. CONSTRAINT_PROJECTION_V0 may create a separate labeled projection by keeping open and close unchanged, raising high to the candle maximum, and lowering low to the candle minimum. It never overwrites raw output and is not treated as improved accuracy.
+
 ## Targets and labels
 
 The primary continuous target is:
@@ -257,6 +283,7 @@ The existing manifest artifact-kind vocabulary may carry Sentinel payloads where
 
 - Unavailable or invalid Yahoo/yfinance history and unavailable real Kronos resources are explicit blockers.
 - A real Kronos failure is persisted; no fake or baseline output silently replaces it.
+- Every raw forecast is structurally validated before downstream use; invalid output is preserved and never silently projected.
 - If Python 3.13/Windows compatibility, deterministic seed control, raw-path capture, or latency makes real Kronos unreasonable, Phase 2 stops and records the evidence.
 - Provider responses, model weights, and caches are never committed.
 - No empirical Sentinel claim exists until the untouched holdout is complete.

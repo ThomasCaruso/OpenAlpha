@@ -31,7 +31,7 @@ The worktree now defines:
 - untouched holdout 2025-07-01 through 2026-06-30;
 - weekly SPY/QQQ five-session experiment;
 - nine-path Kronos ensemble and zero-return baseline;
-- fourteen diagnostics;
+- twenty-five candidate diagnostics after the Phase 2.5 structural-validity amendment;
 - continuous error, worst-development-quartile failure, and baseline-relative labels;
 - logistic/ridge risk configuration;
 - USE, 50/50 BLEND, and ABSTAIN policy;
@@ -229,6 +229,73 @@ This one negative result does not establish whether Kronos or Sentinel works. It
 - Generated report ignore check — exit 0; the local generated copy is ignored.
 - Offline evidence verification — exit 0; the creation seal and resolved chain verify, the resolved descriptor embeds the same creation evidence, and the tracked audit matches the artifact-generated report after normalizing platform line endings.
 
+## Phase 2.5 structural-validity and integration audit
+
+**Claim boundary: DEVELOPMENT INTEGRATION AUDIT - NOT EMPIRICAL EVIDENCE.**
+
+Conclusion category: **B. OFFICIAL RAW-PATH STRUCTURAL INVALIDITY CONFIRMED.**
+
+The pinned official predictor was executed directly outside OpenAlpha's artifact layer and compared with the typed provider response and immutable Phase 2 path. All three canonical path hashes were identical: 2155d9da024b0d0b878a029cca4a180520f59b67acab879eea98e6499cc7fe2c. The input hash also matched the sealed record: f09446b7f7d541907401ca133580eac205c99acb5e27d84bf922943cc4d57bbe. The direct official output was already invalid; OpenAlpha introduced no column, timestamp, inverse-transform, canonicalization, or storage discrepancy.
+
+The audited source was model/kronos.py at pinned source revision 67b630e67f6a18c9e9be918d9b4337c960db1e9a. The trace covered KronosPredictor.predict, KronosPredictor.generate, auto_regressive_inference, KronosTokenizer.encode/decode, and calc_time_stamps. Model/tokenizer pairing, named OHLCV order, internal amount derivation, normalization, inverse transformation, and XNYS timestamp alignment were verified. Deliberate column permutations and shifted, duplicate, missing, or extra timestamps are rejected by regression tests.
+
+### Structural measurements
+
+Sealed Phase 2 nine-path ensemble:
+
+- invalid paths: 7/9 (0.7777777778)
+- invalid candles: 24/45 (0.5333333333)
+- total violations: 52
+- maximum / mean normalized severity: 0.0140865932 / 0.0034681328
+- high-low / high-below-body / low-above-body counts: 11 / 36 / 5
+- nonfinite / nonpositive counts: 0 / 0
+
+Averaging did not remove the issue. The offline three-path 512 canonical average was invalid in 5/5 candles; the diagnostic all-nine average was invalid in 4/5. Official sample_count=3 and sample_count=5 calls were each invalid in 5/5 candles, with 12 and 11 violations respectively.
+
+Identical seeded reruns reproduced exact output hashes, violation locations, codes, gaps, and severities for all three selected 512-context paths. A first repeatability receipt incorrectly included path labels in equality and was preserved as superseded; the corrected comparison ignores identity labels only and retains exact numerical and violation comparisons.
+
+CONSTRAINT_PROJECTION_V0 restored OHLC ordering by changing high and low only. It preserved every open, close, and implied return exactly. It remains a separate experimental artifact and is not an accuracy claim.
+
+The six-origin canary used three 512-context seeds at three additional cutoffs for each of SPY and QQQ: 18 paths total.
+
+- invalid paths: 12/18 (0.6666666667)
+- invalid candles: 31/90 (0.3444444444)
+- total violations: 53
+- maximum / mean normalized severity: 0.0137362017 / 0.0037325163
+- high-low / high-below-body / low-above-body counts: 8 / 38 / 7
+- nonfinite / nonpositive counts: 0 / 0
+
+Both assets reproduced the phenomenon, while one QQQ origin had no invalid path. This tiny canary cannot estimate population frequency or establish a relationship with forecast error.
+
+### Preservation and governance
+
+- Sealed Phase 2 creation descriptor SHA-256: 72016ee3e8074da2e54c6cbabf73e932b8aaa8090a62d61b853659360d77eaeb (unchanged).
+- Sealed Phase 2 resolved descriptor SHA-256: 6920056d303a9e3f15821aa538ccaf4c77c4421b04a258da7784d8f57ef0b561 (unchanged).
+- Sealed Phase 2 artifact inventory SHA-256: 0a40d0fab1b57e2bfcd43b0b2d8203e23c59cf29ad0e2ccff781cf0e78e0781b (unchanged).
+- Original creation and resolved chains reverified successfully.
+- Previous experiment SHA-256: 587bc36ac1dd941c66d9e94c92d7b26a33faeb8e7e7a38883762f0cb54897950.
+- Structural-validity-amended SHA-256: fd50c208f465ce99750b11d4de5d5bc8c391bd73cb9ff450037c596c3e37d8bc.
+- Eleven structural diagnostics and their expected error relationships are locked before the development sample and holdout.
+- No full development sample or Sentinel risk-model fitting occurred.
+
+Private immutable receipts include final trace c9a5fc1994b496921144713daf68fd0fbf3c8a91630a4879c51a11b99599bbd7, repeatability 7b9754e4519f8cf5286a80857ef09fe8472a642573000606291e5dbdf1606ff2, averaging/projection 7bac665b0ea5e01b79b36c74615b515c01f334338062b1a2d4e4d40127f0b767, canary forecast 435940afb200f0ccdf68bd73b80cb0a8fa1afa5a6e0018d6870e80e2d8c8b6ef, canary outcome 4f240f4b3fe44f11ca7358c0384b59be90eaec10d1ca502e542116f37aee5284, and compact report 4e73825b225ebe100b349eea68bf982354b2de8d5dfe34adde48bc598815772b.
+
+### Final Phase 2.5 verification
+
+- uv sync --locked --group dev --group sentinel-phase2 - exit 0; resolved 56 packages and checked 55.
+- Targeted Phase 2.5 pytest command - exit 0; 35 passed in 1.83 seconds.
+- uv run pytest -q - exit 0; 284 passed in 6.76 seconds.
+- uv run ruff check . - exit 0; all checks passed.
+- uv run pyright packages/research-core packages/experiment-spec packages/sentinel scripts/run_sentinel_v0_origin.py scripts/kronos_inference_worker.py scripts/kronos_phase2_5_worker.py scripts/run_sentinel_phase2_5.py - exit 0; 0 errors, 0 warnings, 0 informations.
+- Offline report operation - exit 0; receipt 4e73825b225ebe100b349eea68bf982354b2de8d5dfe34adde48bc598815772b reproduced, Phase 2 fingerprint unchanged, source inventory unchanged, and creation/resolved chains verified.
+- Sentinel v0.4 lock assertion - exit 0; fd50c208f465ce99750b11d4de5d5bc8c391bd73cb9ff450037c596c3e37d8bc.
+- Public JSON parse and policy scan - exit 0; six JSON files valid; no raw observation arrays, patch markers, model weights, reusable CSVs, or cache artifacts tracked.
+- git diff --check - exit 0.
+
 ## Exact next task
+
+Phase 2.5 is complete. The next justified task is the chronological Sentinel development sample using experiment hash fd50c208f465ce99750b11d4de5d5bc8c391bd73cb9ff450037c596c3e37d8bc. It should test, rather than assume, whether the locked structural diagnostics predict later Kronos error. The untouched holdout and risk-model fitting remain out of scope until the development workflow is complete and frozen.
+
+## Superseded Phase 2 pause
 
 Phase 2 is complete and stops at this single origin. Do not begin the approximately 208-origin development/holdout experiment. The next possible implementation task is to review the Phase 2 evidence—especially widespread model-output OHLC inconsistencies and the official predictor's internal amount derivation—then explicitly decide whether Phase 3 should proceed unchanged or requires a pre-development experiment amendment.

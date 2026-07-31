@@ -1,0 +1,1267 @@
+{
+    "claim_boundary":  "DEVELOPMENT AUDIT - NOT EMPIRICAL EVIDENCE",
+    "execution_attempts":  [
+                               {
+                                   "attempt":  1,
+                                   "failure":  "INTRADAY_EXPECTED_TIMESTAMPS_NOT_CONVERTED_TO_STRICT_DATETIME",
+                                   "outcome_accessed":  false,
+                                   "status":  "not_sealed"
+                               },
+                               {
+                                   "attempt":  2,
+                                   "outcome_accessed":  false,
+                                   "status":  "sealed"
+                               }
+                           ],
+    "golden_boundaries":  [
+                              {
+                                  "boundary":  "official_predictor_input_dataframe",
+                                  "column_order":  [
+                                                       "open",
+                                                       "high",
+                                                       "low",
+                                                       "close",
+                                                       "volume",
+                                                       "amount"
+                                                   ],
+                                  "dtype":  "float64",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  11.36,
+                                                       "minimum":  10.67,
+                                                       "name":  "open",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  11.37,
+                                                       "minimum":  10.69,
+                                                       "name":  "high",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  11.32,
+                                                       "minimum":  10.66,
+                                                       "name":  "low",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  11.35,
+                                                       "minimum":  10.67,
+                                                       "name":  "close",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  6825.0,
+                                                       "minimum":  59.0,
+                                                       "name":  "volume",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "shares"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  7460077.0,
+                                                       "minimum":  63252.0,
+                                                       "name":  "amount",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "derived_price_times_volume"
+                                                   }
+                                               ],
+                                  "kind":  "dataframe",
+                                  "operations":  [
+                                                     "named_selection",
+                                                     "float_conversion",
+                                                     "copy"
+                                                 ],
+                                  "sha256":  "f517d91382f52a1d07bb5acb83960c28b06a54aa60d0a07d0411dd2b4196ab8f",
+                                  "shape":  [
+                                                512,
+                                                6
+                                            ],
+                                  "timestamp_index":  {
+                                                          "count":  512,
+                                                          "first":  "2024-06-18T11:15:00+00:00",
+                                                          "last":  "2024-07-03T09:50:00+00:00",
+                                                          "timezone":  "UTC"
+                                                      }
+                              },
+                              {
+                                  "boundary":  "official_predictor_denormalized_output_dataframe",
+                                  "column_order":  [
+                                                       "open",
+                                                       "high",
+                                                       "low",
+                                                       "close",
+                                                       "volume",
+                                                       "amount"
+                                                   ],
+                                  "dtype":  "float32",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  11.045413970947266,
+                                                       "minimum":  10.968948364257812,
+                                                       "name":  "open",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  11.052639961242676,
+                                                       "minimum":  11.019445419311523,
+                                                       "name":  "high",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  10.991633415222168,
+                                                       "minimum":  10.950922012329102,
+                                                       "name":  "low",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  11.051860809326172,
+                                                       "minimum":  10.972638130187988,
+                                                       "name":  "close",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  2810.2705078125,
+                                                       "minimum":  941.1607055664062,
+                                                       "name":  "volume",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "shares"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  3084149.5,
+                                                       "minimum":  1056006.375,
+                                                       "name":  "amount",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "derived_price_times_volume"
+                                                   }
+                                               ],
+                                  "kind":  "dataframe",
+                                  "operations":  [
+                                                     "inverse_per_feature_zscore",
+                                                     "named_dataframe_construction"
+                                                 ],
+                                  "sha256":  "8c1bd8885ba2a271550f4e8c471fdb82e7c3ded5d217ee86f3a5eb52c6b39a86",
+                                  "shape":  [
+                                                5,
+                                                6
+                                            ],
+                                  "timestamp_index":  {
+                                                          "count":  5,
+                                                          "first":  "2024-07-03T09:55:00+00:00",
+                                                          "last":  "2024-07-03T10:15:00+00:00",
+                                                          "timezone":  "UTC"
+                                                      }
+                              }
+                          ],
+    "golden_boundary_policy":  "official input and final output retained; full trace private",
+    "golden_fixture":  {
+                           "context_first_timestamp":  "2024-06-18T11:15:00",
+                           "context_last_timestamp":  "2024-07-03T09:50:00",
+                           "context_rows":  512,
+                           "cutoff_close":  10.93,
+                           "cutoff_volume":  2481.0,
+                           "fixture_relative_path":  "tests/data/regression_input.csv",
+                           "fixture_sha256":  "015ca7cf6ffd16c74676b8526fe2a1b2b50bd17368891380634bdfc02dd33349",
+                           "forecast_rows":  5,
+                           "forecast_timestamps":  [
+                                                       "2024-07-03T09:55:00",
+                                                       "2024-07-03T10:00:00",
+                                                       "2024-07-03T10:05:00",
+                                                       "2024-07-03T10:10:00",
+                                                       "2024-07-03T10:15:00"
+                                                   ],
+                           "input_columns":  [
+                                                 "timestamps",
+                                                 "open",
+                                                 "high",
+                                                 "low",
+                                                 "close",
+                                                 "volume",
+                                                 "amount"
+                                             ]
+                       },
+    "official_environment":  {
+                                 "cache_path":  "C:\\Users\\Tommy\\.cache\\openalpha-sentinel\\phase2\\hf",
+                                 "cache_size_bytes":  32283678,
+                                 "device":  "cpu",
+                                 "downloaded_files":  [
+                                                          {
+                                                              "relative_path":  "config.json",
+                                                              "repository":  "NeoQuasar/Kronos-mini",
+                                                              "revision":  "f4e68697d9d5aed55cef5c96aabc3376bcad9f81",
+                                                              "sha256":  "70daca2cb11e3a979dd6b8ac12ee08e2aace877acf28f5b8dfb4fe5609736201",
+                                                              "size_bytes":  225
+                                                          },
+                                                          {
+                                                              "relative_path":  "model.safetensors",
+                                                              "repository":  "NeoQuasar/Kronos-mini",
+                                                              "revision":  "f4e68697d9d5aed55cef5c96aabc3376bcad9f81",
+                                                              "sha256":  "a7d5f37e2e9fbd9891f7d7d4f72574512dd1f704fee14223e0a8cd0fbf54197c",
+                                                              "size_bytes":  16440776
+                                                          },
+                                                          {
+                                                              "relative_path":  "config.json",
+                                                              "repository":  "NeoQuasar/Kronos-Tokenizer-2k",
+                                                              "revision":  "26966d0035065a0cae0ebad7af8ece35bc1fb51c",
+                                                              "sha256":  "0b30a443affb03e05a876a083857de9164f899feb7b4d261da02c485c9a3e3b6",
+                                                              "size_bytes":  301
+                                                          },
+                                                          {
+                                                              "relative_path":  "model.safetensors",
+                                                              "repository":  "NeoQuasar/Kronos-Tokenizer-2k",
+                                                              "revision":  "26966d0035065a0cae0ebad7af8ece35bc1fb51c",
+                                                              "sha256":  "b97ec46b3b72160509e289183eaf7bdf5f0dac5bb9b49522f6d46638a99a8717",
+                                                              "size_bytes":  15842376
+                                                          }
+                                                      ],
+                                 "model_config":  {
+                                                      "d_model":  256,
+                                                      "n_heads":  4,
+                                                      "n_layers":  4,
+                                                      "s1_bits":  10,
+                                                      "s2_bits":  10
+                                                  },
+                                 "model_repository":  "NeoQuasar/Kronos-mini",
+                                 "model_revision":  "f4e68697d9d5aed55cef5c96aabc3376bcad9f81",
+                                 "numpy_version":  "2.2.6",
+                                 "operating_system":  "Windows-10-10.0.26200-SP0",
+                                 "pandas_version":  "2.2.2",
+                                 "python_version":  "3.11.15",
+                                 "source_inventory":  [
+                                                          {
+                                                              "relative_path":  "README.md",
+                                                              "sha256":  "b815b608192afa4b805a11bcbb66268f3e3db55736218964944318da7865357e",
+                                                              "size_bytes":  16657
+                                                          },
+                                                          {
+                                                              "relative_path":  "model/kronos.py",
+                                                              "sha256":  "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a",
+                                                              "size_bytes":  30795
+                                                          },
+                                                          {
+                                                              "relative_path":  "tests/test_kronos_regression.py",
+                                                              "sha256":  "a20bb7fa97c052f999a05c26b12f91cba6eeb853b98d849b8bf15cfaf4574498",
+                                                              "size_bytes":  5466
+                                                          }
+                                                      ],
+                                 "source_revision":  "67b630e67f6a18c9e9be918d9b4337c960db1e9a",
+                                 "tokenizer_config":  {
+                                                          "d_in":  6,
+                                                          "d_model":  256,
+                                                          "n_heads":  4,
+                                                          "s1_bits":  10,
+                                                          "s2_bits":  10
+                                                      },
+                                 "tokenizer_repository":  "NeoQuasar/Kronos-Tokenizer-2k",
+                                 "tokenizer_revision":  "26966d0035065a0cae0ebad7af8ece35bc1fb51c",
+                                 "torch_version":  "2.13.0+cpu"
+                             },
+    "phase2_boundaries":  [
+                              {
+                                  "boundary":  "official_predictor_input_dataframe",
+                                  "column_order":  [
+                                                       "open",
+                                                       "high",
+                                                       "low",
+                                                       "close",
+                                                       "volume"
+                                                   ],
+                                  "dtype":  "float64",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  551.77001953125,
+                                                       "minimum":  349.2099914550781,
+                                                       "name":  "open",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  555.0499877929688,
+                                                       "minimum":  359.82000732421875,
+                                                       "name":  "high",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  551.1199951171875,
+                                                       "minimum":  348.1099853515625,
+                                                       "name":  "low",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  554.6400146484375,
+                                                       "minimum":  356.55999755859375,
+                                                       "name":  "close",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  189253000.0,
+                                                       "minimum":  29737400.0,
+                                                       "name":  "volume",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "shares"
+                                                   }
+                                               ],
+                                  "kind":  "dataframe",
+                                  "operations":  [
+                                                     "named_selection",
+                                                     "float_conversion",
+                                                     "copy"
+                                                 ],
+                                  "sha256":  "6cb252ce915104da970126290a2e99d6c1aecc570fe80666386336ffa13e2931",
+                                  "shape":  [
+                                                512,
+                                                5
+                                            ],
+                                  "timestamp_index":  {
+                                                          "count":  512,
+                                                          "first":  "2022-06-22T00:00:00+00:00",
+                                                          "last":  "2024-07-05T00:00:00+00:00",
+                                                          "timezone":  "UTC"
+                                                      }
+                              },
+                              {
+                                  "boundary":  "official_dataframe_after_optional_field_derivation",
+                                  "column_order":  [
+                                                       "open",
+                                                       "high",
+                                                       "low",
+                                                       "close",
+                                                       "volume",
+                                                       "amount"
+                                                   ],
+                                  "dtype":  "float64",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  551.77001953125,
+                                                       "minimum":  349.2099914550781,
+                                                       "name":  "open",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  555.0499877929688,
+                                                       "minimum":  359.82000732421875,
+                                                       "name":  "high",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  551.1199951171875,
+                                                       "minimum":  348.1099853515625,
+                                                       "name":  "low",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  554.6400146484375,
+                                                       "minimum":  356.55999755859375,
+                                                       "name":  "close",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  189253000.0,
+                                                       "minimum":  29737400.0,
+                                                       "name":  "volume",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "shares"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  73542769766.02173,
+                                                       "minimum":  12283908861.639404,
+                                                       "name":  "amount",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "derived_price_times_volume"
+                                                   }
+                                               ],
+                                  "kind":  "dataframe",
+                                  "operations":  [
+                                                     "named_reorder_open_high_low_close_volume_amount",
+                                                     "derive_amount_as_volume_times_mean_ohlc_when_missing"
+                                                 ],
+                                  "sha256":  "b40e8a1c071afc170889bc780a0ee9119dfe7a7a0177b0eb8ad733530a78066b",
+                                  "shape":  [
+                                                512,
+                                                6
+                                            ],
+                                  "timestamp_index":  {
+                                                          "count":  512,
+                                                          "first":  "2022-06-22T00:00:00+00:00",
+                                                          "last":  "2024-07-05T00:00:00+00:00",
+                                                          "timezone":  "UTC"
+                                                      }
+                              },
+                              {
+                                  "boundary":  "normalized_feature_tensor",
+                                  "column_order":  [
+                                                       "open",
+                                                       "high",
+                                                       "low",
+                                                       "close",
+                                                       "volume",
+                                                       "amount"
+                                                   ],
+                                  "dtype":  "float32",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.2821664810180664,
+                                                       "minimum":  -1.8017444610595703,
+                                                       "name":  "open",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.321363925933838,
+                                                       "minimum":  -1.6556380987167358,
+                                                       "name":  "high",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.3001139163970947,
+                                                       "minimum":  -1.7599092721939087,
+                                                       "name":  "low",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.334068536758423,
+                                                       "minimum":  -1.6583338975906372,
+                                                       "name":  "close",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  4.91916036605835,
+                                                       "minimum":  -2.1202526092529297,
+                                                       "name":  "volume",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  4.488593101501465,
+                                                       "minimum":  -2.4012341499328613,
+                                                       "name":  "amount",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   }
+                                               ],
+                                  "kind":  "array",
+                                  "operations":  [
+                                                     "float32_cast",
+                                                     "per_feature_zscore",
+                                                     "clip_minus5_plus5"
+                                                 ],
+                                  "sha256":  "276aed83a2fccb188734194d4db038cec35a0e9908c24d47b6de3974b81d349a",
+                                  "shape":  [
+                                                1,
+                                                512,
+                                                6
+                                            ],
+                                  "timestamp_index":  null
+                              },
+                              {
+                                  "boundary":  "context_timestamp_tensor",
+                                  "column_order":  [
+                                                       "minute",
+                                                       "hour",
+                                                       "weekday",
+                                                       "day",
+                                                       "month"
+                                                   ],
+                                  "dtype":  "float32",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  0.0,
+                                                       "minimum":  0.0,
+                                                       "name":  "minute",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "integer_calendar_feature"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  0.0,
+                                                       "minimum":  0.0,
+                                                       "name":  "hour",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "integer_calendar_feature"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  4.0,
+                                                       "minimum":  0.0,
+                                                       "name":  "weekday",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "integer_calendar_feature"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  31.0,
+                                                       "minimum":  1.0,
+                                                       "name":  "day",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "integer_calendar_feature"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  12.0,
+                                                       "minimum":  1.0,
+                                                       "name":  "month",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "integer_calendar_feature"
+                                                   }
+                                               ],
+                                  "kind":  "array",
+                                  "operations":  [
+                                                     "calc_time_stamps",
+                                                     "float32_cast"
+                                                 ],
+                                  "sha256":  "5a27de7ba813a57a74da1a18eaf0fb79be6204107208125255faa747c04a1baf",
+                                  "shape":  [
+                                                1,
+                                                512,
+                                                5
+                                            ],
+                                  "timestamp_index":  null
+                              },
+                              {
+                                  "boundary":  "forecast_timestamp_tensor",
+                                  "column_order":  [
+                                                       "minute",
+                                                       "hour",
+                                                       "weekday",
+                                                       "day",
+                                                       "month"
+                                                   ],
+                                  "dtype":  "float32",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  0.0,
+                                                       "minimum":  0.0,
+                                                       "name":  "minute",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "integer_calendar_feature"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  0.0,
+                                                       "minimum":  0.0,
+                                                       "name":  "hour",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "integer_calendar_feature"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  4.0,
+                                                       "minimum":  0.0,
+                                                       "name":  "weekday",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "integer_calendar_feature"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  12.0,
+                                                       "minimum":  8.0,
+                                                       "name":  "day",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "integer_calendar_feature"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  7.0,
+                                                       "minimum":  7.0,
+                                                       "name":  "month",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "integer_calendar_feature"
+                                                   }
+                                               ],
+                                  "kind":  "array",
+                                  "operations":  [
+                                                     "calc_time_stamps",
+                                                     "float32_cast"
+                                                 ],
+                                  "sha256":  "beb7c5f7d416f78dca5afdc18a84cb5466f9557d4a01231bdc352f25b96c0f2c",
+                                  "shape":  [
+                                                1,
+                                                5,
+                                                5
+                                            ],
+                                  "timestamp_index":  null
+                              },
+                              {
+                                  "boundary":  "tokenizer_encode_input",
+                                  "column_order":  [
+                                                       "open",
+                                                       "high",
+                                                       "low",
+                                                       "close",
+                                                       "volume",
+                                                       "amount"
+                                                   ],
+                                  "dtype":  "float32",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.2821664810180664,
+                                                       "minimum":  -1.8017444610595703,
+                                                       "name":  "open",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.321363925933838,
+                                                       "minimum":  -1.6556380987167358,
+                                                       "name":  "high",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.3001139163970947,
+                                                       "minimum":  -1.7599092721939087,
+                                                       "name":  "low",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.334068536758423,
+                                                       "minimum":  -1.6583338975906372,
+                                                       "name":  "close",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  4.91916036605835,
+                                                       "minimum":  -2.1202526092529297,
+                                                       "name":  "volume",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  4.488593101501465,
+                                                       "minimum":  -2.4012341499328613,
+                                                       "name":  "amount",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   }
+                                               ],
+                                  "kind":  "array",
+                                  "operations":  [
+                                                     "half=true"
+                                                 ],
+                                  "sha256":  "276aed83a2fccb188734194d4db038cec35a0e9908c24d47b6de3974b81d349a",
+                                  "shape":  [
+                                                1,
+                                                512,
+                                                6
+                                            ],
+                                  "timestamp_index":  null
+                              },
+                              {
+                                  "boundary":  "tokenizer_encoded_pre_tokens",
+                                  "column_order":  [
+
+                                                   ],
+                                  "dtype":  "int64",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "int64",
+                                                       "maximum":  1019.0,
+                                                       "minimum":  1.0,
+                                                       "name":  "value",
+                                                       "nonfinite_count":  0,
+                                                       "units":  null
+                                                   }
+                                               ],
+                                  "kind":  "array",
+                                  "operations":  [
+                                                     "quantized_token_ids"
+                                                 ],
+                                  "sha256":  "52914f5e37bab6b68434f6586a15233b679d0c04ab2d327065a617a22f9b8dec",
+                                  "shape":  [
+                                                1,
+                                                512
+                                            ],
+                                  "timestamp_index":  null
+                              },
+                              {
+                                  "boundary":  "tokenizer_encoded_post_tokens",
+                                  "column_order":  [
+
+                                                   ],
+                                  "dtype":  "int64",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "int64",
+                                                       "maximum":  991.0,
+                                                       "minimum":  0.0,
+                                                       "name":  "value",
+                                                       "nonfinite_count":  0,
+                                                       "units":  null
+                                                   }
+                                               ],
+                                  "kind":  "array",
+                                  "operations":  [
+                                                     "quantized_token_ids"
+                                                 ],
+                                  "sha256":  "ae57bc89123e7f89467de2e5b55d43f0e2be8f65c918e89d3b366e5d2c692edb",
+                                  "shape":  [
+                                                1,
+                                                512
+                                            ],
+                                  "timestamp_index":  null
+                              },
+                              {
+                                  "boundary":  "tokenizer_decode_pre_tokens",
+                                  "column_order":  [
+
+                                                   ],
+                                  "dtype":  "int64",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "int64",
+                                                       "maximum":  1019.0,
+                                                       "minimum":  1.0,
+                                                       "name":  "value",
+                                                       "nonfinite_count":  0,
+                                                       "units":  null
+                                                   }
+                                               ],
+                                  "kind":  "array",
+                                  "operations":  [
+                                                     "half=true"
+                                                 ],
+                                  "sha256":  "f27299052b84be310954b69d6be5f8728c686803577372f1c4b41521b4adb885",
+                                  "shape":  [
+                                                1,
+                                                512
+                                            ],
+                                  "timestamp_index":  null
+                              },
+                              {
+                                  "boundary":  "tokenizer_decode_post_tokens",
+                                  "column_order":  [
+
+                                                   ],
+                                  "dtype":  "int64",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "int64",
+                                                       "maximum":  991.0,
+                                                       "minimum":  0.0,
+                                                       "name":  "value",
+                                                       "nonfinite_count":  0,
+                                                       "units":  null
+                                                   }
+                                               ],
+                                  "kind":  "array",
+                                  "operations":  [
+                                                     "half=true"
+                                                 ],
+                                  "sha256":  "5e3ab8f31c1c1ce5e3f45bc20470a23a878f47680b44b6b647a229515cdae8f6",
+                                  "shape":  [
+                                                1,
+                                                512
+                                            ],
+                                  "timestamp_index":  null
+                              },
+                              {
+                                  "boundary":  "tokenizer_decoded_tensor",
+                                  "column_order":  [
+                                                       "open",
+                                                       "high",
+                                                       "low",
+                                                       "close",
+                                                       "volume",
+                                                       "amount"
+                                                   ],
+                                  "dtype":  "float32",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.190027952194214,
+                                                       "minimum":  -1.6468558311462402,
+                                                       "name":  "open",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.2090871334075928,
+                                                       "minimum":  -1.6152925491333008,
+                                                       "name":  "high",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.2468698024749756,
+                                                       "minimum":  -1.6540931463241577,
+                                                       "name":  "low",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.263573408126831,
+                                                       "minimum":  -1.6488076448440552,
+                                                       "name":  "close",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  4.721461296081543,
+                                                       "minimum":  -2.3146026134490967,
+                                                       "name":  "volume",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  4.197641372680664,
+                                                       "minimum":  -2.164043426513672,
+                                                       "name":  "amount",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   }
+                                               ],
+                                  "kind":  "array",
+                                  "operations":  [
+                                                     "tokenizer_decode"
+                                                 ],
+                                  "sha256":  "f107a1b9bc98010f9743a9dd9360fa1ef16f49a40311a21a9e91bff99236f768",
+                                  "shape":  [
+                                                1,
+                                                512,
+                                                6
+                                            ],
+                                  "timestamp_index":  null
+                              },
+                              {
+                                  "boundary":  "decoded_normalized_predictor_output",
+                                  "column_order":  [
+                                                       "open",
+                                                       "high",
+                                                       "low",
+                                                       "close",
+                                                       "volume",
+                                                       "amount"
+                                                   ],
+                                  "dtype":  "float32",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.1354587078094482,
+                                                       "minimum":  1.9219685792922974,
+                                                       "name":  "open",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.0998363494873047,
+                                                       "minimum":  1.9611527919769287,
+                                                       "name":  "high",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.1210689544677734,
+                                                       "minimum":  1.9255924224853516,
+                                                       "name":  "low",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  2.138570547103882,
+                                                       "minimum":  1.996638536453247,
+                                                       "name":  "close",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  -0.905303955078125,
+                                                       "minimum":  -1.8451213836669922,
+                                                       "name":  "volume",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   },
+                                                   {
+                                                       "dtype":  "float32",
+                                                       "maximum":  -0.6936906576156616,
+                                                       "minimum":  -1.7821731567382812,
+                                                       "name":  "amount",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "zscore"
+                                                   }
+                                               ],
+                                  "kind":  "array",
+                                  "operations":  [
+                                                     "decode",
+                                                     "sample_mean_normalized_space"
+                                                 ],
+                                  "sha256":  "f2195146094467055636bf2961f8cac6cc3d4a2d9d2db985a1c85cf6249a2a87",
+                                  "shape":  [
+                                                1,
+                                                5,
+                                                6
+                                            ],
+                                  "timestamp_index":  null
+                              },
+                              {
+                                  "boundary":  "official_predictor_denormalized_output_dataframe",
+                                  "column_order":  [
+                                                       "open",
+                                                       "high",
+                                                       "low",
+                                                       "close",
+                                                       "volume",
+                                                       "amount"
+                                                   ],
+                                  "dtype":  "float32",
+                                  "features":  [
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  544.493408203125,
+                                                       "minimum":  533.9043579101562,
+                                                       "name":  "open",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  544.17529296875,
+                                                       "minimum":  537.3673095703125,
+                                                       "name":  "high",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  542.1673583984375,
+                                                       "minimum":  532.39306640625,
+                                                       "name":  "low",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  544.9405517578125,
+                                                       "minimum":  537.898681640625,
+                                                       "name":  "close",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "raw_price"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  57268564.0,
+                                                       "minimum":  35971968.0,
+                                                       "name":  "volume",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "shares"
+                                                   },
+                                                   {
+                                                       "dtype":  "float64",
+                                                       "maximum":  27466027008.0,
+                                                       "minimum":  17788104704.0,
+                                                       "name":  "amount",
+                                                       "nonfinite_count":  0,
+                                                       "units":  "derived_price_times_volume"
+                                                   }
+                                               ],
+                                  "kind":  "dataframe",
+                                  "operations":  [
+                                                     "inverse_per_feature_zscore",
+                                                     "named_dataframe_construction"
+                                                 ],
+                                  "sha256":  "e47d9e87709651374a3d7e28ce44480cfbb32dc9d965489e75b9a0230d493849",
+                                  "shape":  [
+                                                5,
+                                                6
+                                            ],
+                                  "timestamp_index":  {
+                                                          "count":  5,
+                                                          "first":  "2024-07-08T00:00:00+00:00",
+                                                          "last":  "2024-07-12T00:00:00+00:00",
+                                                          "timezone":  "UTC"
+                                                      }
+                              }
+                          ],
+    "phase2_fingerprint_before":  {
+                                      "artifacts":  [
+                                                        {
+                                                            "relative_path":  "artifacts/sha256/0b/0b758a89366920c8cdb2f0387be7da85562329fb2ab4e3a2d9e8cc2b9d1f14aa",
+                                                            "sha256":  "0b758a89366920c8cdb2f0387be7da85562329fb2ab4e3a2d9e8cc2b9d1f14aa",
+                                                            "size_bytes":  14318
+                                                        },
+                                                        {
+                                                            "relative_path":  "artifacts/sha256/1a/1a9a8d3c2074daea16b052e3dd638397447eb3008576b710b8a20da75a385962",
+                                                            "sha256":  "1a9a8d3c2074daea16b052e3dd638397447eb3008576b710b8a20da75a385962",
+                                                            "size_bytes":  2620
+                                                        },
+                                                        {
+                                                            "relative_path":  "artifacts/sha256/2d/2d65affb6e16bb152a82ffac43a98deca9b57d13699a8a117fa5558c08d99945",
+                                                            "sha256":  "2d65affb6e16bb152a82ffac43a98deca9b57d13699a8a117fa5558c08d99945",
+                                                            "size_bytes":  22458
+                                                        },
+                                                        {
+                                                            "relative_path":  "artifacts/sha256/50/50ab72351e9c3928a35574dfbbaa03fd370cccd19e29bb39cd10c6cfd519875e",
+                                                            "sha256":  "50ab72351e9c3928a35574dfbbaa03fd370cccd19e29bb39cd10c6cfd519875e",
+                                                            "size_bytes":  3144
+                                                        },
+                                                        {
+                                                            "relative_path":  "artifacts/sha256/7b/7bf0359a4f1414518f52f7ab8c8c8f95c6aae4c6590328d0e59525e913545d09",
+                                                            "sha256":  "7bf0359a4f1414518f52f7ab8c8c8f95c6aae4c6590328d0e59525e913545d09",
+                                                            "size_bytes":  1676
+                                                        },
+                                                        {
+                                                            "relative_path":  "artifacts/sha256/97/973d9d0e30327f88dfe2a0ccd7da2d36fbf23f37407578249a60fc50d77b7021",
+                                                            "sha256":  "973d9d0e30327f88dfe2a0ccd7da2d36fbf23f37407578249a60fc50d77b7021",
+                                                            "size_bytes":  2437
+                                                        },
+                                                        {
+                                                            "relative_path":  "artifacts/sha256/e7/e7312bcef351d225d4a543a722990dfe3478c27b809e7282ffa859a3dc7b4f42",
+                                                            "sha256":  "e7312bcef351d225d4a543a722990dfe3478c27b809e7282ffa859a3dc7b4f42",
+                                                            "size_bytes":  867
+                                                        },
+                                                        {
+                                                            "relative_path":  "artifacts/sha256/ea/ea8e2c4b5789f969c066adabaf685823528190b2399986a52ec91162f7f1dabf",
+                                                            "sha256":  "ea8e2c4b5789f969c066adabaf685823528190b2399986a52ec91162f7f1dabf",
+                                                            "size_bytes":  1884
+                                                        },
+                                                        {
+                                                            "relative_path":  "artifacts/sha256/f1/f17c148f18e61078e97fa0507d4d7e8d6eafbf667245ed5b7d10688b549b9286",
+                                                            "sha256":  "f17c148f18e61078e97fa0507d4d7e8d6eafbf667245ed5b7d10688b549b9286",
+                                                            "size_bytes":  7635
+                                                        }
+                                                    ],
+                                      "descriptors":  {
+                                                          "creation.json":  {
+                                                                                "sha256":  "72016ee3e8074da2e54c6cbabf73e932b8aaa8090a62d61b853659360d77eaeb",
+                                                                                "size_bytes":  4354
+                                                                            },
+                                                          "resolved.json":  {
+                                                                                "sha256":  "6920056d303a9e3f15821aa538ccaf4c77c4421b04a258da7784d8f57ef0b561",
+                                                                                "size_bytes":  4758
+                                                                            }
+                                                      },
+                                      "inventory_sha256":  "0a40d0fab1b57e2bfcd43b0b2d8203e23c59cf29ad0e2ccff781cf0e78e0781b",
+                                      "root":  "C:\\Users\\Tommy\\.cache\\openalpha-sentinel\\phase2\\run-spy-20240705",
+                                      "schema_version":  "sentinel-phase2-fingerprint-v0"
+                                  },
+    "pipeline":  [
+                     "Yahoo raw OHLCV",
+                     "normalized input DataFrame",
+                     "512-session context slice",
+                     "official named input DataFrame",
+                     "derived amount field",
+                     "per-feature float32 normalization",
+                     "tokenizer encode",
+                     "model generation",
+                     "tokenizer decode",
+                     "inverse per-feature normalization",
+                     "official predictor output DataFrame",
+                     "OpenAlpha named extraction and canonicalization",
+                     "sealed forecast artifact"
+                 ],
+    "private_receipt_sha256":  "c9a5fc1994b496921144713daf68fd0fbf3c8a91630a4879c51a11b99599bbd7",
+    "provider":  {
+                     "access_class":  "unofficial_public_interface",
+                     "adjustment":  "raw",
+                     "client":  "yfinance",
+                     "client_version":  "1.5.2",
+                     "corporate_action_warnings":  [
+                                                       {
+                                                           "kind":  "DIVIDEND",
+                                                           "session":  "2022-06-17",
+                                                           "value":  1.577
+                                                       },
+                                                       {
+                                                           "kind":  "DIVIDEND",
+                                                           "session":  "2022-09-16",
+                                                           "value":  1.596
+                                                       },
+                                                       {
+                                                           "kind":  "DIVIDEND",
+                                                           "session":  "2022-12-16",
+                                                           "value":  1.781
+                                                       },
+                                                       {
+                                                           "kind":  "DIVIDEND",
+                                                           "session":  "2023-03-17",
+                                                           "value":  1.506
+                                                       },
+                                                       {
+                                                           "kind":  "DIVIDEND",
+                                                           "session":  "2023-06-16",
+                                                           "value":  1.638
+                                                       },
+                                                       {
+                                                           "kind":  "DIVIDEND",
+                                                           "session":  "2023-09-15",
+                                                           "value":  1.583
+                                                       },
+                                                       {
+                                                           "kind":  "DIVIDEND",
+                                                           "session":  "2023-12-15",
+                                                           "value":  1.906
+                                                       },
+                                                       {
+                                                           "kind":  "DIVIDEND",
+                                                           "session":  "2024-03-15",
+                                                           "value":  1.595
+                                                       },
+                                                       {
+                                                           "kind":  "DIVIDEND",
+                                                           "session":  "2024-06-21",
+                                                           "value":  1.759
+                                                       }
+                                                   ],
+                     "first_session":  "2022-06-01",
+                     "intended_use":  "local_research_and_education",
+                     "last_session":  "2024-07-05",
+                     "normalized_input_sha256":  "f09446b7f7d541907401ca133580eac205c99acb5e27d84bf922943cc4d57bbe",
+                     "normalized_schema":  [
+                                               "session",
+                                               "open",
+                                               "high",
+                                               "low",
+                                               "close",
+                                               "volume"
+                                           ],
+                     "pagination":  "client_managed_not_exposed",
+                     "provider":  "yahoo_finance",
+                     "quality_summary":  [
+                                             "STRICTLY_INCREASING_SESSIONS",
+                                             "NO_DUPLICATE_SESSIONS",
+                                             "COMPLETE_XNYS_WINDOW",
+                                             "FINITE_VALID_OHLCV",
+                                             "EXACT_CUTOFF"
+                                         ],
+                     "redistribution":  "prohibited_by_project_policy",
+                     "request_parameters":  [
+                                                [
+                                                    "actions",
+                                                    "true"
+                                                ],
+                                                [
+                                                    "auto_adjust",
+                                                    "false"
+                                                ],
+                                                [
+                                                    "back_adjust",
+                                                    "false"
+                                                ],
+                                                [
+                                                    "end",
+                                                    "2024-07-06"
+                                                ],
+                                                [
+                                                    "interval",
+                                                    "1d"
+                                                ],
+                                                [
+                                                    "keepna",
+                                                    "false"
+                                                ],
+                                                [
+                                                    "multi_level_index",
+                                                    "false"
+                                                ],
+                                                [
+                                                    "prepost",
+                                                    "false"
+                                                ],
+                                                [
+                                                    "progress",
+                                                    "false"
+                                                ],
+                                                [
+                                                    "repair",
+                                                    "false"
+                                                ],
+                                                [
+                                                    "rounding",
+                                                    "false"
+                                                ],
+                                                [
+                                                    "start",
+                                                    "2022-06-01"
+                                                ],
+                                                [
+                                                    "threads",
+                                                    "false"
+                                                ],
+                                                [
+                                                    "tickers",
+                                                    "SPY"
+                                                ],
+                                                [
+                                                    "timeout",
+                                                    "30.0"
+                                                ]
+                                            ],
+                     "retrieved_at":  "2026-07-31T00:39:57.877684Z",
+                     "row_count":  526,
+                     "synthetic":  false,
+                     "timezone_normalization":  "provider_session_label_to_utc_midnight"
+                 },
+    "schema_version":  "sentinel-phase2_5-integration-trace-v0",
+    "source_functions":  [
+                             "model/kronos.py:KronosPredictor.predict",
+                             "model/kronos.py:KronosPredictor.generate",
+                             "model/kronos.py:auto_regressive_inference",
+                             "model/kronos.py:KronosTokenizer.encode",
+                             "model/kronos.py:KronosTokenizer.decode",
+                             "model/kronos.py:calc_time_stamps"
+                         ]
+}
