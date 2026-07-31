@@ -1,0 +1,66 @@
+{
+  "schema_version": "sentinel-v1-source-trace-v1",
+  "source_revision": "67b630e67f6a18c9e9be918d9b4337c960db1e9a",
+  "files": [
+    {
+      "path": "model/kronos.py",
+      "sha256": "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a"
+    },
+    {
+      "path": "model/module.py",
+      "sha256": "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f"
+    }
+  ],
+  "boundaries": [
+    {
+      "function": "KronosTokenizer.encode",
+      "location": "model/kronos.py:142",
+      "role": "continuous normalized sequence to hierarchical token IDs"
+    },
+    {
+      "function": "KronosTokenizer.decode",
+      "location": "model/kronos.py:161",
+      "role": "hierarchical token sequence to normalized continuous sequence"
+    },
+    {
+      "function": "BSQuantizer.forward",
+      "location": "model/module.py:245",
+      "role": "split 20-bit representation into 10-bit coarse and fine IDs"
+    },
+    {
+      "function": "Kronos.decode_s1",
+      "location": "model/kronos.py:278",
+      "role": "produce coarse logits and transformer context"
+    },
+    {
+      "function": "Kronos.decode_s2",
+      "location": "model/kronos.py:310",
+      "role": "produce fine logits conditioned on the selected coarse token"
+    },
+    {
+      "function": "sample_from_logits",
+      "location": "model/kronos.py:373",
+      "role": "temperature and nucleus-filtered multinomial sampling"
+    },
+    {
+      "function": "auto_regressive_inference",
+      "location": "model/kronos.py:389",
+      "role": "sample and append one hierarchical token pair per future step"
+    },
+    {
+      "function": "KronosPredictor.predict",
+      "location": "model/kronos.py:519",
+      "role": "named column selection, causal normalization, generation, inverse normalization"
+    }
+  ],
+  "smallest_safe_interception": {
+    "location": "model/kronos.py:444-454",
+    "description": "after coarse and fine logits and the raw pair are available, before the pair is appended"
+  },
+  "tokenizer_constraints": {
+    "encoder_sequence_dependent": true,
+    "decoder_sequence_dependent": true,
+    "independent_single_candle_decode_assumed": false,
+    "round_trip_must_be_measured": true
+  }
+}

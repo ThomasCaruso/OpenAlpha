@@ -1,10 +1,19 @@
 # OpenAlpha Sentinel Direction
 
 - Decision date: 2026-07-30
-- Status: final product direction; Phase 2.5 integration audit complete
+- Status: v0 reliability track retired; v1 constrained-decoding feasibility active
 - Preserved commits: `c037bd5`, `27f0c69`
 
-## Product
+## Current product direction
+
+OpenAlpha Sentinel v1 is a financial grammar-constrained decoding layer. It seeks to
+prevent invalid generated K-lines from becoming autoregressive context, without
+retraining or modifying model weights. Structural assurance and auditable repair
+remain; v0 forecast-error risk prediction is retired.
+
+The v0 product definition below is preserved as historical context.
+
+## Sentinel v0 product
 
 OpenAlpha Sentinel is a model-agnostic reliability, failure-detection, and forecast-intervention layer for financial forecasting models.
 
@@ -14,7 +23,7 @@ Its core proposition is:
 
 Kronos is the first supported forecast provider and case study. The immediate proof implements only USE, BLEND, and ABSTAIN; a 50/50 blend with the causal baseline is the only repair.
 
-## Governing research question
+## Sentinel v0 governing research question
 
 > Can information available at forecast time predict the future error of a financial forecasting model, and can selective use, blending, or abstention outperform blindly accepting every forecast?
 
@@ -50,6 +59,17 @@ Phase 2.5 confirmed that the pinned official Kronos predictor can emit reproduci
 The next measure of value is whether pre-outcome diagnostics predict later forecast failure. Sentinel v0 is useful only if the locked holdout shows that higher risk corresponds to higher Kronos error and that selective acceptance or blending reduces error at declared coverage levels.
 
 Plausible explanations, repository size, interface polish, and in-sample fit are not evidence.
+
+## V0 closure and v1 question
+
+The complete v0 development study found widespread structural invalidity but no
+useful chronological out-of-fold forecast-error ranking. Abstention did not improve
+accepted MAE, and the zero-return baseline outperformed Kronos. The reliability-risk
+model is retired without holdout access.
+
+Sentinel v1 asks whether hard financial constraints can be enforced inside Kronos's
+autoregressive token loop while preserving forecast fidelity, diversity, and
+practical runtime. It is not a reformulation or refit of v0.
 
 ## Preserved infrastructure
 

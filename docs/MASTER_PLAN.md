@@ -1,18 +1,44 @@
 # OpenAlpha Sentinel Master Plan
 
-## Mission
+## Current decision
 
-OpenAlpha Sentinel predicts when a financial forecasting model is likely to fail before its outcome, explains the forecast-time evidence, and selects USE, BLEND, or ABSTAIN.
+Sentinel v0 reliability prediction is retired after a negative chronological
+development result. Its frozen policy will not be run on the untouched holdout.
+The active, separately versioned track is Sentinel v1 financial grammar-constrained
+decoding. See `SENTINEL_V0_POSTMORTEM.md` and
+`SENTINEL_CONSTRAINED_DECODING_DESIGN.md`.
 
-Kronos is the first supported model. Benchmarking remains required to produce labels and evaluate interventions, but benchmarking is not the product.
+## Preserved v0 mission and result
 
-## Definition of success
+Sentinel v0 attempted to predict when a financial forecasting model was likely to
+fail before its outcome and to select USE, BLEND, or ABSTAIN. Development evidence
+did not support that proposition. No further v0 feature mining, refitting, threshold
+tuning, or holdout evaluation is authorized.
 
-Sentinel v0 succeeds as a research decision process when it can truthfully state:
+Kronos remains the first model. Sentinel v1 prevents structurally impossible K-lines
+from entering an autoregressive rollout and measures the fidelity, diversity, and
+cost consequences.
 
-> We used only forecast-time information to estimate later Kronos error, froze the detector before an untouched holdout, measured selective use and blending at every declared coverage level, and preserved negative or positive evidence without changing the rules.
+## Sentinel v1 definition of success
 
-The detector itself may fail. A verified STOP decision is a valid outcome.
+Phase 3B succeeds only if an in-loop method can truthfully state:
+
+> We enforced the versioned financial grammar before an invalid generated state
+> conditioned later tokens, returned only valid paths or explicit hard failures, and
+> measured the paired effects on path quality, range fidelity, barriers, diversity,
+> latency, and memory without retraining or changing weights.
+
+The decoder may fail its gates. A verified negative conclusion is valid.
+
+## Active Stage 3B - bounded decoder feasibility
+
+1. Close v0 and preserve its negative evidence.
+2. Trace and pin the official token-generation boundary.
+3. Lock 12 development origins and numerical gates.
+4. Compare raw autoregression, terminal projection, stepwise project/re-encode, and
+   bounded valid-candidate resampling.
+5. Run the model-size canary only after an in-loop mini method passes all gates.
+6. Stop before a larger experiment or any untouched-holdout access.
 
 ## Stage 0 — Preserved evidence infrastructure
 

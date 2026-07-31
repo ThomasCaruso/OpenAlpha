@@ -41,6 +41,7 @@ sentinel-cache/
 .yfinance/
 yfinance-cache/
 research/sentinel-v0/private/
+research/sentinel-v1/private/
 
 # Generated research artifacts
 artifacts/

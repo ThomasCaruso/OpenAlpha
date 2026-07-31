@@ -1,6 +1,37 @@
 # Project Status
 
-Last updated: 2026-07-30
+Last updated: 2026-07-31
+
+## Sentinel v0 closure and v1 preregistration
+
+Sentinel v0 reliability prediction is retired. Its development result established
+widespread structural invalidity but did not produce useful chronological
+out-of-fold error ranking; abstention did not improve accepted MAE, and the
+zero-return baseline outperformed Kronos. No holdout origin was accessed. The full
+postmortem is `docs/SENTINEL_V0_POSTMORTEM.md`; all v0 artifacts, including the
+unused freeze SHA-256
+`c073d0e8d6cc4760211fc07f20c896444cd31d72a02d31a048e8c8d1ae6038a9`, remain
+preserved.
+
+The separately versioned Sentinel v1 Phase 3B design traces the pinned official
+Kronos coarse/fine sampling loop and identifies the token-pair append boundary as
+the smallest intervention point. Twelve development origins are locked at cutoff
+indices 0, 10, 20, 30, 40, and 50 for both SPY and QQQ. All selected outcomes end
+by 2025-06-27, before the untouched holdout. Exact method behavior, barriers,
+metrics, hard-failure behavior, and eight numerical continuation gates are frozen in
+`research/sentinel-v1/experiment.yaml` before any v1 outcome comparison.
+The sealed experiment SHA-256 is
+`55e9d2eb9a9b64feac394c40e295fa16679edc7b8e3cfa803676774e6d86d0a3`.
+
+Design-lock verification:
+
+- experiment YAML parse and hash check - exit 0; schema
+  `sentinel-v1.0-preregistered`, 12 locked origins, holdout access forbidden;
+- compact pinned-source trace JSON parse - exit 0;
+- complete existing test suite - exit 0; 336 passed in 63.26 seconds;
+- Ruff - exit 0; all checks passed;
+- Pyright - exit 0; 0 errors, 0 warnings, 0 informations;
+- `git diff --check` - exit 0.
 
 ## Product direction
 

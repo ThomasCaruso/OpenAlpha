@@ -1,5 +1,19 @@
 # Sentinel v0 Methodology
 
+## Track closure and v1 boundary
+
+Sentinel v0 reliability prediction is closed with a negative development result.
+Its risk model, selected features, thresholds, and unused holdout policy remain
+frozen artifacts and must not be refit or reanalyzed as a rescue attempt.
+
+Sentinel v1 is independently versioned. Its Phase 3B methodology is defined by
+`research/sentinel-v1/experiment.yaml`, the preregistration, and
+`docs/SENTINEL_CONSTRAINED_DECODING_DESIGN.md`. The study is paired,
+development-only, limited to 12 origins, context 512, and three seeds. It separates
+raw autoregression, terminal projection, stepwise project/re-encode, and bounded
+valid-candidate resampling, and judges them on hard validity, path/range/barrier
+quality, diversity, determinism, latency, and memory.
+
 ## Status and claim boundary
 
 Sentinel v0 has completed its locked Phase 3A development analysis. It is not a sealed scientific publication, production reliability system, trading strategy, or public claim that Sentinel or Kronos works. No holdout origin has been accessed.

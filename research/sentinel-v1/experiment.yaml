@@ -1,0 +1,194 @@
+schema_version: "sentinel-v1.0-preregistered"
+experiment_id: "openalpha-sentinel-v1-phase3b"
+status: "locked_before_decoder_outcome_evaluation"
+locked_on: "2026-07-31"
+claim_scope: "bounded_development_feasibility_only"
+research_question: >-
+  Can hard financial-domain constraints be enforced inside the autoregressive
+  generation loop of a pretrained financial time-series foundation model,
+  without retraining, while preserving or improving forecast fidelity,
+  distributional diversity, and computational practicality?
+holdout:
+  start: "2025-07-01"
+  end: "2026-06-30"
+  access: "forbidden_in_phase_3b"
+v0_reliability_model:
+  status: "retired_negative_development_result"
+  refit: false
+  further_feature_mining: false
+universe:
+  assets: ["SPY", "QQQ"]
+  calendar: "XNYS"
+  frequency: "1d"
+  horizon_sessions: 5
+origins:
+  selection_rule: "indices_0_10_20_30_40_50_of_locked_52_cutoff_development_calendar"
+  per_asset: 6
+  total: 12
+  values:
+    - {cutoff: "2024-07-05", horizon_end: "2024-07-12"}
+    - {cutoff: "2024-09-13", horizon_end: "2024-09-20"}
+    - {cutoff: "2024-11-22", horizon_end: "2024-12-02"}
+    - {cutoff: "2025-01-31", horizon_end: "2025-02-07"}
+    - {cutoff: "2025-04-11", horizon_end: "2025-04-21"}
+    - {cutoff: "2025-06-20", horizon_end: "2025-06-27"}
+market_data:
+  provider: "yahoo_finance"
+  client: "yfinance"
+  client_version: "1.5.2"
+  access_class: "unofficial_public_interface"
+  adjustment: "raw"
+  fields: ["open", "high", "low", "close", "volume"]
+  request:
+    interval: "1d"
+    auto_adjust: false
+    back_adjust: false
+    repair: false
+    actions: true
+    progress: false
+    threads: false
+    timeout_seconds: 30.0
+  raw_response_storage: "ephemeral"
+  reusable_history_commit: false
+model:
+  source_repository: "https://github.com/shiyu-coder/Kronos"
+  source_revision: "67b630e67f6a18c9e9be918d9b4337c960db1e9a"
+  repository: "NeoQuasar/Kronos-mini"
+  revision: "f4e68697d9d5aed55cef5c96aabc3376bcad9f81"
+tokenizer:
+  repository: "NeoQuasar/Kronos-Tokenizer-2k"
+  revision: "26966d0035065a0cae0ebad7af8ece35bc1fb51c"
+  coarse_bits: 10
+  fine_bits: 10
+  feature_count: 6
+generation:
+  context_length: 512
+  horizon_sessions: 5
+  seeds: [1729, 2027, 7919]
+  sample_count: 1
+  temperature: 1.0
+  top_p: 0.9
+  top_k: 0
+  model_weights_modified: false
+grammar:
+  version: "financial-kline-grammar-v1"
+  price_finite: true
+  price_strictly_positive: true
+  high_gte: ["open", "close", "low"]
+  low_lte: ["open", "close", "high"]
+  generated_volume_finite: true
+  generated_volume_nonnegative: true
+  exact_horizon_length: 5
+  expected_timestamps_only: true
+  strictly_increasing_timestamps: true
+  duplicates_forbidden: true
+methods:
+  - id: "RAW_AUTOREGRESSIVE"
+    intervention: "none"
+  - id: "TERMINAL_PROJECTION"
+    intervention: "CONSTRAINT_PROJECTION_V0_after_complete_rollout"
+    feeds_projected_state_back: false
+  - id: "STEPWISE_PROJECT_REENCODE"
+    intervention: "project_invalid_step_then_full_sequence_reencode"
+    reencode_attempts: 1
+    invalid_roundtrip: "hard_failure"
+    invalid_final_path: "hard_failure"
+  - id: "VALID_CANDIDATE_RESAMPLING"
+    first_candidate: "paired_raw_draw"
+    initial_ranked_grid: {coarse: 4, fine_per_coarse: 4, maximum_pairs: 16}
+    expansion_grid: {coarse: 8, fine_per_coarse: 8, maximum_pairs: 64}
+    valid_selection: "sample_from_renormalized_joint_probability"
+    auxiliary_rng: "sha256_origin_seed_step_derived"
+    fallback: "STEPWISE_PROJECT_REENCODE"
+    invalid_final_path: "hard_failure"
+pairing:
+  same_context: true
+  same_timestamps: true
+  same_initial_seed: true
+  preserve_primary_rng_until_intervention: true
+  record_first_divergence: true
+barriers:
+  symmetric_fractions: [0.005, 0.01, 0.02]
+metrics:
+  normalization_denominator: "causal_cutoff_close"
+  path:
+    - "NORMALIZED_OHLC_MAE"
+    - "OPEN_MAE"
+    - "HIGH_MAE"
+    - "LOW_MAE"
+    - "CLOSE_MAE"
+    - "HIGH_LOW_RANGE_MAE"
+    - "CANDLE_BODY_MAE"
+    - "UPPER_WICK_MAE"
+    - "LOWER_WICK_MAE"
+    - "RANGE_DIRECTION_ACCURACY"
+    - "PATH_SHAPE_DISTANCE"
+    - "ERROR_BY_HORIZON_STEP"
+  volatility:
+    - "PARKINSON_VOLATILITY_ERROR"
+    - "CUMULATIVE_RANGE_ERROR"
+  barriers:
+    - "POSITIVE_TOUCH_ACCURACY"
+    - "NEGATIVE_TOUCH_ACCURACY"
+    - "EITHER_TOUCH_ACCURACY"
+  secondary:
+    - "FIVE_SESSION_CLOSE_RETURN_MAE"
+    - "DIRECTION_ACCURACY"
+    - "ZERO_RETURN_BASELINE_COMPARISON"
+  generation:
+    - "STRUCTURAL_VALIDITY_RATE"
+    - "INTERVENTIONS_PER_PATH"
+    - "INTERVENTION_STEP"
+    - "INTERVENTION_SEVERITY"
+    - "PROJECTION_MAGNITUDE"
+    - "TOKEN_CHANGES"
+    - "CANDIDATE_REJECTION_RATE"
+    - "FALLBACK_RATE"
+    - "AVERAGE_SELECTED_TOKEN_RANK"
+    - "RAW_CONSTRAINED_PATH_DISTANCE"
+    - "MEAN_PAIRWISE_PATH_DIVERSITY"
+    - "FINAL_RETURN_VARIANCE"
+    - "REPEATED_PATH_RATE"
+    - "RUNTIME"
+    - "PEAK_PROCESS_MEMORY"
+    - "LATENCY_MULTIPLIER"
+continuation_gates:
+  applies_to: ["STEPWISE_PROJECT_REENCODE", "VALID_CANDIDATE_RESAMPLING"]
+  returned_path_structural_validity: 1.0
+  maximum_hard_failures: 1
+  maximum_hard_failure_rate: 0.027777777777777776
+  close_mae:
+    maximum_ratio_to_raw: 1.10
+    maximum_absolute_increase_cutoff_close_fraction: 0.001
+    require_both: true
+  full_ohlc_mae:
+    maximum_ratio_to_better_of_raw_and_terminal: 1.05
+  high_low_range_mae:
+    maximum_ratio_to_better_of_raw_and_terminal: 1.05
+  diversity:
+    minimum_pairwise_ratio_to_raw: 0.50
+    final_return_variance_strictly_positive: true
+    maximum_repeated_path_rate: 0.10
+  determinism:
+    synthetic_identical_hash_replays: 2
+    real_identical_hash_replays: 2
+  runtime:
+    maximum_median_latency_multiplier_to_raw: 5.0
+    maximum_peak_memory_ratio_to_raw: 2.0
+    additional_peak_memory_bytes_allowed: 1073741824
+  retraining_allowed: false
+  model_weight_modification_allowed: false
+model_size_canary:
+  prerequisite: "at_least_one_in_loop_method_passes_all_mini_continuation_gates"
+  models: ["Kronos-small", "Kronos-base"]
+  origins:
+    - {cutoff: "2024-07-05", assets: ["SPY", "QQQ"]}
+    - {cutoff: "2025-04-11", assets: ["SPY", "QQQ"]}
+  seeds: [1729, 2027, 7919]
+  skip_when_cpu_or_runtime_impractical: true
+allowed_conclusions:
+  - "CONSTRAINED_DECODING_SUCCEEDS"
+  - "VALIDITY_SUCCEEDS_QUALITY_DEGRADES"
+  - "TECHNICALLY_INFEASIBLE_WITH_CURRENT_TOKENIZER"
+  - "STRUCTURAL_ISSUE_IS_MINI_SPECIFIC"
+  - "STOP"
