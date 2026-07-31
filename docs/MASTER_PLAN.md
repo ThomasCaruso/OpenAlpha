@@ -2,6 +2,15 @@
 
 ## Current decision
 
+Sentinel v1.1 is the final bounded constrained-decoding investigation. The
+development-only tokenizer round-trip audit found material financial-grammar
+violations in both Tokenizer-2k and Tokenizer-base before autoregressive generation.
+Under the preregistered decision rule, the primary classification is
+TOKENIZER_CONSTRAINT_DEFECT. A support-conditioned decoder is not authorized.
+Sentinel therefore ships as a validator, immutable raw-output audit layer,
+terminal-projection gateway, compatibility profiler, and model-selection safety
+check. Training a constraint-preserving tokenizer would be a separate future track.
+
 Sentinel v0 reliability prediction is retired after a negative chronological
 development result. Its frozen policy will not be run on the untouched holdout.
 Sentinel v1 Phase 3B is also complete: constrained decoding achieved valid returned
@@ -52,11 +61,11 @@ not run.
 
 ## Next justified scope
 
-Retain the structural validator and explicit terminal projection gateway. A more
-principled candidate-selection method may be proposed only as a separately
-versioned development study with new preregistered gates. Do not use the existing
-v0 outcomes for feature mining, do not access the untouched holdout, and do not
-claim improved forecasting from the Phase 3B feasibility sample.
+Complete and publish the bounded v1.1 compatibility artifacts, then stop decoder
+research. Retain the structural validator and explicit terminal projection gateway.
+Do not propose another inference-only candidate-selection pivot from the same
+development sample. Do not use existing v0 outcomes for feature mining, access the
+untouched holdout, or claim improved forecasting.
 
 ## Stage 0 — Preserved evidence infrastructure
 

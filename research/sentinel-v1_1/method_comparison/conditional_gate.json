@@ -1,0 +1,1 @@
+{"holdout_accessed":false,"method":"SUPPORT_CONDITIONED_SAMPLING_V0","method_executed":false,"reason":"Authorized only for OFF_MANIFOLD_TOKEN_COMBINATIONS, LOW_VALID_PROBABILITY_MASS, or CANDIDATE_SEARCH_FAILURE.","root_cause":"TOKENIZER_CONSTRAINT_DEFECT","schema_version":"sentinel-v1.1-conditional-method-gate-v1","status":"not_authorized"}

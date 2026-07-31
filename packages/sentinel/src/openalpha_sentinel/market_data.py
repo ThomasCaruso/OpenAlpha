@@ -21,6 +21,18 @@ YFINANCE_VERSION = "1.5.2"
 ProviderName = Literal["yahoo_finance"]
 Purpose = Literal["forecast_context", "outcome"]
 WarningKind = Literal["DIVIDEND", "STOCK_SPLIT"]
+MarketSymbol = Literal[
+    "SPY",
+    "QQQ",
+    "IWM",
+    "DIA",
+    "TLT",
+    "HYG",
+    "GLD",
+    "EFA",
+    "EEM",
+    "XLF",
+]
 Nonempty = Annotated[str, StringConstraints(min_length=1, max_length=512)]
 Downloader = Callable[..., pd.DataFrame | None]
 
@@ -50,7 +62,7 @@ class FrozenModel(BaseModel):
 
 class MarketDataRequest(FrozenModel):
     purpose: Purpose
-    symbol: Literal["SPY", "QQQ"]
+    symbol: MarketSymbol
     start_inclusive: date
     end_exclusive: date
     cutoff: date

@@ -1,10 +1,22 @@
 # OpenAlpha Sentinel Direction
 
 - Decision date: 2026-07-30
-- Status: v0 reliability track retired; v1 bounded feasibility complete
+- Status: v0 reliability retired; v1.1 compatibility study is the final decoder track
 - Preserved commits: `c037bd5`, `27f0c69`
 
 ## Current product direction
+
+Sentinel v1.1 establishes the durable product boundary. Both pinned released
+tokenizers materially violated OHLC constraints during encode-decode reconstruction
+of valid development-only ETF sequences. This places the incompatibility in the
+continuous tokenizer reconstruction before any autoregressive token selection.
+The locked root-cause result is TOKENIZER_CONSTRAINT_DEFECT.
+
+No new support-conditioned decoder is authorized by that classification. The
+product becomes structural validation, immutable raw-output audit, deterministic
+terminal projection, token-manifold compatibility profiling, and model-selection
+safety checks. A constraint-preserving tokenizer is a distinct future training
+research direction, not another Sentinel inference phase.
 
 OpenAlpha Sentinel v1 is a financial grammar-constrained decoding layer. It seeks to
 prevent invalid generated K-lines from becoming autoregressive context, without

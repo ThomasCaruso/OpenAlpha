@@ -1,5 +1,29 @@
 # Sentinel v0 Methodology
 
+## Sentinel v1.1 final compatibility track
+
+Sentinel v1.1 is governed by research/sentinel-v1_1/experiment.yaml and its
+SHA-256. It uses a ten-ETF, development-only corpus ending 2024-06-28; three
+nonoverlapping 512-session windows per instrument; the pinned Tokenizer-2k and
+Tokenizer-base revisions; and the exact twelve Sentinel v1 origins for secondary
+generated-token characterization.
+
+The first decision boundary is tokenizer encode-decode reconstruction without
+autoregressive forecasting. Material defects are preregistered at an invalid
+fraction of at least 1% with Wilson lower bound at least 0.5%. Tokenizer-2k
+reconstructed 4,357 of 15,360 candles invalid (28.3659%), and Tokenizer-base
+reconstructed 3,555 invalid (23.1445%). Both are material defects.
+
+Classification precedence is fixed. Because Tokenizer-base is also materially
+defective rather than overwhelmingly valid, the mini-specific rule does not apply;
+TOKENIZER_CONSTRAINT_DEFECT is selected before probability-mass or support rules.
+The support-conditioned decoder is therefore not authorized. No outcomes are
+required for this classification and the untouched holdout remains inaccessible.
+
+The generated-token audit remains a secondary, outcome-free characterization. It
+uses nested 64-, 256-, and 1,024-pair grids and reports considered mass plus honest
+lower/upper bounds. It may not overturn the tokenizer-defect stopping decision.
+
 ## Track closure and v1 boundary
 
 Sentinel v0 reliability prediction is closed with a negative development result.

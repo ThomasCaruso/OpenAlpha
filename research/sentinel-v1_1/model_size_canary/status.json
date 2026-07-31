@@ -1,0 +1,1 @@
+{"holdout_accessed":false,"models_executed":[],"reason":"Encode-decode reconstruction materially violated the grammar; the preregistered round-trip decision stops further autoregressive candidate investigation.","schema_version":"sentinel-v1.1-model-size-canary-v1","status":"not_run_tokenizer_defect_gate","tokenizer_material_defects":{"tokenizer_2k":true,"tokenizer_base":true}}

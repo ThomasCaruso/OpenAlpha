@@ -1,6 +1,7 @@
 from datetime import date
 from pathlib import Path
 
+from openalpha_sentinel.market_data import MarketDataRequest
 from openalpha_sentinel.sentinel_v1_1 import (
     MASS_BUDGETS,
     SUPPORT_END_EXCLUSIVE,
@@ -45,3 +46,16 @@ def test_v1_1_experiment_hash_matches_exact_yaml_bytes() -> None:
         Path("research/sentinel-v1_1/experiment.yaml"),
         Path("research/sentinel-v1_1/experiment.sha256"),
     )
+
+
+def test_market_data_boundary_accepts_the_locked_support_corpus() -> None:
+    for symbol in SUPPORT_SYMBOLS:
+        request = MarketDataRequest(
+            purpose="forecast_context",
+            symbol=symbol,
+            start_inclusive=date(2017, 1, 1),
+            end_exclusive=date(2024, 6, 29),
+            cutoff=date(2024, 6, 28),
+            minimum_sessions=1536,
+        )
+        assert request.symbol == symbol

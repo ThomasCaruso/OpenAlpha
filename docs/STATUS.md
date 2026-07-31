@@ -2,6 +2,77 @@
 
 Last updated: 2026-07-31
 
+## Sentinel v1.1 token-manifold compatibility result
+
+**Claim boundary: DEVELOPMENT COMPATIBILITY RESEARCH - NOT HOLDOUT
+EVIDENCE.**
+
+The separately versioned v1.1 study is complete under experiment SHA-256
+6dacd9fd0912a77cce9d373d910b7bff9d58b44076d814960a191cdbe183bd76.
+The primary root-cause classification is TOKENIZER_CONSTRAINT_DEFECT, matched by
+the locked A rule after the higher-precedence mini-specific rule failed.
+
+The fixed pre-origin support corpus contained 30 nonoverlapping 512-session
+windows and 15,360 reconstruction positions per tokenizer:
+
+| Tokenizer | Invalid reconstructions | Fraction | Wilson 95% interval |
+|---|---:|---:|---:|
+| Tokenizer-2k | 4,357/15,360 | 28.3659% | 27.6585%-29.0841% |
+| Tokenizer-base | 3,555/15,360 | 23.1445% | 22.4843%-23.8182% |
+
+Both are material defects under the locked threshold. Valid observed candles can
+therefore reconstruct as invalid before autoregressive forecasting. This result is
+not mini- or Tokenizer-2k-specific because Tokenizer-base is also materially
+defective rather than overwhelmingly valid.
+
+All 12 fixed Sentinel v1 origins completed: 36 raw paths and 180 forecast steps.
+Every path hash matched its sealed v1 counterpart. Raw generation produced 68
+invalid candles (37.7778%). Fifty-nine raw pairs were unsupported (32.7778%), but
+only 26.4706% of invalid candles used unsupported pairs. Supported-pair invalidity
+was 41.3223%, versus 30.5085% for unsupported pairs, so unsupported token pairs did
+not explain most invalidity.
+
+The 1,024-pair bounded audit reported median considered mass 1.0, median valid-mass
+bounds [0.599689, 0.602011], and median valid-and-supported bounds
+[0.348095, 0.350324]. They are separately aggregated truncated bounds, not a claim
+of exact full-vocabulary probability. The 36 compatibility paths had median
+measured inference duration 159,672.91 ms, mean 173,132.38 ms, and maximum
+294,883.40 ms; total measured path computation was 6,232,765.77 ms. Maximum
+recorded model-cache footprint was 48,126,347 bytes. These timings exclude provider
+retrieval and some process/model startup overhead.
+
+The preregistered round-trip gate stopped the model-size autoregressive canary.
+Support-conditioned sampling was not authorized and was not executed. No new
+decoder was fitted or tuned, no realized outcomes were used for classification,
+and the untouched holdout was not accessed.
+
+The final decision is
+STOP_CONSTRAINED_DECODING_RESEARCH_SHIP_ASSURANCE_LIBRARY. Sentinel remains a
+structural validator, immutable raw-output audit layer, deterministic terminal
+projection gateway, token-manifold compatibility profiler, and model-selection
+safety check. Constraint-preserving candle parameterization is documented only as
+a future training track.
+
+Final v1.1 verification:
+
+- complete test suite - exit 0; 403 passed in 98.44 seconds;
+- targeted worker regression suite after the annotation-only fix - exit 0; 12
+  passed in 0.36 seconds;
+- Ruff across the repository - exit 0; all checks passed;
+- Pyright across the repository - exit 0; 0 errors, 0 warnings, 0 informations;
+- offline v1.1 verification - exit 0; 12 private forecast seals, 12 exact v1 path
+  parity checks, 13 policy-scanned compact files, experiment hash match, unchanged
+  Sentinel v0/v1 research trees, and holdout access false;
+- artifact report SHA-256 -
+  ad63863c490f4148af038f50facd7b9e8227a53103e9daaa6005002045eaf3a7;
+- analysis SHA-256 -
+  762ce83aa848db6971dd96177b2aa57f64acdccd66d38dffba3bf3fe41c313d2;
+- git diff --check - exit 0.
+
+The exact next justified task is product hardening of the existing validator and
+explicit terminal-projection gateway. Do not begin another decoder research phase,
+access the holdout, or claim improved forecast accuracy.
+
 ## Sentinel v0 closure and v1 preregistration
 
 Sentinel v0 reliability prediction is retired. Its development result established
