@@ -2,7 +2,7 @@
 
 ## Status and claim boundary
 
-Sentinel v0 is a locked development and feasibility experiment. It is not a sealed scientific publication, production reliability system, trading strategy, or public claim that Sentinel or Kronos works.
+Sentinel v0 has completed its locked Phase 3A development analysis. It is not a sealed scientific publication, production reliability system, trading strategy, or public claim that Sentinel or Kronos works. No holdout origin has been accessed.
 
 The governing question is:
 
@@ -20,7 +20,7 @@ Every forecast and diagnostic vector is persisted before its five-session outcom
 | Development period | 2024-07-01 through 2025-06-30 |
 | Untouched holdout | 2025-07-01 through 2026-06-30 |
 | Cutoff rule | Last valid XNYS session of each ISO week |
-| Expected sample | About 52 cutoffs per segment and 104 per asset |
+| Expected sample | About 52 cutoffs and 104 total origins per segment; 52 origins per asset |
 | Baseline | Raw last-value path; predicted five-session return is zero |
 | Kronos checkpoint | `NeoQuasar/Kronos-mini` |
 | Context lengths | 128, 256, 512 sessions |
@@ -209,19 +209,84 @@ Gradient-boosted trees are excluded from the primary v0 proof. They may be repor
 
 ## Risk score and actions
 
-The failure probability is the logistic output. Reliability is `round(100 × (1 - failure_probability))`, clamped to 0–100.
+The failure probability is the logistic output. Reliability is
+`CLIP_0_100(100 × (1 - failure_probability))`; no integer rounding is applied.
 
 Development risk-score quantiles freeze the policy:
 
-- **USE:** predicted risk at or below the development 50th percentile; return the Kronos median forecast.
-- **BLEND:** predicted risk above the 50th and at or below the 80th percentile; return a deterministic 50/50 average of the Kronos and last-value paths.
+- **USE:** predicted risk at or below the development 50th percentile; retain the locked canonical three-path 512-context close-return forecast.
+- **BLEND:** predicted risk above the 50th and at or below the 80th percentile; return a deterministic 50/50 average of the canonical Kronos return and the zero-return last-value baseline.
 - **ABSTAIN:** predicted risk above the development 80th percentile; return no deployable forecast.
 
 No action threshold or blend weight is selected from holdout outcomes.
 
+## Phase 3A frozen development system
+
+All 104 eligible development origins completed: 52 SPY and 52 QQQ origins,
+covering 2024-07-05 through 2025-06-27. The run produced 936 official paths
+and zero terminal failures. Forecast-time artifacts were sealed before their
+logically separate outcomes, and every terminal origin chain verifies.
+The final 2025-06-27 development origin required its five declared outcome
+sessions through 2025-07-07. Those rows resolve that predeclared development
+origin; they were not used to create, fit, inspect, or score a holdout origin.
+
+Three expanding chronological folds generated 78 OOF predictions. The
+nonstructural family had the lowest mean logistic log loss (0.5287820395),
+followed by combined (0.5363007406) and structural (0.5638847126). The locked
+one-standard-error-then-fewest-features rule selected the structural family;
+this selection is a simplicity rule, not a claim that its raw mean score was
+best.
+
+The final retained feature order is:
+
+1. `INVALID_PATH_FRACTION`
+2. `INVALID_CANDLE_FRACTION`
+3. `MAX_CONSTRAINT_VIOLATION_SEVERITY`
+4. `MEAN_CONSTRAINT_VIOLATION_SEVERITY`
+5. `EARLIEST_INVALID_HORIZON_STEP`
+6. `HIGH_LOW_INVERSION_COUNT`
+7. `LOW_ABOVE_BODY_COUNT`
+
+Training-median imputation, explicit missing indicators, and training-only
+mean/population-scale normalization are frozen. The final logistic model uses
+`C=0.01`; the ridge model uses `alpha=100.0`. The failure-label threshold is
+the fixed development worst-quartile absolute error
+`0.046428259296972106`.
+
+For development-only OOF policy evaluation, the OOF risk distribution produced
+thresholds `0.2877681209707471` and `0.3162253084287816`. These are not the
+deployment thresholds. After selecting and refitting the final model on all
+104 development origins, its full-development risk distribution froze the
+USE/BLEND threshold at `0.24972087273272664` and the BLEND/ABSTAIN threshold
+at `0.2684525799345617`. USE applies at or below the first value, BLEND
+strictly above the first and at or below the second with weight 0.5, and
+ABSTAIN strictly above the second. Thresholds are pooled and never
+asset-specific. P3 valid-path aggregation is not retained.
+
+The freeze artifact SHA-256 is
+`c073d0e8d6cc4760211fc07f20c896444cd31d72a02d31a048e8c8d1ae6038a9`.
+Its `holdout_accessed` field is false and its selected configuration is
+fully recorded in `research/sentinel-v0/development/freeze_candidate.json`.
+
+## Phase 3A development decision
+
+The pooled OOF risk/error Spearman correlation was 0.0814754865. SPY was
+0.1157894737 and QQQ was -0.0267206478. Error was nonmonotonic across risk
+quintiles, and Kronos MAE did not improve at the declared 90%, 80%, or 70%
+coverage levels relative to 100% coverage. The zero-return baseline beat
+Kronos at every declared pooled coverage level.
+
+The locked development recommendation is
+`CHANGE_THE_RELIABILITY_APPROACH`. The freeze preserves exactly what was fit,
+but the evidence does not justify executing the holdout. Any future reliability
+change must be defined and frozen as a new development experiment without
+inspecting the existing holdout.
+
 ## Holdout evaluation
 
-The holdout is run once with the frozen development pipeline. Required outputs are:
+The holdout remains untouched and deferred. If a later, explicitly justified
+development approach earns a holdout test, it is run once with its frozen
+development pipeline. Required outputs are:
 
 - pooled and per-asset Spearman correlation between risk and future absolute Kronos error;
 - mean error by holdout risk quintile;

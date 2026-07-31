@@ -40,7 +40,10 @@ The worktree now defines:
 - research workspace and experiment YAML;
 - archived unimplemented Kronos Reality Check plan and design.
 
-Phase 1 remains locked. Phase 2 added one narrow internal package and completed only the single predeclared SPY origin described below; the SPY/QQQ development sample has not begun.
+Phase 1 remains locked. Phase 2 completed the single predeclared SPY origin,
+Phase 2.5 isolated structural invalidity to official raw predictor output, and
+Phase 3A completed the full locked SPY/QQQ development sample. No holdout
+origin has been accessed.
 
 ## Verified provider and model facts
 
@@ -67,11 +70,13 @@ Phase 1 remains locked. Phase 2 added one narrow internal package and completed 
 ## Evidence status
 
 - Protocol v1 is unfrozen and its implementation task is paused.
-- One real, historical, development-only SPY forecast origin has completed.
-- Model weights and caches exist only under `C:\Users\Tommy\.cache\openalpha-sentinel\phase2`, outside Git and the worktree.
+- The complete real Phase 3A development sample has 104 eligible and completed origins, 52 each for SPY and QQQ, and 936 official paths.
+- Model weights and caches exist only under `C:\Users\Tommy\.cache\openalpha-sentinel`, outside Git and the worktree.
 - Yahoo response frames were ephemeral. No raw response, reusable market dataset, CSV export, or yfinance cache is tracked.
-- A real Kronos forecast, causal diagnostic vector, separately resolved outcome, append-only ledger, completed journal, and verified manifest now exist for this one origin.
-- No Sentinel risk model, action, development sample, holdout result, provider-independent result, or empirical Sentinel efficacy claim exists.
+- Every Phase 3A forecast-time artifact was sealed before its separate outcome operation; all 104 terminal origin chains verify.
+- A transparent structural-only risk model and pooled USE/BLEND/ABSTAIN policy are frozen under SHA-256 `c073d0e8d6cc4760211fc07f20c896444cd31d72a02d31a048e8c8d1ae6038a9`.
+- The development evidence recommends `CHANGE_THE_RELIABILITY_APPROACH`; it does not justify holdout execution.
+- No holdout result, provider-independent result, or empirical Sentinel efficacy claim exists.
 
 ## Phase 2 pre-execution amendment
 
@@ -292,9 +297,137 @@ Private immutable receipts include final trace c9a5fc1994b496921144713daf68fd0fb
 - Public JSON parse and policy scan - exit 0; six JSON files valid; no raw observation arrays, patch markers, model weights, reusable CSVs, or cache artifacts tracked.
 - git diff --check - exit 0.
 
-## Exact next task
+## Phase 3A chronological development sample
 
-Phase 2.5 is complete. The next justified task is the chronological Sentinel development sample using experiment hash fd50c208f465ce99750b11d4de5d5bc8c391bd73cb9ff450037c596c3e37d8bc. It should test, rather than assume, whether the locked structural diagnostics predict later Kronos error. The untouched holdout and risk-model fitting remain out of scope until the development workflow is complete and frozen.
+**Claim boundary: DEVELOPMENT ANALYSIS - NOT HOLDOUT EVIDENCE.**
+
+The locked preflight produced 52 cutoffs from 2024-07-05 through 2025-06-27
+and 104 ordered SPY/QQQ origins. It accessed neither network nor inference and
+bound manifest SHA-256
+`a58eec6698ac0596d407486ca83dda9c55a6b08c5b4eba18ba2f2bf32caa99a0`
+to experiment SHA-256
+`fd50c208f465ce99750b11d4de5d5bc8c391bd73cb9ff450037c596c3e37d8bc`.
+
+The first real-inference ten-origin operational pilot had 100% request success,
+8.3677122 seconds median nine-path wall latency, 32,495,085 cache bytes,
+deterministic seeded replay, zero failed criteria, and stable process behavior.
+It continued automatically. The resumable full run completed every origin with
+zero terminal failures and 936 generated paths. Median recorded provider
+inference time across all nine paths was 2.44944075 seconds per origin; median
+real end-to-end origin forecast wall time was 6.98129455 seconds.
+
+After independent review identified five analysis and resume defects, a
+separate corrected private state reused the verified content-addressed
+inference cache and regenerated every causal diagnostic, outcome row, OOF
+analysis, policy, freeze, and report. Its ten-origin cache-resume pilot had
+100% request success, 0.2641656 seconds median ensemble retrieval latency,
+34,482,153 cache bytes, and zero failed criteria. A no-op resume reverified all
+104 terminal chains without inference.
+The final 2025-06-27 development forecast resolved on its five declared
+sessions through 2025-07-07. Those outcome rows belong to that locked
+development origin; no holdout origin was created, forecast, fitted, inspected,
+or scored.
+
+### Structural findings
+
+- invalid paths: 473/936 (0.5053418803)
+- invalid candles: 961/4680 (0.2053418803)
+- invalid canonical forecasts: 57/104 (0.5480769231)
+- context 128/256/512 invalid-path prevalence: 0.3429487179 /
+  0.4358974359 / 0.7371794872
+- seed 1729/2027/7919 invalid-path prevalence: 0.3621794872 /
+  0.5641025641 / 0.5897435897
+- step 1-5 violation counts: 376 / 262 / 274 / 328 / 219
+
+Canonical-invalid forecasts did not have larger mean absolute return error:
+0.0336116547 versus 0.0367770848 for canonical-valid forecasts. Structural
+invalidity is established as a model-output contract problem, not as a
+development-proven return-error signal. At the individual-path level, invalid
+paths had mean absolute error 0.0311702181 versus 0.0290077646 for valid paths;
+this descriptive difference does not establish incremental predictive value.
+
+### Chronological OOF reliability findings
+
+Three expanding folds generated 78 OOF predictions. Mean logistic log loss was
+0.5287820395 for nonstructural, 0.5363007406 for combined, and 0.5638847126
+for structural features. The locked one-standard-error/fewest-feature rule
+selected structural.
+
+Pooled risk/error Spearman was 0.0814754865; SPY was 0.1157894737 and QQQ
+was -0.0267206478. Kronos MAE at 100%, 90%, 80%, 70%, and 50% coverage was
+0.0349578070, 0.0360615809, 0.0368760077, 0.0356734882, and 0.0345707249.
+The respective sample counts were 78, 71, 63, 55, and 39. Risk quintile
+errors were nonmonotonic, and the zero-return baseline beat Kronos at every
+declared pooled coverage level.
+
+The fixed P2 policy accepted 62 rows with MAE 0.0329987680, but did not meet
+the locked continuation criteria. P3 valid-path aggregation applied at 22
+origins, worsened mean error by 0.0013143109, and is not retained. P0 and P3
+use all 104 completed origins; only P1 and P2 depend on the 78 OOF rows.
+
+### Freeze and provenance
+
+The selected seven-feature structural model, preprocessing, logistic/ridge
+coefficients, pooled risk thresholds, 0.5 blend weight, structural gate,
+missingness behavior, and reason thresholds are frozen under SHA-256
+`c073d0e8d6cc4760211fc07f20c896444cd31d72a02d31a048e8c8d1ae6038a9`.
+The analysis receipt is
+`69a7329bd5928aa9451840d7fe3cd4cc1b1a0a55d7d58a1317567a44bd2a78b3`;
+the freeze receipt is
+`b48bdc7837c2f5eb0e2860d0a92c20311db8dba811c94ea6226fae6a841d2707`;
+and the concise report is
+`e96197c77adf65dff707af11941dde0b48ac244f35aea99c3c22e5dc37f2a36d`.
+The deterministic development table is
+`5a2c8258d808ae715d118d5e9a289289520435ecc3bfde4dc52c321dd59a2c2d`.
+
+A superseded analysis whose path-ID parser grouped real context/seed values as
+`UNKNOWN`, a superseded verbose report, and the complete pre-review run remain
+preserved in the original private state root. None is published or used for
+the corrected freeze. The separately rooted corrected analysis, freeze,
+report, manifest, 104 terminal chains, and deterministic development table
+verify. Offline verification reported 104 completed, zero failed,
+`network_accessed=false`, and `inference_accessed=false`.
+
+### Final Phase 3A verification
+
+Fresh verification on 2026-07-30:
+
+- `uv sync --locked --group dev --group sentinel-phase2 --group sentinel-phase3`
+  - exit 0; resolved 60 packages and checked 59 packages.
+- `uv run --group dev --group sentinel-phase2 --group sentinel-phase3 pytest -q`
+  - exit 0; 336 passed in 31.43 seconds.
+- Focused post-review regression suite covering causal cutoff equality, final
+  refit thresholds, full-sample P0/P3 evaluation, terminal-chain resume
+  verification, and individual-path error preservation
+  - exit 0; 23 passed in 9.66 seconds.
+- `uv run --group dev --group sentinel-phase2 --group sentinel-phase3 ruff check .`
+  - exit 0; `All checks passed!`
+- `uv run --group dev --group sentinel-phase2 --group sentinel-phase3 pyright packages/research-core packages/experiment-spec packages/sentinel scripts/run_sentinel_v0_origin.py scripts/kronos_inference_worker.py scripts/kronos_phase2_5_worker.py scripts/run_sentinel_phase2_5.py scripts/run_sentinel_phase3a.py`
+  - exit 0; 0 errors, 0 warnings, 0 informations.
+- `uv run --group dev --group sentinel-phase3 python scripts/run_sentinel_phase3a.py verify --state-root C:\Users\Tommy\.cache\openalpha-sentinel\phase3a-corrected`
+  - exit 0; manifest verified; 104 terminal/completed origins; zero failed;
+    freeze SHA-256 `c073d0e8d6cc4760211fc07f20c896444cd31d72a02d31a048e8c8d1ae6038a9`;
+    report SHA-256 `e96197c77adf65dff707af11941dde0b48ac244f35aea99c3c22e5dc37f2a36d`;
+    network and inference access false.
+- Experiment hash verification
+  - exit 0; `fd50c208f465ce99750b11d4de5d5bc8c391bd73cb9ff450037c596c3e37d8bc`.
+- Public/private byte comparison and built-in repository policy scan
+  - exit 0; 10 compact files verified; report hash matched.
+- Forbidden weight/cache/raw-data filename scan
+  - exit 0; clean.
+- `git diff --check`
+  - exit 0.
+
+### Decision and exact next task
+
+Recommendation: **CHANGE THE RELIABILITY APPROACH.**
+
+Do not access the holdout. The exact next task is a bounded development-only
+postmortem using the committed diagnostic analysis and OOF residuals to
+identify why instability/regime features failed and to specify a materially
+different reliability hypothesis. Any new approach requires a separately
+versioned development configuration and fresh pre-holdout freeze; it must not
+reuse the untouched holdout for iteration.
 
 ## Superseded Phase 2 pause
 

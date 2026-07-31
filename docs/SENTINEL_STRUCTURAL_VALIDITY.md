@@ -94,6 +94,39 @@ The phenomenon recurred in both assets, but one QQQ origin had 0/3 invalid paths
 
 Structural validity is now a locked candidate Sentinel v0 diagnostic and a mandatory runtime gate. Raw output remains immutable. Fatal finite/alignment conditions block use; finite OHLC-ordering violations are labeled and retained for development evaluation. Optional projected output is separate.
 
-The next justified task is the chronological development sample using the amended diagnostic lock. It must test whether the structural measures predict later error; it must not assume that they do.
+## Phase 3A development result
+
+The complete 2024-07-01 through 2025-06-30 development sample contained 104
+eligible and completed origins, 52 each for SPY and QQQ, and 936 official
+sample-count-one paths. No holdout origin was accessed.
+
+- invalid paths: 473/936 (0.5053418803)
+- invalid candles: 961/4680 (0.2053418803)
+- invalid canonical 512-context averages: 57/104 (0.5480769231)
+- invalid-path prevalence by context: 128 = 0.3429487179, 256 =
+  0.4358974359, 512 = 0.7371794872
+- invalid-path prevalence by seed: 1729 = 0.3621794872, 2027 =
+  0.5641025641, 7919 = 0.5897435897
+- violations by forecast step 1-5: 376, 262, 274, 328, 219
+
+Structural invalidity was widespread and strongly context- and seed-dependent,
+but it did not become monotonically more frequent later in the five-step
+horizon. Canonical-invalid forecasts had lower mean absolute return error
+than canonical-valid forecasts in this development sample
+(0.0336116547 versus 0.0367770848). Individual invalid paths had higher
+descriptive mean absolute return error than individual valid paths
+(0.0311702181 versus 0.0290077646), but the chronological OOF structural-only
+risk model had weak pooled risk/error rank association. Structural validity is
+therefore justified as a downstream domain contract and safety gate, not
+established as an incremental return-error warning signal.
+
+CONSTRAINT_PROJECTION_V0 passed every checked structural constraint while
+preserving every open, close, and implied close return. It remains a separate
+path artifact and is not an accuracy intervention. Development-only valid-path
+aggregation was applied at 22 origins and worsened mean absolute error by
+0.0013143109 on average; it is not retained.
+
+The verified compact evidence is under `research/sentinel-v0/development/`.
+Complete per-origin chains and provider-derived rows remain private outside Git.
 
 Compact evidence is under research/sentinel-v0/phase2_5/. Full comparison receipts and model/data caches remain outside Git.

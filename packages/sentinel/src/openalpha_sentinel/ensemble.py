@@ -5,7 +5,8 @@ from datetime import date
 
 from pydantic import Field, model_validator
 
-from .contracts import ForecastPath, FrozenModel
+from .contracts import ForecastPath, FrozenModel, OHLCVObservation
+from .development_serialization import canonical_json_bytes, sha256_bytes
 
 EXPECTED_COMBINATIONS = frozenset(
     (context, seed)
@@ -62,6 +63,44 @@ class EnsembleResult(FrozenModel):
         if not all(math.isfinite(value) for value in values):
             raise ValueError("ensemble values must be finite")
         return self
+
+
+def average_forecast_paths(
+    paths: tuple[ForecastPath, ...],
+    *,
+    path_id: str,
+) -> ForecastPath:
+    if not paths:
+        raise ValueError('at least one forecast path is required')
+    expected = tuple(
+        (row.session, row.timestamp) for row in paths[0].observations
+    )
+    if any(
+        tuple((row.session, row.timestamp) for row in path.observations) != expected
+        for path in paths[1:]
+    ):
+        raise ValueError('forecast path sessions and timestamps must match')
+    count = float(len(paths))
+    observations = tuple(
+        OHLCVObservation(
+            session=paths[0].observations[step].session,
+            timestamp=paths[0].observations[step].timestamp,
+            open=sum(path.observations[step].open for path in paths) / count,
+            high=sum(path.observations[step].high for path in paths) / count,
+            low=sum(path.observations[step].low for path in paths) / count,
+            close=sum(path.observations[step].close for path in paths) / count,
+            volume=sum(path.observations[step].volume for path in paths) / count,
+        )
+        for step in range(len(paths[0].observations))
+    )
+    canonical_sha256 = sha256_bytes(
+        canonical_json_bytes([row.model_dump(mode='json') for row in observations])
+    )
+    return ForecastPath(
+        path_id=path_id,
+        observations=observations,
+        canonical_sha256=canonical_sha256,
+    )
 
 
 def assemble_ensemble(

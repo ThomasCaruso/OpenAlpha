@@ -232,6 +232,10 @@ def append_outcome_and_complete(
     methodology_status: MethodologyStatus,
     test_evidence: tuple[str, ...],
     completed_at: datetime,
+    manifest_parameters: tuple[tuple[str, str], ...] = (
+        ('phase', '2'),
+        ('origin', 'SPY-2024-07-05'),
+    ),
 ) -> ResolvedEvidence:
     if not verify_creation(store, creation):
         raise ValueError("immutable forecast creation seal failed verification")
@@ -293,6 +297,7 @@ def append_outcome_and_complete(
         audit_ref=audit_ref,
         creation_time=creation.ledger_events[0].occurred_at,
         completed_at=completed_at,
+        manifest_parameters=manifest_parameters,
     )
     manifest = RunManifest(
         schema_version="1.0",
@@ -362,6 +367,7 @@ def _manifest_artifacts(
     audit_ref: ArtifactRef,
     creation_time: datetime,
     completed_at: datetime,
+    manifest_parameters: tuple[tuple[str, str], ...],
 ) -> tuple[ManifestArtifact, ...]:
     definitions = (
         (ArtifactKind.CANONICAL_SPEC, creation.canonical_spec_ref, (), creation_time),
@@ -422,7 +428,7 @@ def _manifest_artifacts(
             code_commit=context.code_commit,
             code_dirty=context.code_dirty,
             dependency_lock_sha256=context.dependency_lock_sha256,
-            parameters=(("phase", "2"), ("origin", "SPY-2024-07-05")),
+            parameters=manifest_parameters,
             random_seed=None,
         )
         for kind, ref, inputs, created_at in definitions

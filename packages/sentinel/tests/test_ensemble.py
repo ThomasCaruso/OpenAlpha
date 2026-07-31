@@ -3,7 +3,11 @@ from math import log
 
 import pytest
 from openalpha_sentinel.contracts import ForecastPath, OHLCVObservation
-from openalpha_sentinel.ensemble import EnsembleMember, assemble_ensemble
+from openalpha_sentinel.ensemble import (
+    EnsembleMember,
+    assemble_ensemble,
+    average_forecast_paths,
+)
 from pydantic import ValidationError
 
 SESSIONS = (
@@ -99,3 +103,51 @@ def test_ensemble_rejects_missing_duplicate_or_wrong_sessions() -> None:
     payload["observations"] = tuple(rows)
     with pytest.raises(ValidationError):
         ForecastPath.model_validate(payload)
+
+
+def test_average_forecast_paths_uses_named_fields_and_exact_sessions() -> None:
+    paths = tuple(
+        ForecastPath(
+            path_id=f'named-{offset}',
+            observations=tuple(
+                OHLCVObservation(
+                    session=session,
+                    timestamp=datetime.combine(session, datetime.min.time(), tzinfo=UTC),
+                    open=10.0 + offset + step,
+                    high=20.0 + offset + step,
+                    low=5.0 + offset + step,
+                    close=15.0 + offset + step,
+                    volume=100.0 + 10.0 * offset + step,
+                )
+                for step, session in enumerate(SESSIONS)
+            ),
+            canonical_sha256=f'{offset + 1:064x}',
+        )
+        for offset in (0, 3, 6)
+    )
+
+    averaged = average_forecast_paths(paths, path_id='offline-average')
+
+    first = averaged.observations[0]
+    assert first.open == pytest.approx(13.0)
+    assert first.high == pytest.approx(23.0)
+    assert first.low == pytest.approx(8.0)
+    assert first.close == pytest.approx(18.0)
+    assert first.volume == pytest.approx(130.0)
+    assert tuple(row.session for row in averaged.observations) == SESSIONS
+    assert len(averaged.canonical_sha256) == 64
+
+
+def test_average_forecast_paths_rejects_timestamp_mismatch() -> None:
+    valid = _path(512, 1729, 101.0)
+    payload = valid.model_dump(mode='python')
+    rows = list(payload['observations'])
+    shifted = dict(rows[0])
+    shifted['session'] = date(2024, 7, 7)
+    shifted['timestamp'] = datetime(2024, 7, 7, tzinfo=UTC)
+    rows[0] = OHLCVObservation.model_validate(shifted)
+    payload['observations'] = tuple(rows)
+    mismatched = ForecastPath.model_validate(payload)
+
+    with pytest.raises(ValueError, match='sessions'):
+        average_forecast_paths((valid, mismatched), path_id='bad-average')
