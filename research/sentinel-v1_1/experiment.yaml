@@ -1,0 +1,196 @@
+schema_version: sentinel-v1.1-experiment-v1
+experiment_id: sentinel-v1.1-token-manifold-compatibility
+status: locked
+claim_boundary: DEVELOPMENT COMPATIBILITY RESEARCH - NOT HOLDOUT EVIDENCE
+primary_question: >-
+  Does Kronos generate invalid candles because its tokenizer does not preserve
+  OHLC constraints, because the model generates unsupported hierarchical token
+  pairs, or because too little conditional probability lies in the valid region?
+source:
+  repository: https://github.com/shiyu-coder/Kronos
+  revision: 67b630e67f6a18c9e9be918d9b4337c960db1e9a
+models:
+  mini:
+    repository: NeoQuasar/Kronos-mini
+    revision: f4e68697d9d5aed55cef5c96aabc3376bcad9f81
+    tokenizer: tokenizer_2k
+  small:
+    repository: NeoQuasar/Kronos-small
+    revision: 901c26c1332695a2a8f243eb2f37243a37bea320
+    tokenizer: tokenizer_base
+  base:
+    repository: NeoQuasar/Kronos-base
+    revision: 2b554741eca47781b64468546e77fef3e85130e6
+    tokenizer: tokenizer_base
+tokenizers:
+  tokenizer_2k:
+    repository: NeoQuasar/Kronos-Tokenizer-2k
+    revision: 26966d0035065a0cae0ebad7af8ece35bc1fb51c
+  tokenizer_base:
+    repository: NeoQuasar/Kronos-Tokenizer-base
+    revision: 0e0117387f39004a9016484a186a908917e22426
+provider:
+  provider: yahoo_finance
+  client: yfinance
+  client_version: 1.5.2
+  access_class: unofficial_public_interface
+  intended_use: local_research_and_education
+  redistribution: prohibited_by_project_policy
+  interval: 1d
+  auto_adjust: false
+  back_adjust: false
+  repair: false
+  actions: true
+  progress: false
+  threads: false
+support_corpus:
+  symbols: [SPY, QQQ, IWM, DIA, TLT, HYG, GLD, EFA, EEM, XLF]
+  start_inclusive: 2017-01-01
+  end_exclusive: 2024-06-29
+  last_eligible_session: 2024-06-28
+  calendar: XNYS
+  frequency: daily
+  row_policy: final_1536_complete_sessions
+  window_length: 512
+  windows_per_symbol: 3
+  overlap: prohibited
+  replacement_instruments: prohibited
+  raw_data_committed: false
+preprocessing:
+  columns: [open, high, low, close, volume, amount]
+  amount: volume_times_ohlc_mean
+  dtype: float32
+  normalization: feature_window_mean_population_std
+  epsilon: 0.00001
+  clip: [-5.0, 5.0]
+  tokenizer_half: true
+paired_sample:
+  assets: [SPY, QQQ]
+  cutoffs:
+    - 2024-07-05
+    - 2024-09-13
+    - 2024-11-22
+    - 2025-01-31
+    - 2025-04-11
+    - 2025-06-20
+  context_length: 512
+  forecast_horizon: 5
+  seeds: [1729, 2027, 7919]
+  temperature: 1.0
+  top_p: 0.9
+  top_k: 0
+  sample_count: 1
+  outcomes_access: only_after_forecast_seal
+roundtrip:
+  confidence_interval: wilson_95
+  material_defect:
+    invalid_fraction_minimum: 0.01
+    confidence_lower_minimum: 0.005
+  overwhelmingly_valid:
+    invalid_fraction_maximum: 0.001
+    confidence_upper_maximum: 0.0025
+  severity_denominator: observed_close
+  volatility_regime:
+    window_sessions: 20
+    pooled_quantiles: [0.3333333333333333, 0.6666666666666666]
+empirical_support:
+  scope: tokenizer_specific
+  hard_pair_count_floor: 2
+  smoothing: jeffreys
+  alpha: 0.5
+  vocabulary_denominator: vocab_s1_times_vocab_s2
+probability_mass:
+  model_support_distribution: temperature_one_unfiltered_softmax
+  intervention_distribution: temperature_1_top_p_0.9
+  grids:
+    - coarse: 8
+      fine_per_coarse: 8
+      maximum_pairs: 64
+    - coarse: 16
+      fine_per_coarse: 16
+      maximum_pairs: 256
+    - coarse: 32
+      fine_per_coarse: 32
+      maximum_pairs: 1024
+  upper_bound: lower_plus_uncovered_mass_capped_at_one
+  zero_mass_status: ZERO_ESTIMATED_MASS
+  exact_tolerance: 1.0e-12
+model_size_canary:
+  cutoffs: [2024-07-05, 2025-04-11]
+  assets: [SPY, QQQ]
+  seeds: [1729, 2027, 7919]
+  maximum_pairs: 256
+  order: [mini, small, base]
+  limits:
+    cache_bytes: 4294967296
+    peak_process_memory_bytes: 8589934592
+    first_path_seconds: 600
+    projected_remaining_seconds: 14400
+classification:
+  precedence:
+    - MINI_OR_TOKENIZER_2K_SPECIFIC
+    - TOKENIZER_CONSTRAINT_DEFECT
+    - LOW_VALID_PROBABILITY_MASS
+    - OFF_MANIFOLD_TOKEN_COMBINATIONS
+    - CANDIDATE_SEARCH_FAILURE
+    - MIXED_OR_UNRESOLVED
+  mini_specific:
+    larger_invalid_rate_ratio_maximum: 0.5
+    larger_invalid_rate_maximum: 0.05
+    requires_both_available_larger_models: true
+  low_valid_mass:
+    median_valid_mass_upper_maximum: 0.25
+    alternative_step_fraction_minimum: 0.75
+    alternative_valid_mass_upper_maximum: 0.5
+  off_manifold:
+    invalid_raw_unsupported_fraction_minimum: 0.7
+    unsupported_to_supported_invalid_rate_minimum: 2.0
+    minimum_group_count: 10
+    alternative_valid_mass_lower_minimum: 0.25
+    alternative_valid_supported_mass_upper_maximum: 0.25
+  candidate_search_failure:
+    valid_supported_mass_lower_minimum: 0.25
+    considered_mass_minimum: 0.8
+conditional_method:
+  authorized_classifications:
+    - OFF_MANIFOLD_TOKEN_COMBINATIONS
+    - LOW_VALID_PROBABILITY_MASS
+    - CANDIDATE_SEARCH_FAILURE
+  method: SUPPORT_CONDITIONED_SAMPLING_V0
+  maximum_pairs: 1024
+  support_pair_count_floor: 2
+  probability: original_top_p_joint_probability
+  empty_set: hard_failure
+  fallback: prohibited
+  optional_draft:
+    minimum_candidates: 2
+    eligible_intervention_fraction_minimum: 0.8
+    distance: ohlc_rms_over_causal_atr20
+    weight: exp_negative_half_distance_squared
+continuation:
+  returned_path_validity: 1.0
+  hard_failure_count_maximum: 1
+  paired_path_count: 36
+  high_low_range_mae_maximum: 0.009934683599145366
+  close_mae_raw_multiplier_maximum: 1.1
+  close_mae_raw_additive_maximum: 0.001
+  pairwise_diversity_raw_fraction_minimum: 0.5
+  final_return_variance: positive
+  repeated_path_rate_maximum: 0.1
+  raw_path_distance_maximum: 0.00894289586146275
+  selected_token_rank_mean_maximum: 9.318181818181818
+  identical_synthetic_replays: 2
+  identical_real_replays: 2
+  median_latency_raw_multiplier_maximum: 5.0
+  cache_bytes_maximum: 4294967296
+  peak_memory_rule: raw_times_two_plus_1_gib
+  retraining: prohibited
+  model_weight_modification: prohibited
+governance:
+  holdout_start: 2025-07-01
+  holdout_access: prohibited
+  v0_v1_modification: prohibited
+  raw_provider_data_committed: false
+  model_weights_committed: false
+  full_historical_sample: prohibited
+  next_decoder_phase_if_failed: prohibited
