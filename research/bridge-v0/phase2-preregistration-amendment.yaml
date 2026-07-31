@@ -1,0 +1,111 @@
+schema_version: openalpha-bridge-v0-phase2-amendment-v1
+experiment_id: openalpha-kronos-bridge-2k-feasibility
+phase: phase_2_reconstruction_feasibility
+status: terminal_pre_data_operational_block
+amended_on: 2026-07-31
+claim_boundary: DEVELOPMENT COMPATIBILITY RESEARCH - NO RECONSTRUCTION RESULT
+
+original_lock:
+  path: research/bridge-v0/experiment.yaml
+  sha256: d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2
+  bytes_modified: false
+  controlling_except_for_explicit_clarifications_below: true
+
+execution_state_at_amendment:
+  provider_requests: 0
+  retrieved_candles: 0
+  kronos_source_downloads: 0
+  kronos_checkpoint_downloads: 0
+  kronos_checkpoint_loads: 0
+  tokenizer_encodes: 0
+  bridge_optimizer_steps: 0
+  validation_metrics_inspected: false
+  reconstruction_test_opened: false
+  external_slices_opened: false
+  sentinel_untouched_holdout_opened: false
+
+clarifications:
+  primary_provider: yahoo_finance_yfinance_1_5_2_as_originally_locked
+  binance_phase_2_access: prohibited
+  learning_rate_policy: constant_0_001_without_scheduler
+  validation_checkpoint_tie_break: earliest_epoch_at_identical_validation_total_loss
+  stage_a:
+    status_if_pre_data_gate_passed: authorized
+    symbols: [SPY]
+    request_period: [2015-05-04, 2023-01-01]
+    maximum_complete_candles: 2000
+    scientific_claims: prohibited
+  stage_b:
+    status_if_pre_data_gate_passed: authorized
+    symbols: [SPY, QQQ, XLF, XLK, XLE, XLI, XLV]
+    periods: [train, validation]
+    maximum_complete_candles: 25000
+    validation_test_access: prohibited
+    minimum_relative_validation_loss_improvement_from_initialization: 0.01
+  representation_coverage:
+    valid_source_candle_supported_fraction_minimum: 0.999
+    valid_source_sequence_supported_fraction_minimum: 0.99
+    invalid_or_out_of_domain_silent_discard: prohibited
+  cpu_compute_gate:
+    stage_b_wall_clock_hours_maximum: 4
+    stage_c_cpu_execution: prohibited
+  latency_measurement_if_reached:
+    warmup_batches: 10
+    timed_batches: 100
+    batch_size: 64
+    device_synchronization_before_and_after_each_batch: required
+  phase_scope:
+    phase_4_binance_slices_rephased_into_phase_2: false
+    reason: original_lock_requires_phase_3_success_and_data_policy_review
+
+literal_split_contract:
+  partition_raw_series_before_window_construction: true
+  complete_sequence_may_cross_partition_boundary: false
+  context_prefix_borrowing_from_another_partition: false
+  token_window_length: 512
+  causal_prefix_length: 448
+  supervised_suffix_length: 64
+  purge_candles_at_time_boundaries_minimum: 512
+
+provider_free_feasibility_proof:
+  counting_convention: half_open_dates_with_weekdays_as_an_upper_bound_before_holidays
+  train:
+    period: [2010-01-01, 2022-01-01]
+    calendar_day_upper_bound: 4383
+    weekday_upper_bound: 3131
+    can_contain_one_512_candle_sequence: true
+  validation:
+    period: [2022-01-01, 2023-01-01]
+    calendar_day_upper_bound: 365
+    weekday_upper_bound: 260
+    can_contain_one_512_candle_sequence: false
+  reconstruction_test:
+    period: [2023-01-01, 2024-06-29]
+    calendar_day_upper_bound: 545
+    weekday_upper_bound: 390
+    can_contain_one_512_candle_sequence: false
+  external_later_period:
+    period: [2024-07-01, 2025-07-01]
+    calendar_day_upper_bound: 365
+    weekday_upper_bound: 261
+    can_contain_one_512_candle_sequence: false
+  validation_sequence_count_upper_bound: 0
+  reconstruction_test_sequence_count_upper_bound: 0
+  reconstruction_test_target_candle_count_upper_bound: 0
+  required_unique_reconstruction_test_target_candles: 5000
+  required_unique_unseen_symbol_test_target_candles: 500
+  required_counts_reachable: false
+
+terminal_decision:
+  conclusion: OPERATIONALLY_BLOCKED
+  reason_code: LOCKED_PARTITIONS_CANNOT_FORM_LOCKED_SEQUENCE
+  data_access_after_this_finding: prohibited
+  checkpoint_access_after_this_finding: prohibited
+  training_after_this_finding: prohibited
+  test_evaluation_after_this_finding: prohibited
+  architecture_change_authorized: false
+  period_change_authorized: false
+  window_change_authorized: false
+  split_crossing_authorized: false
+  scientific_bridge_quality_conclusion_authorized: false
+  next_justified_task: none_under_current_lock
