@@ -2,6 +2,76 @@
 
 Last updated: 2026-07-31
 
+## OpenAlpha for Kronos Bridge Phase 0
+
+**Claim boundary: DESIGN AND PREREGISTRATION ONLY - NO BRIDGE TRAINING OR
+HOLDOUT EVIDENCE.**
+
+OpenAlpha remains the project and repository identity. The working branch
+`feature/openalpha-kronos-bridge` begins at preserved research commit
+`daf347756f468953394fcf5f3eb1969d41f1a406`, retaining its complete ancestry and
+all Sentinel v0, v1, and v1.1 artifacts.
+
+The next product direction is OpenAlpha for Kronos, with three connected layers:
+
+- Sentinel for validation, raw-output preservation, exact violation reporting, and
+  immutable audit;
+- Bridge for a separately labeled constraint-preserving reconstruction of the same
+  unchanged official Kronos token sequence; and
+- Evidence for the complete reproducible history, including failed hypotheses and
+  methods.
+
+The pinned source trace confirms that both audited tokenizers use 10-bit coarse and
+10-bit fine identifiers, an implicit 20-dimensional bipolar BSQ latent, and a causal
+sequence decoder. Tokenizer-2k uses an unrestricted six-output head after a frozen
+20-to-256 projection and three causal decoder blocks. The selected Bridge-2K design
+is Candidate C: reuse that frozen sequence trunk and train only a 17,605-parameter
+269-to-64-to-5 constrained reconstruction head. The forecasting transformer,
+encoder, codebook, token IDs, decoder trunk, and official raw output remain frozen
+and preserved.
+
+The hard output representation is bounded gap return, bounded body return,
+nonnegative upper and lower wick log ratios, and optional nonnegative log-volume,
+reconstructed recursively from the last observed close. Structural validity is a
+mathematical output contract, not a loss penalty or hidden projection.
+
+The bounded Bridge-2K plan is locked before implementation:
+
+- no more than 250,000 retrieved complete candles across the first program;
+- raw data, caches, and checkpoints outside Git;
+- 10 GiB temporary-cache cap, one accelerator, 24 GiB device-memory cap, and 24
+  GPU-hours for Phase 2;
+- one million trainable parameters and 25 MiB checkpoint maximum;
+- zero invalid reconstruction and forecast candles;
+- at least 10% lower paired high-low range MAE than terminal projection for Phase 2
+  and Phase 3, with a paired-bootstrap improvement bound;
+- frozen OHLC and close/return non-inferiority margins;
+- deterministic replay, resource, diversity, and external-generalization gates;
+  and
+- no data on or after the untouched-holdout start of 2025-07-01.
+
+The locked Bridge v0 experiment SHA-256 is
+`d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2`.
+
+No decoder has been implemented or trained, no market data has been retrieved for
+Bridge, no Bridge test or forecast metric has been calculated, no checkpoint has
+been created, and the untouched holdout remains unaccessed.
+
+The exact next task is Phase 1 implementation of the typed mathematical
+representation, stable forward/inverse transforms, causal chaining,
+normalization-state and missing-volume contracts, independent validation,
+deterministic serialization, property tests, and numerical edge-case tests. Work
+must stop again before corpus retrieval or learned decoder training.
+
+Design sources:
+
+- `docs/OPENALPHA_PIVOT.md`
+- `docs/OPENALPHA_KRONOS_BRIDGE.md`
+- `docs/KRONOS_COMPATIBILITY_BOUNDARY.md`
+- `docs/BRIDGE_MATHEMATICAL_REPRESENTATION.md`
+- `research/bridge-v0/experiment.yaml`
+- `research/bridge-v0/preregistration.md`
+
 ## Sentinel v1.1 token-manifold compatibility result
 
 **Claim boundary: DEVELOPMENT COMPATIBILITY RESEARCH - NOT HOLDOUT
@@ -69,9 +139,12 @@ Final v1.1 verification:
   762ce83aa848db6971dd96177b2aa57f64acdccd66d38dffba3bf3fe41c313d2;
 - git diff --check - exit 0.
 
-The exact next justified task is product hardening of the existing validator and
-explicit terminal-projection gateway. Do not begin another decoder research phase,
-access the holdout, or claim improved forecast accuracy.
+At v1.1 closure, the exact next justified task was product hardening of the existing
+validator and explicit terminal-projection gateway, with no further inference-only
+decoder phase. That stop decision remains binding for token filtering and candidate
+selection. The later Bridge v0 direction above is the distinct trained continuous-
+reconstruction track that v1.1 left outside its scope. It does not authorize
+holdout access or an improved-forecast-accuracy claim.
 
 ## Sentinel v0 closure and v1 preregistration
 

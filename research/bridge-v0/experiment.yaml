@@ -1,0 +1,511 @@
+schema_version: openalpha-bridge-v0-experiment-v1
+experiment_id: openalpha-kronos-bridge-2k-feasibility
+status: locked_before_phase_1_implementation
+claim_boundary: DEVELOPMENT COMPATIBILITY RESEARCH - NOT HOLDOUT EVIDENCE
+primary_question: >-
+  Can a learned, constraint-preserving decoder reconstruct the unchanged
+  hierarchical token sequences produced by Kronos into valid financial candles
+  without retraining the forecasting backbone and without materially degrading
+  reconstruction or forecast quality?
+
+identity:
+  project: OpenAlpha
+  integration: OpenAlpha for Kronos
+  bridge_target: BRIDGE-2K
+  separate_repository: prohibited
+  project_rename: prohibited
+
+preserved_evidence:
+  required_ancestor: daf347756f468953394fcf5f3eb1969d41f1a406
+  sentinel_v0_v1_v1_1_modification: prohibited
+  sentinel_untouched_holdout_start: 2025-07-01
+  sentinel_untouched_holdout_access: prohibited
+
+official_source:
+  repository: https://github.com/shiyu-coder/Kronos
+  revision: 67b630e67f6a18c9e9be918d9b4337c960db1e9a
+  files:
+    model/kronos.py: 638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a
+    model/module.py: a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f
+
+official_model:
+  repository: NeoQuasar/Kronos-mini
+  revision: f4e68697d9d5aed55cef5c96aabc3376bcad9f81
+  config_sha256: 70daca2cb11e3a979dd6b8ac12ee08e2aace877acf28f5b8dfb4fe5609736201
+  weights_sha256: a7d5f37e2e9fbd9891f7d7d4f72574512dd1f704fee14223e0a8cd0fbf54197c
+  weights_modified: false
+  training_or_fine_tuning: prohibited
+
+official_tokenizer:
+  repository: NeoQuasar/Kronos-Tokenizer-2k
+  revision: 26966d0035065a0cae0ebad7af8ece35bc1fb51c
+  config_sha256: 0b30a443affb03e05a876a083857de9164f899feb7b4d261da02c485c9a3e3b6
+  weights_sha256: b97ec46b3b72160509e289183eaf7bdf5f0dac5bb9b49522f6d46638a99a8717
+  implicit_codebook_sha256: ea1825698624a0835a2238d9bfe8c5ebbd39e074fb4daa9613423f0e4df23af2
+  input_dimension: 6
+  hidden_dimension: 256
+  coarse_bits: 10
+  fine_bits: 10
+  coarse_vocabulary_size: 1024
+  fine_vocabulary_size: 1024
+  pair_space_size: 1048576
+  quantized_latent_dimension: 20
+  quantized_values: [-1, 1]
+  quantized_scale: one_over_sqrt_20
+  bit_order: least_significant_first_within_each_10_bit_token
+  configured_encoder_layers: 4
+  effective_encoder_blocks: 3
+  configured_decoder_layers: 4
+  effective_decoder_blocks: 3
+  decoder_attention: causal_rope
+  group_size: 5
+  weights_modified: false
+  encoder_frozen: true
+  codebook_frozen: true
+  decoder_trunk_frozen: true
+
+features:
+  ordered_columns: [open, high, low, close, volume, amount]
+  amount_when_volume_present: volume_times_ohlc_mean
+  missing_volume_official_placeholder: 0.0
+  missing_amount_official_placeholder: 0.0
+  bridge_missing_volume_output: omitted
+  bridge_amount_output: derived_only_when_volume_present
+  dtype_before_tokenizer: float32
+  normalization: causal_prefix_feature_population_mean_and_std
+  normalization_epsilon: 0.00001
+  clip: [-5.0, 5.0]
+  tokenizer_half: true
+
+compatibility_boundary:
+  location: after_ordered_generated_token_sequence_before_continuous_acceptance
+  token_identifiers_modified: false
+  original_token_sequence_preserved: true
+  official_decoder_preserved: true
+  raw_official_output_preserved: true
+  bridge_output_separately_labeled: true
+  maximum_token_window: 512
+  maximum_output_suffix: 64
+  future_information: prohibited
+
+bridge_architecture:
+  selected_candidate: C_SEQUENCE_LEVEL_CONSTRAINED_RECONSTRUCTION_HEAD
+  trainable_components:
+    - linear_269_to_64
+    - silu
+    - linear_64_to_5
+  trainable_parameter_count: 17605
+  trainable_parameter_maximum: 1000000
+  checkpoint_size_bytes_maximum: 26214400
+  frozen_path:
+    - official_indices_to_bits_half_true
+    - official_post_quant_embed_20_to_256
+    - official_three_causal_decoder_blocks
+  tensors:
+    coarse_ids:
+      dtype: int64
+      shape: [B, T]
+      bounds: [0, 1023]
+    fine_ids:
+      dtype: int64
+      shape: [B, T]
+      bounds: [0, 1023]
+    position_ids:
+      dtype: int64
+      shape: [T]
+      rule: contiguous_zero_based_order
+    quantized_bits:
+      dtype: float32
+      shape: [B, T, 20]
+    decoder_hidden:
+      dtype: float32
+      shape: [B, T, 256]
+    scale_features:
+      dtype: float32
+      shape: [B, T, 13]
+      ordered_features:
+        - log_anchor_close
+        - open_mean_relative_to_anchor
+        - high_mean_relative_to_anchor
+        - low_mean_relative_to_anchor
+        - close_mean_relative_to_anchor
+        - log1p_open_std_over_anchor
+        - log1p_high_std_over_anchor
+        - log1p_low_std_over_anchor
+        - log1p_close_std_over_anchor
+        - log1p_volume_mean
+        - log1p_volume_std
+        - log1p_amount_mean
+        - log1p_amount_std
+    bridge_input:
+      dtype: float32
+      shape: [B, T, 269]
+    bridge_raw_output:
+      dtype: float32
+      shape: [B, S, 5]
+      ordered_features: [gap, body, upper, lower, log1p_volume]
+  official_six_output_head_used_by_bridge: false
+  post_output_projection: prohibited
+
+mathematical_contract:
+  compute_dtype: float64
+  minimum_price: 1.0e-12
+  maximum_price: 1.0e12
+  maximum_volume: 1.0e15
+  log_price_guard: [-300.0, 300.0]
+  gap_absolute_maximum: 1.3862943611198906
+  body_absolute_maximum: 1.3862943611198906
+  upper_log_maximum: 1.3862943611198906
+  lower_log_maximum: 1.3862943611198906
+  log1p_volume_maximum: 34.538776394910684
+  nonnegative_map: bounded_stable_softplus
+  gap_body_map: bounded_tanh
+  initial_anchor: last_observed_close_before_output_suffix
+  later_anchor: previous_reconstructed_close
+  source_roundtrip_relative_tolerance: 1.0e-12
+  source_roundtrip_absolute_tolerance: 1.0e-12
+  near_zero_canonicalization_tolerance: 1.0e-14
+  invalid_source_behavior: typed_failure_no_output
+  numerical_guard_behavior: typed_failure_no_output
+  output_contract:
+    finite: required
+    open_positive: required
+    high_positive: required
+    low_positive: required
+    close_positive: required
+    high_gte_open: required
+    high_gte_close: required
+    high_gte_low: required
+    low_lte_open: required
+    low_lte_close: required
+    volume_gte_zero_when_present: required
+
+data:
+  primary_provider:
+    provider: yahoo_finance
+    client: yfinance
+    client_version: 1.5.2
+    access_class: unofficial_public_interface
+    intended_use: local_research_and_education
+    interval: 1d
+    auto_adjust: false
+    back_adjust: false
+    repair: false
+    actions: true
+    progress: false
+    threads: false
+  training_symbols:
+    [SPY, QQQ, XLF, XLK, XLE, XLI, XLV, XLP, XLY, XLU, TLT, HYG, EFA, VNQ]
+  unseen_symbol_set: [IWM, DIA, GLD, EEM, SLV, USO]
+  periods:
+    train: [2010-01-01, 2022-01-01]
+    validation: [2022-01-01, 2023-01-01]
+    reconstruction_test: [2023-01-01, 2024-06-29]
+    external_later_period: [2024-07-01, 2025-07-01]
+  windowing:
+    token_window_length: 512
+    causal_prefix_length: 448
+    supervised_suffix_length: 64
+    training_stride: 64
+    validation_target_overlap: prohibited
+    test_target_overlap: prohibited
+    split_crossing: prohibited
+    minimum_unique_test_candles: 5000
+    minimum_unique_unseen_symbol_test_candles: 500
+  volatility_regimes:
+    metric: causal_20_bar_population_std_of_log_close_returns
+    thresholds: pooled_training_split_quantiles
+    quantiles: [0.3333333333333333, 0.6666666666666666]
+    labels: [low, middle, high]
+    scaler_and_thresholds_serialized_and_hashed: true
+    minimum_candles_per_external_regime: 500
+  external_frequency_provider:
+    provider: binance_vision_public_archive
+    symbols: [BTCUSDT, ETHUSDT]
+    intervals: [1d, 1h]
+    period: [2024-07-01, 2025-07-01]
+    authorization: phase_4_only_after_data_policy_review
+  maximum_complete_retrieved_candles_all_bridge_2k_phases: 250000
+  maximum_temporary_cache_bytes: 10737418240
+  raw_data_committed: false
+  reusable_provider_dataset_committed: false
+  cache_location: outside_git_configurable
+  cache_cleanup: automatic_after_manifest_and_hash_seal
+  committed_data: compact_manifests_hashes_aggregates_and_synthetic_fixtures_only
+  checkpoint_storage: outside_git_release_or_model_hub
+
+training:
+  authorized_phase: phase_2_only_after_phase_1_passes
+  examples: official_encoder_tokens_from_valid_real_sequences
+  frozen_train_only_scale:
+    method: median_absolute_deviation
+    floor: 0.0001
+    serialized_and_hashed: true
+  loss:
+    robust_function: huber
+    huber_delta_standardized_units: 1.0
+    groups:
+      gap_and_body:
+        weight: 1.0
+        reduction: mean_of_two_coordinates
+      upper_and_lower:
+        weight: 1.0
+        reduction: mean_of_two_coordinates
+      derived_log_high_low_range:
+        weight: 1.0
+        formula: abs_body_plus_upper_plus_lower
+      masked_log1p_volume:
+        weight: 0.25
+        absent_behavior: omitted_and_active_weights_renormalized
+    structural_validity_penalty: prohibited
+    direct_ohlc_level_loss: omitted
+  optimizer:
+    name: AdamW
+    learning_rate: 0.001
+    betas: [0.9, 0.999]
+    epsilon: 1.0e-8
+    weight_decay: 0.0001
+    gradient_norm_maximum: 1.0
+  batch_size: 64
+  maximum_epochs: 50
+  early_stopping:
+    metric: validation_total_loss
+    patience_epochs: 5
+    minimum_delta: 0.0001
+    checkpoint: lowest_validation_total_loss
+  seed: 1729
+  deterministic_algorithms: required_where_supported
+  mixed_precision: prohibited_for_primary_feasibility
+  test_access_before_checkpoint_seal: prohibited
+  phase_2_gpu_hours_maximum: 24
+  accelerator_count_maximum: 1
+  accelerator_memory_bytes_maximum: 25769803776
+
+baselines:
+  official_decoder:
+    weights_frozen: true
+    terminal_projection: false
+  terminal_projection:
+    preserve_open: true
+    preserve_close: true
+    high: max_raw_high_open_close
+    low: min_raw_low_open_close
+    separately_labeled: true
+  linear_residual_projection:
+    input: official_normalized_six_plus_quantized_twenty
+    target: normalized_six_residual
+    estimator: ridge
+    alpha: 0.001
+    fit_intercept: true
+    terminal_projection: required_and_explicit
+  openalpha_bridge:
+    post_output_projection: false
+
+metrics:
+  reconstruction_price_error_denominator: each_target_row_close
+  forecast_price_error_denominator: origin_cutoff_close
+  forecast_metric_implementation: openalpha_sentinel.decoding_metrics
+  close_return_reconstruction: one_step_log_close_return_from_causal_anchor
+  barrier_fractions: [0.005, 0.01, 0.02]
+  barrier_event_types: [positive_touch, negative_touch, either_touch]
+  barrier_accuracy_aggregation: equal_mean_over_three_barriers_and_three_event_types
+  pairwise_path_diversity: mean_pairwise_rms_ohlc_distance_over_origin_cutoff_close
+  final_return_variance: population_variance_of_log_final_close_over_origin_cutoff_close
+  repeated_path_rate: duplicate_canonical_path_hash_count_over_path_count
+  reconstruction:
+    - structurally_invalid_candle_fraction
+    - open_mae
+    - high_mae
+    - low_mae
+    - close_mae
+    - full_ohlc_mae
+    - high_low_range_mae
+    - body_mae
+    - upper_wick_mae
+    - lower_wick_mae
+    - close_return_mae
+    - path_shape_rms_log_close
+    - latency_ms
+    - incremental_peak_memory_bytes
+    - checkpoint_size_bytes
+    - deterministic_canonical_sha256
+  forecast:
+    - structurally_invalid_candle_fraction
+    - structurally_invalid_path_fraction
+    - open_mae
+    - high_mae
+    - low_mae
+    - close_mae
+    - full_ohlc_mae
+    - high_low_range_mae
+    - body_mae
+    - upper_wick_mae
+    - lower_wick_mae
+    - close_return_mae
+    - five_session_return_mae
+    - path_shape_distance
+    - barrier_event_accuracy
+    - pairwise_path_diversity
+    - final_return_variance
+    - repeated_path_rate
+    - raw_path_distance
+    - intervention_magnitude
+    - latency_ms
+    - incremental_peak_memory_bytes
+
+statistics:
+  unit: nonoverlapping_target_suffix_sequence
+  paired_bootstrap_resamples: 10000
+  paired_bootstrap_seed: 20260731
+  confidence_level: 0.95
+  report_point_estimate_and_interval: required
+  missing_or_failed_output: failure_not_dropped
+
+phase_1_success:
+  property_examples_minimum: 10000
+  supported_source_roundtrip_pass_fraction: 1.0
+  successful_output_invalid_fraction: 0.0
+  future_perturbation_earlier_output_changes: 0
+  deterministic_serialization_replays: 2
+  deterministic_serialization_hash_match_fraction: 1.0
+  any_hidden_projection: false
+
+phase_2_reconstruction_success:
+  structurally_invalid_candle_fraction: 0.0
+  token_identifier_parity_fraction: 1.0
+  frozen_weight_hash_parity_fraction: 1.0
+  post_output_projection: false
+  high_low_range_mae:
+    bridge_to_terminal_projection_ratio_maximum: 0.90
+    paired_bootstrap_difference_upper_must_be_below: 0.0
+  full_ohlc_mae:
+    official_multiplier_maximum: 1.05
+    normalized_additive_maximum: 0.0005
+  each_ohlc_field_mae:
+    official_multiplier_maximum: 1.05
+    normalized_additive_maximum: 0.0005
+  close_mae:
+    official_multiplier_maximum: 1.05
+    normalized_additive_maximum: 0.0005
+  close_return_mae:
+    official_multiplier_maximum: 1.05
+    normalized_additive_maximum: 0.00025
+  same_runtime_replay_count: 2
+  canonical_hash_match_fraction: 1.0
+  trainable_parameter_count_maximum: 1000000
+  checkpoint_size_bytes_maximum: 26214400
+  median_latency_official_multiplier_maximum: 2.0
+  p95_incremental_latency_ms_maximum: 50.0
+  incremental_peak_memory_bytes_maximum: 536870912
+
+phase_3_forecast_sample:
+  origin_source: preserved_sentinel_v1_fixed_development_origins
+  origin_count: 12
+  assets: [SPY, QQQ]
+  frequency: daily
+  context_length: 512
+  forecast_horizon: 5
+  cutoffs:
+    [2024-07-05, 2024-09-13, 2024-11-22, 2025-01-31, 2025-04-11, 2025-06-20]
+  seeds: [1729, 2027, 7919]
+  temperature: 1.0
+  top_p: 0.9
+  top_k: 0
+  sample_count_per_token_path: 1
+  generated_token_sequences_preserved: required
+  untouched_holdout_access: prohibited
+
+phase_3_forecast_success:
+  structurally_invalid_candle_fraction: 0.0
+  structurally_invalid_path_fraction: 0.0
+  token_identifier_parity_fraction: 1.0
+  forecasting_weight_hash_parity_fraction: 1.0
+  post_output_projection: false
+  high_low_range_mae:
+    bridge_to_terminal_projection_ratio_maximum: 0.90
+    paired_bootstrap_difference_upper_must_be_below: 0.0
+  each_ohlc_field_mae:
+    official_multiplier_maximum: 1.05
+    normalized_additive_maximum: 0.0005
+  close_mae:
+    official_multiplier_maximum: 1.05
+    normalized_additive_maximum: 0.0005
+  close_return_mae:
+    official_multiplier_maximum: 1.05
+    normalized_additive_maximum: 0.00025
+  five_session_return_mae:
+    official_multiplier_maximum: 1.05
+    normalized_additive_maximum: 0.0005
+  barrier_event_accuracy_mean_degradation_maximum: 0.05
+  pairwise_path_diversity_raw_fraction_minimum: 0.75
+  final_return_variance: positive
+  repeated_path_rate_maximum: 0.10
+  same_runtime_replay_count: 2
+  canonical_hash_match_fraction: 1.0
+  median_latency_official_multiplier_maximum: 2.0
+  p95_incremental_latency_ms_maximum: 50.0
+  incremental_peak_memory_bytes_maximum: 536870912
+
+phase_4_generalization_success:
+  required_slices:
+    - unseen_equity_symbols_daily_reconstruction_test_period
+    - unseen_equity_symbols_daily_later_period
+    - btcusdt_daily_later_period
+    - ethusdt_daily_later_period
+    - btcusdt_hourly_later_period
+    - ethusdt_hourly_later_period
+  each_slice_structurally_invalid_candle_fraction: 0.0
+  each_slice_range_mae_projection_ratio_maximum: 0.95
+  each_volatility_regime_structurally_invalid_candle_fraction: 0.0
+  each_volatility_regime_range_mae_projection_ratio_maximum: 0.95
+  pooled_close_mae_official_multiplier_maximum: 1.05
+  pooled_close_mae_normalized_additive_maximum: 0.0005
+  pooled_close_return_mae_official_multiplier_maximum: 1.05
+  pooled_close_return_mae_normalized_additive_maximum: 0.00025
+  replacement_slices_after_result_access: prohibited
+
+continuation:
+  phase_2_requires_phase_1_success: true
+  phase_3_requires_phase_2_success: true
+  phase_4_requires_phase_3_success: true
+  bridge_base_requires_all_bridge_2k_success: true
+  public_package_requires_reproducible_bridge_checkpoint: true
+  threshold_changes_after_test_access: prohibited
+
+stop_conditions:
+  - hard_parameterization_requires_post_output_repair
+  - any_future_information_dependency
+  - phase_2_range_gate_fails_at_data_or_compute_cap
+  - phase_2_ohlc_or_close_return_noninferiority_fails
+  - improvement_exists_only_on_training_symbols_or_periods
+  - phase_3_materially_degrades_locked_important_metrics
+  - compatibility_requires_forecasting_model_retraining_or_weight_change
+  - trainable_parameter_or_checkpoint_cap_exceeded
+  - data_cache_memory_latency_or_compute_cap_exceeded
+  - undeclared_data_or_post_test_threshold_change_required
+
+failure_product:
+  components:
+    - sentinel_structural_validator
+    - immutable_audit_layer
+    - deterministic_projection_gateway
+    - tokenizer_compatibility_profiler
+    - reproducible_research_package
+  next_conceptual_pivot: prohibited
+
+governance:
+  model_weights_committed: false
+  tokenizer_weights_committed: false
+  bridge_checkpoint_committed: false
+  raw_provider_data_committed: false
+  proprietary_reusable_dataset_committed: false
+  exact_provider_requests_and_hashes_recorded: required
+  raw_and_safe_outputs_both_required: true
+  limitations_publication: required
+  profitability_claim: prohibited
+  universal_kronos_failure_claim: prohibited
+  untouched_holdout_access: prohibited
+  official_source_and_model_license_review_before_distribution: required
+  bridge_checkpoint_license_field: required
+  bridge_training_data_policy_field: required
+  bridge_limitations_field: required

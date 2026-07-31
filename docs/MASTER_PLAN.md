@@ -1,24 +1,38 @@
-# OpenAlpha Sentinel Master Plan
+# OpenAlpha Master Plan
 
 ## Current decision
 
-Sentinel v1.1 is the final bounded constrained-decoding investigation. The
-development-only tokenizer round-trip audit found material financial-grammar
-violations in both Tokenizer-2k and Tokenizer-base before autoregressive generation.
-Under the preregistered decision rule, the primary classification is
-TOKENIZER_CONSTRAINT_DEFECT. A support-conditioned decoder is not authorized.
-Sentinel therefore ships as a validator, immutable raw-output audit layer,
-terminal-projection gateway, compatibility profiler, and model-selection safety
-check. Training a constraint-preserving tokenizer would be a separate future track.
+OpenAlpha remains one project. Its first public integration is OpenAlpha for
+Kronos: Sentinel assurance, a learned Bridge compatibility decoder, and the full
+Evidence record.
 
-Sentinel v0 reliability prediction is retired after a negative chronological
+The separately versioned Bridge v0 direction begins only with compatibility design
+and the Phase 1 mathematical contract. It freezes the official encoder, implicit
+codebook, Tokenizer-2k causal decoder trunk, Kronos-mini forecasting transformer,
+token vocabulary, and every original generated token sequence. Only a 17,605-
+parameter constrained sequence reconstruction head may later be trained. The raw
+official decoder output and the separately labeled Bridge output must both remain
+available.
+
+This direction builds on rather than reverses Sentinel v1.1. The v1.1 locked rule
+stopped inference-time token filtering and support-conditioned decoding after the
+primary classification `TOKENIZER_CONSTRAINT_DEFECT`. Its documentation explicitly
+left a separately trained constraint-preserving reconstruction direction outside
+that stopped track. Bridge intervenes only at the continuous reconstruction
+boundary and does not change token generation.
+
+Sentinel v0 reliability prediction remains retired after a negative chronological
 development result. Its frozen policy will not be run on the untouched holdout.
-Sentinel v1 Phase 3B is also complete: constrained decoding achieved valid returned
-paths, but no in-loop method passed every locked fidelity and operational gate. The
-result is **VALIDITY SUCCEEDS, QUALITY DEGRADES**. No larger experiment or
-model-size canary is authorized by this result. See `SENTINEL_V0_POSTMORTEM.md`,
-`SENTINEL_CONSTRAINED_DECODING_DESIGN.md`, and
-`research/sentinel-v1/report.md`.
+Sentinel v1 remains complete with **VALIDITY SUCCEEDS, QUALITY DEGRADES**: terminal
+projection guaranteed returned validity, stepwise re-encoding hard-failed
+excessively, and candidate resampling failed the range gate. No prior outcome,
+threshold, result, artifact, or claim boundary is changed.
+
+Bridge-2K reconstruction feasibility must pass before forecast integration.
+Bridge-base is prohibited until Bridge-2K passes all reconstruction, fixed forecast,
+and external-generalization gates. See `OPENALPHA_PIVOT.md`,
+`OPENALPHA_KRONOS_BRIDGE.md`, `KRONOS_COMPATIBILITY_BOUNDARY.md`, and
+`research/bridge-v0/experiment.yaml`.
 
 ## Preserved v0 mission and result
 
@@ -61,11 +75,17 @@ not run.
 
 ## Next justified scope
 
-Complete and publish the bounded v1.1 compatibility artifacts, then stop decoder
-research. Retain the structural validator and explicit terminal projection gateway.
-Do not propose another inference-only candidate-selection pivot from the same
-development sample. Do not use existing v0 outcomes for feature mining, access the
-untouched holdout, or claim improved forecasting.
+Implement Phase 1 only: the typed constrained representation, stable forward and
+inverse transforms, causal previous-close chaining, normalization-state contract,
+optional-volume behavior, independent structural validation, deterministic
+serialization, property tests, and numerical edge-case tests. Do not retrieve the
+Bridge corpus, fit a head, run reconstruction metrics, generate a checkpoint, run
+Kronos forecasts, or access the untouched holdout until the complete Phase 1 gate
+passes and its artifacts are committed.
+
+The former v1.1 next-step instruction to stop inference-only decoder research
+remains binding. Bridge is not another candidate-selection method and may not reuse
+v0 outcomes for feature mining or make an improved-forecasting claim.
 
 ## Stage 0 — Preserved evidence infrastructure
 

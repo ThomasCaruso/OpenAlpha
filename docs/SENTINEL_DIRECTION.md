@@ -1,34 +1,38 @@
 # OpenAlpha Sentinel Direction
 
-- Decision date: 2026-07-30
-- Status: v0 reliability retired; v1.1 compatibility study is the final decoder track
-- Preserved commits: `c037bd5`, `27f0c69`
+- Decision date: 2026-07-30; OpenAlpha integration update: 2026-07-31
+- Status: v0 reliability retired; Sentinel assurance retained within OpenAlpha for Kronos
+- Preserved commits: `c037bd5`, `27f0c69`, `daf3477`
 
 ## Current product direction
 
-Sentinel v1.1 establishes the durable product boundary. Both pinned released
+Sentinel is OpenAlpha's assurance layer. It validates the official raw forecast and
+every separately labeled compatible reconstruction, preserves exact violations and
+provenance, creates immutable audits, and prevents an invalid raw path from being
+silently accepted downstream. Deterministic terminal projection remains an explicit
+fallback gateway, never a disguised model output or an accuracy claim.
+
+Sentinel v1.1 established why that assurance is necessary. Both pinned released
 tokenizers materially violated OHLC constraints during encode-decode reconstruction
-of valid development-only ETF sequences. This places the incompatibility in the
-continuous tokenizer reconstruction before any autoregressive token selection.
-The locked root-cause result is TOKENIZER_CONSTRAINT_DEFECT.
+of valid development-only ETF sequences. This places the measured incompatibility
+in continuous tokenizer reconstruction before autoregressive token selection. The
+locked result remains `TOKENIZER_CONSTRAINT_DEFECT`.
 
-No new support-conditioned decoder is authorized by that classification. The
-product becomes structural validation, immutable raw-output audit, deterministic
-terminal projection, token-manifold compatibility profiling, and model-selection
-safety checks. A constraint-preserving tokenizer is a distinct future training
-research direction, not another Sentinel inference phase.
+That classification did not authorize support-conditioned sampling or another
+inference-only token-selection method. The bounded v1 experiment remains
+**VALIDITY SUCCEEDS, QUALITY DEGRADES**: candidate resampling returned 36 of 36
+valid paths but failed the high-low range gate, while stepwise project/re-encode
+hard-failed 21 of 36 paths. The model-size canary, larger v1 study, and untouched
+holdout remain unrun.
 
-OpenAlpha Sentinel v1 is a financial grammar-constrained decoding layer. It seeks to
-prevent invalid generated K-lines from becoming autoregressive context, without
-retraining or modifying model weights. Structural assurance and auditable repair
-remain; v0 forecast-error risk prediction is retired.
+OpenAlpha Bridge is a new, separately preregistered training track at the continuous
+reconstruction boundary, not another Sentinel phase. It retains all official tokens
+and weights, reuses the frozen causal tokenizer decoder trunk, and produces a
+separately labeled constrained path. Sentinel validates and audits both the official
+and Bridge paths. See `OPENALPHA_PIVOT.md` and
+`OPENALPHA_KRONOS_BRIDGE.md`.
 
-The bounded v1 experiment reached **VALIDITY SUCCEEDS, QUALITY DEGRADES**. Bounded
-valid-candidate resampling produced 36 of 36 structurally valid paths without
-fallback, but failed the locked high-low range-error gate. Stepwise project and
-re-encode returned valid paths when it succeeded but hard-failed 21 of 36 paths.
-No in-loop method passed every continuation criterion, so the model-size canary,
-larger study, and holdout remain unrun.
+Structural assurance remains; v0 forecast-error risk prediction remains retired.
 
 The v0 product definition below is preserved as historical context.
 
