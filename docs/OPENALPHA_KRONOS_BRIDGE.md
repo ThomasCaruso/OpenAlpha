@@ -10,6 +10,19 @@
 Bridge-2K is a compatibility experiment, not a new tokenizer, forecasting model, or
 trading system.
 
+## Phase 1 implementation status
+
+The mathematical/runtime boundary is implemented in the internal
+`openalpha-bridge` workspace package. It provides immutable configuration, honest
+target encoding, versioned five-channel activation mapping, causal float32/float64
+reconstruction, all three volume modes, a Sentinel audit adapter, deterministic
+serialization, and numerical round-trip audit.
+
+Phase 1 retrieved no market data, loaded no Kronos source or checkpoint at runtime,
+ran no forecast, trained no head, created no checkpoint, and accessed no untouched
+holdout. It proves the hard output contract only; learned reconstruction and
+forecast quality remain entirely unmeasured.
+
 ## Product contract
 
 Kronos remains responsible for predicting hierarchical market-token sequences.
@@ -112,6 +125,9 @@ when present. The representation, caps, missing-volume behavior, numerical guard
 proof, and Phase 1 test obligations are specified in
 `BRIDGE_MATHEMATICAL_REPRESENTATION.md`.
 
+The explicit dtype guards, failure classes, round-trip tolerances, tensor encoding,
+and property evidence are specified in `BRIDGE_NUMERICAL_CONTRACT.md`.
+
 No structural-validity penalty substitutes for this construction. Sentinel still
 validates the result independently and fails closed if the implementation violates
 the contract.
@@ -212,10 +228,11 @@ Checkpoints are release or model-hub artifacts and are never committed.
 
 ### Phase 1: mathematical contract
 
-Implement only the representation, inverse, typed batches, independent validator,
-canonical serialization, property tests, numerical tests, missing-volume policy,
-sequence chaining, and causal future-perturbation checks. Do not load training data
-or fit a decoder.
+Complete. The representation, inverse, exact batch/anchor checks, independent
+Sentinel validator adapter, canonical serialization, dtype-specific numerical
+audits, missing-volume policy, causal chaining, future-perturbation invariance, and
+10,500 deterministic property examples are implemented and tested. There is no
+post-output projection. No training data was loaded and no decoder head was fitted.
 
 ### Phase 2: Bridge-2K reconstruction feasibility
 
@@ -292,12 +309,13 @@ On failure, OpenAlpha retains Sentinel validation, immutable audit, deterministi
 projection, compatibility profiling, and the complete Bridge evidence. It does not
 begin another conceptual pivot.
 
-## Known risks before implementation
+## Remaining risks after Phase 1
 
 - The frozen token sequence may not retain enough range or wick information.
 - Encoded real tokens and autoregressively generated tokens may have different
   distributions even when they share identifiers.
-- Recursive previous-close reconstruction may accumulate path drift.
+- Recursive previous-close reconstruction may accumulate path drift on learned
+  suffix distributions outside the deterministic Phase 1 stress fixtures.
 - The fixed numerical caps exclude rare but valid extreme candles.
 - The selected boundary depends on pinned Python module internals rather than a
   formal upstream decoder-trunk API.

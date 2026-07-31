@@ -2,9 +2,10 @@
 
 ## Status
 
-This document defines the Phase 1 mathematical contract. It does not implement or
-train a learned decoder. Numerical constants are frozen before Bridge-2K evaluation
-in `research/bridge-v0/experiment.yaml`.
+This document defines the implemented Phase 1 mathematical contract in
+`packages/bridge`. Phase 1 implements no learned decoder and performs no training.
+Numerical constants remain frozen before Bridge-2K evaluation in
+`research/bridge-v0/experiment.yaml`.
 
 The contract has two layers:
 
@@ -33,11 +34,15 @@ A source candle is supported when:
 - `abs(log(C_t/O_t)) <= log(4)`;
 - `log(H_t/max(O_t,C_t)) <= log(4)`;
 - `log(min(O_t,C_t)/L_t) <= log(4)`; and
-- the output suffix contains at most 64 candles.
+- the output suffix contains at most the immutable configuration limit. The
+  Bridge-2K default and locked Phase 2 limit is 64 candles; Phase 1 may use a larger
+  validated limit, up to 4,096, only for deterministic recursive-stability tests.
 
 Valid candles outside these deliberately broad numerical limits are
-`UNSUPPORTED_NUMERICAL_DOMAIN`; they are not clipped into the experiment. This
-keeps every emitted finite-float guarantee explicit and testable.
+typed `OUT_OF_DOMAIN` failures; they are not clipped into the experiment. Invalid
+source structure is reported separately as `INVALID_INPUT`, while a recursive
+dtype/exponential guard is `UNSUPPORTED_NUMERICAL`. This keeps every emitted
+finite-float guarantee explicit and testable.
 
 ## Forward transform
 
@@ -128,6 +133,21 @@ is supported by the mathematical representation itself and may also occur throug
 floating-point underflow of the nonnegative map. Structural validity does not depend
 on exact zero recovery.
 
+For a signed target `y` strictly inside `(-cap,cap)`, the inverse training-target
+mapping is `atanh(y/cap)`. Its forward derivative is
+`cap * (1 - tanh(x)^2)`: it is largest at zero and saturates toward zero at both
+bounds.
+
+For a nonnegative target `y` strictly inside `(0,cap)`, first recover
+`s = cap*y/(cap-y)`, then invert softplus as
+`log(expm1(s))`, using the stable equivalent
+`s + log1p(-exp(-s))` for large `s`. Exact zero corresponds to raw negative
+infinity and the exact cap to raw positive infinity, so neither has a finite raw
+inverse. The nonnegative forward derivative is
+`cap^2 * sigmoid(x) / (cap + softplus(x))^2`; it is nonnegative and tends to zero
+at both saturation extremes. Phase 1 exposes these inverse functions for target
+analysis but never uses them to clip target candles.
+
 ## Proof of structural validity
 
 Assume a supported positive `C_{t-1}`, finite mapped parameters, and successful
@@ -181,32 +201,28 @@ The real suffix is normalized with that frozen prefix state before the official
 encoder creates target tokens. At inference, the same state is calculated from
 historical data only. No statistic is recomputed from realized future candles.
 
-## Typed batch interfaces for Phase 1
+## Implemented typed batch interfaces
 
-The implementation task will define immutable typed records equivalent to:
+`BridgeFinancialTransform` accepts NumPy tensors without a PyTorch or checkpoint
+dependency and returns read-only typed records:
 
 ```text
-FinancialRepresentationBatch
-  gap: float64[B,S]
-  body: float64[B,S]
-  upper: float64[B,S]
-  lower: float64[B,S]
-  log1p_volume: optional float64[B,S]
-  volume_present: bool[B]
+FinancialFeatureTensor
+  values: float64 targets or configured float32/float64 mapped features [B,S,F]
+  volume_present: optional bool[B,S]
+  representation_version and configuration_sha256
 
-ReconstructionAnchorBatch
-  previous_close: float64[B]
-  maximum_suffix_length: 64
-
-ReconstructedCandleBatch
-  open/high/low/close: float64[B,S]
-  volume: optional float64[B,S]
-  amount: optional derived float64[B,S]
+ReconstructedSequence
+  candles: configured float32/float64 [B,S,F]
+  transformed_features: FinancialFeatureTensor
+  volume_present: optional bool[B,S]
+  numerical_warnings and projection_applied=false
 ```
 
-Batch dimensions must agree exactly. Ragged suffixes use an explicit boolean mask;
-masked positions are never serialized as candles. Broadcasting that could change
-the batch or time axis is rejected.
+The `[S,F]` convenience form preserves a single-sequence output. Batch dimensions
+and one initial anchor per sequence must agree exactly. Broadcasting that could
+change the batch or time axis is rejected. Phase 1 does not accept ragged sequence
+masks; the only mask is the exact optional-volume presence mask.
 
 ## Phase 1 validator contract
 
@@ -217,16 +233,15 @@ construction. It reports, at minimum:
 - nonpositive OHLC;
 - high below open, close, or low;
 - low above open, close, or high;
-- negative volume or amount;
+- negative volume where volume is present;
 - missing, duplicate, unordered, or unexpected timestamps;
-- shape, mask, column-order, and suffix-length mismatches; and
-- provenance or compatibility-manifest mismatches.
+- shape, mask, column-order, and suffix-length mismatches.
 
 Validation never mutates the raw or safe path.
 
 ## Round-trip and property requirements
 
-Before any learned decoder work, Phase 1 must demonstrate:
+Before any learned decoder work, Phase 1 demonstrates:
 
 - every finite supported neural-output tensor either produces a structurally valid
   sequence or a typed no-output numerical failure;
@@ -246,13 +261,22 @@ and extreme supported wicks, cap-adjacent returns, missing volume, batch masks, 
 the 64-step chaining bound. Numerical tests cover anchor bounds, log-price guards,
 subnormal-adjacent values, overflow attempts, and malformed tensors.
 
+The implemented deterministic property suite executes 10,000 raw-head examples,
+250 variable-batch examples, and 250 optional-volume examples. Successful output
+invalidity is zero. Float64 and float32 round trips cover lengths 1, 5, 128, 512,
+and 2,048. Exact dtype-specific tolerances and observed audit fields are in
+`BRIDGE_NUMERICAL_CONTRACT.md`.
+
 ## Serialization
 
 Canonical artifacts use UTF-8 JSON with sorted keys, compact separators, explicit
-schema versions, ISO-8601 timestamps, decimal finite numbers only, and SHA-256 over
-the exact bytes. Negative zero is serialized as zero. NaN, infinity, unordered
-timestamps, implicit missing values, and platform-dependent tensor dumps are
-prohibited.
+schema versions, UTC ISO-8601 timestamps, and SHA-256 over the exact bytes. Tensors
+are C-order little-endian IEEE-754 bytes represented as lowercase hexadecimal with
+explicit dtype and shape. Negative zero is serialized as positive zero. Missing
+volume is encoded by an explicit byte mask and a normalized storage slot, so NaN
+never enters canonical bytes and missing volume hashes differently from present
+zero. Infinity, naïve datetimes, implicit missing values, and platform-dependent
+native tensor dumps are prohibited.
 
 Raw official output, safe Bridge output, validation, token IDs, compatibility
 manifest, normalization state hash, latency, and raw-to-safe differences are

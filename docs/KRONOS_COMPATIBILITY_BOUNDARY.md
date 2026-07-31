@@ -165,7 +165,7 @@ The stable public compatibility bundle is:
 | `normalization_epsilon` | scalar `1e-5` | pinned predictor contract | no |
 | `clip_bounds` | scalar pair `[-5,5]` | pinned predictor contract | no |
 | `previous_close` | positive `float64[B]` | last observation before output suffix | causal state |
-| `volume_present` | `bool[B]` | input schema | no |
+| `volume_present` | mode plus optional `bool[B,S]` target/output mask | input schema | no |
 
 Inside the frozen compatibility trunk:
 
@@ -213,6 +213,27 @@ forecasting transformer. The implicit tokenizer codebook and learned frozen
 `post_quant_embed` can be reused directly. The learned forecast-model token
 embeddings are not needed and are deliberately excluded to avoid coupling Bridge to
 a particular forecasting-backbone size.
+
+## Phase 1 boundary implementation
+
+Phase 1 deliberately implements only the stable continuous-financial side of this
+boundary. `BridgeFinancialTransform` receives either a valid source OHLC(V) tensor,
+a transformed financial-feature tensor, or a future `[B,S,5]` raw-head tensor. It
+does not accept token IDs, instantiate the frozen decoder trunk, load a Kronos
+module, or claim checkpoint compatibility.
+
+The future sequence head must pass its five raw float32 outputs into this exact
+versioned mapping. Phase 1 returns both `transformed_features` and separately
+labeled reconstructed candles; it records the representation/configuration hash and
+sets `projection_applied=false`. Each batch requires one exact initial previous
+close per sequence. Later anchors are the preceding reconstructed close, so no
+future true candle, official-decoder next close, or broadcast state can enter the
+recursion.
+
+This separation is the smallest useful implementation slice: the mathematical
+contract can be proven without loading protected model assets, while the Phase 2
+adapter remains obligated to reuse the pinned full-sequence trunk and unchanged
+tokens described above.
 
 ## Runtime rejection rules
 

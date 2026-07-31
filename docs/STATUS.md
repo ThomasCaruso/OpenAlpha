@@ -2,7 +2,69 @@
 
 Last updated: 2026-07-31
 
-## OpenAlpha for Kronos Bridge Phase 0
+## OpenAlpha for Kronos Bridge Phase 1
+
+**Claim boundary: MATHEMATICAL AND RUNTIME CONTRACT ONLY - NO TRAINING,
+FORECASTING, MARKET DATA, CHECKPOINT, OR HOLDOUT EVIDENCE.**
+
+Phase 1 is implemented on `feature/openalpha-kronos-bridge` on top of preserved
+Phase 0 commit `ce507303fe8633e74ae60248ecb7450ea0dcc707`. The locked experiment remains
+byte-identical at SHA-256
+`d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2`.
+All Sentinel v0, v1, and v1.1 source, tests, evidence, and immutable research
+artifacts remain unchanged.
+
+The new internal `openalpha-bridge` workspace package implements:
+
+- a strict frozen `openalpha.bridge.financial.v1` configuration with exact source,
+  channel, volume, dtype, guard, policy, feature-order, and suffix limits;
+- typed `INVALID_INPUT`, `OUT_OF_DOMAIN`, `UNSUPPORTED_NUMERICAL`, shape, and
+  configuration failures with exact sequence/candle/field/value/bound location;
+- honest float64 target construction with no default or hidden clipping;
+- scaled-tanh gap/body mapping and bounded stable-softplus wick/volume mapping;
+- recursive float32 or float64 reconstruction from one exact anchor per sequence;
+- `VOLUME_REQUIRED`, `VOLUME_OPTIONAL`, and `PRICE_ONLY` semantics that distinguish
+  missing volume from present zero;
+- single-sequence and exact batch interfaces with no axis or anchor broadcasting;
+- independent reuse of Sentinel structural validation plus strict timestamp-order
+  checks;
+- canonical little-endian IEEE-754 tensor serialization, explicit missing-volume
+  masks, UTC timestamps, and SHA-256 identity; and
+- per-field absolute, relative, and log-space numerical audits with recursive close
+  drift.
+
+The hard formulas guarantee positive finite OHLC and correct high/low ordering for
+every successful output; volume is nonnegative when present. A dtype or scientific
+guard failure emits no candle. The validator asserts this guarantee but does not
+create it, and `projection_applied` is always false.
+
+Targeted Phase 1 verification contains 110 passing tests, and the complete
+repository verification contains 513 passing tests. The
+deterministic property proof covers 10,000 finite raw-head examples, 250 variable
+batch examples, and 250 optional-volume examples with zero invalid successful
+outputs. Round trips pass the locked float64 and float32 tolerances at lengths 1, 5,
+128, 512, and 2,048. Ruff, formatting, and Pyright pass for the package.
+
+Phase 1 retrieved no market data, contacted no provider, loaded no Kronos
+checkpoint/tokenizer, ran no official inference or forecast, trained no 17,605
+parameter head, produced no checkpoint, and accessed no untouched holdout. No
+learned reconstruction or forecast-quality claim is authorized.
+
+The exact next gated task is Phase 2 Bridge-2K reconstruction feasibility: retrieve
+only the locked bounded development corpus, load the pinned Tokenizer-2k assets,
+freeze the official encoder/codebook/decoder trunk, train only the preregistered
+17,605-parameter sequence head, and compare identical held-out real-token sequences
+against the official decoder and locked baselines. This task is not part of Phase 1
+and must not begin unless the Phase 1 seal and preservation checks pass.
+
+Implementation documents:
+
+- `docs/BRIDGE_MATHEMATICAL_REPRESENTATION.md`
+- `docs/BRIDGE_NUMERICAL_CONTRACT.md`
+- `docs/OPENALPHA_KRONOS_BRIDGE.md`
+- `docs/KRONOS_COMPATIBILITY_BOUNDARY.md`
+
+## Preserved OpenAlpha for Kronos Bridge Phase 0 record
 
 **Claim boundary: DESIGN AND PREREGISTRATION ONLY - NO BRIDGE TRAINING OR
 HOLDOUT EVIDENCE.**
@@ -53,15 +115,15 @@ The bounded Bridge-2K plan is locked before implementation:
 The locked Bridge v0 experiment SHA-256 is
 `d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2`.
 
-No decoder has been implemented or trained, no market data has been retrieved for
-Bridge, no Bridge test or forecast metric has been calculated, no checkpoint has
-been created, and the untouched holdout remains unaccessed.
+At the Phase 0 seal, no decoder had been implemented or trained, no market data had
+been retrieved for Bridge, no Bridge test or forecast metric had been calculated,
+no checkpoint had been created, and the untouched holdout remained unaccessed.
 
-The exact next task is Phase 1 implementation of the typed mathematical
+The exact task after the Phase 0 seal was Phase 1 implementation of the typed mathematical
 representation, stable forward/inverse transforms, causal chaining,
 normalization-state and missing-volume contracts, independent validation,
 deterministic serialization, property tests, and numerical edge-case tests. Work
-must stop again before corpus retrieval or learned decoder training.
+was required to stop again before corpus retrieval or learned decoder training.
 
 Design sources:
 

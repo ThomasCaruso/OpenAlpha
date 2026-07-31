@@ -9,6 +9,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "openalpha-bridge",
     "openalpha-experiment-spec",
     "openalpha-research-core",
     "openalpha-sentinel",
@@ -306,6 +307,23 @@ wheels = [
 ]
 
 [[package]]
+name = "openalpha-bridge"
+version = "0.1.0"
+source = { editable = "packages/bridge" }
+dependencies = [
+    { name = "numpy" },
+    { name = "openalpha-sentinel" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.5,<3" },
+    { name = "openalpha-sentinel", editable = "packages/sentinel" },
+    { name = "pydantic", specifier = ">=2.11,<3" },
+]
+
+[[package]]
 name = "openalpha-experiment-spec"
 version = "0.1.0"
 source = { editable = "packages/experiment-spec" }
@@ -359,6 +377,7 @@ name = "openalpha-workspace"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "openalpha-bridge" },
     { name = "openalpha-research-core" },
     { name = "openalpha-sentinel" },
 ]
@@ -382,6 +401,7 @@ sentinel-phase3 = [
 
 [package.metadata]
 requires-dist = [
+    { name = "openalpha-bridge", editable = "packages/bridge" },
     { name = "openalpha-research-core", editable = "packages/research-core" },
     { name = "openalpha-sentinel", editable = "packages/sentinel" },
 ]

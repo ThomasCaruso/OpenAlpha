@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openalpha-bridge"
+version = "0.1.0"
+description = "Constraint-preserving mathematical decoder contract for OpenAlpha Bridge"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "numpy>=2.5,<3",
+  "openalpha-sentinel",
+  "pydantic>=2.11,<3",
+]
+
+[tool.uv.sources]
+openalpha-sentinel = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openalpha_bridge"]
