@@ -33,6 +33,98 @@ Design-lock verification:
 - Pyright - exit 0; 0 errors, 0 warnings, 0 informations;
 - `git diff --check` - exit 0.
 
+## Sentinel v1 Phase 3B bounded feasibility result
+
+**Claim boundary: DEVELOPMENT FEASIBILITY - NOT HOLDOUT EVIDENCE.**
+
+All 12 locked origins completed with zero origin failures: six SPY and six QQQ
+cutoffs, three seeds per origin, context 512, and five XNYS forecast sessions. The
+corrected private run receipt is
+`3c176793e9863496a2796d735095fa616467a539a4d5c02852039353e4f9a99e`.
+Every forecast record was sealed before its separate outcome operation, and all 12
+terminal chains verify. The untouched holdout was not accessed.
+
+The original private run and analysis remain preserved. The first analysis exposed
+two audit-only defects: Windows peak working-set measurement returned zero because
+the native API signature was incomplete, and deterministic replay hashing included
+candidate-validation elapsed time. Test-first fixes corrected those fields without
+changing method paths or quality metrics. The original run receipt
+`7a22deda53dd678fe2c76970a0661a4838537fcf60003020ef5df8745e873114`
+and analysis
+`c5db13568eb79db17b4ac81c450ffea971943274c2162ee908110c4b51b81505`
+remain private and unchanged. The final analysis SHA-256 is
+`12ba69d8ccdd63efbe862e85b791d8518dc3f5abaeb3b8f97c70536afd5b005a`.
+
+### Paired method results
+
+| Method | Successful paths | Valid returned paths | Normalized OHLC MAE | High-low range MAE | Close MAE | Median latency |
+|---|---:|---:|---:|---:|---:|---:|
+| Raw autoregressive | 36/36 | 13/36 | 0.02760710 | 0.01030152 | 0.02675216 | 416.70 ms |
+| Terminal projection | 36/36 | 36/36 | 0.02734030 | 0.00959934 | 0.02675216 | 417.03 ms |
+| Stepwise project/re-encode | 15/36 | 15/15 | 0.02333886 | 0.00844207 | 0.02483735 | 546.66 ms |
+| Valid-candidate resampling | 36/36 | 36/36 | 0.02547039 | 0.01045756 | 0.02442360 | 1539.20 ms |
+
+Raw path structural validity was 36.11%. Terminal projection recorded 80 field
+adjustments but, by definition, could not change earlier autoregressive
+conditioning. Stepwise project/re-encode attempted intervention at 23 steps, changed
+the hierarchical token pair only twice, and hard-failed 21 paths because the actual
+encode/decode round trip remained invalid. Valid-candidate resampling intervened at
+66 steps, rejected 67.01% of considered candidates, selected mean rank 9.32, used
+three search expansions, and never invoked its explicit fallback. Its ensemble
+pairwise diversity was 0.01559381 versus raw 0.01800002, with no repeated paths.
+Median latency was 3.69 times raw, and measured peak working set was 667,443,200
+bytes for both raw and candidate resampling.
+
+Terminal projection's 417.03 ms is the paired raw rollout plus 0.31 ms median
+projection overhead. Peak memory is the Windows process-wide cumulative working-set
+peak observed within the shared worker; it is a measured operational upper bound,
+not an isolated incremental allocation for each method.
+
+The zero-return baseline five-session MAE was 0.01943683, below every tested Kronos
+method. This feasibility sample does not establish comparative forecasting
+performance; return error was secondary and no holdout was used.
+
+### Locked gate decision
+
+- Stepwise project/re-encode passed validity, close, full-OHLC, high-low range,
+  diversity, determinism, runtime/memory, and no-weight-change gates, but failed the
+  hard-failure gate at 21/36 failures.
+- Valid-candidate resampling passed validity, hard failure, close, full-OHLC,
+  diversity, determinism, runtime/memory, and no-weight-change gates, but failed the
+  high-low range gate. Its 0.01045756 range MAE exceeded the locked maximum
+  0.01007931.
+- No in-loop method passed all gates. The preregistered model-size canary therefore
+  remained `not_run_prerequisite_not_met`; Kronos-small and Kronos-base were not
+  downloaded or run.
+
+The required conclusion is **VALIDITY SUCCEEDS, QUALITY DEGRADES**. Structural
+validation and explicit terminal projection remain useful safety infrastructure.
+The tested in-loop decoder does not justify a larger evaluation or holdout access.
+
+### Final verification
+
+- targeted Phase 3B tests - exit 0; 24 passed in 7.97 seconds;
+- complete test suite - exit 0; 360 passed in 76.38 seconds;
+- Ruff across the repository - exit 0; all checks passed;
+- Pyright across research-core, experiment-spec, Sentinel, and runner scripts -
+  exit 0; 0 errors, 0 warnings, 0 informations;
+- offline Phase 3B verification - exit 0; 12/12 origin chains verified, experiment
+  SHA-256 matched, analysis/report hashes matched, and network/inference access was
+  false during verification;
+- manifest verification test - exit 0; every tracked derived-artifact and
+  implementation hash matched, 12 compact summaries parsed, and no forecast path
+  was published;
+- policy scan - exit 0; no model weights, provider response, CSV history, or cache
+  artifact was tracked;
+- v0 research diff - empty;
+- `git diff --check` - exit 0.
+
+The artifact-generated report SHA-256 is
+`85213205cf8bf96243d88d59565f39cf3341c1461d6f44313717e523c54b8d12`.
+The exact next task, if any, is to preregister a separately versioned, more
+principled candidate-selection experiment. Do not run the larger sample or access
+the untouched holdout from this result.
+
 ## Product direction
 
 OpenAlpha has made its second and final pivot to **OpenAlpha Sentinel**: a forecast-time reliability, failure-detection, and intervention layer. Kronos is the first forecast provider and case study.

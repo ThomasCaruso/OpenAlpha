@@ -1,7 +1,7 @@
 # OpenAlpha Sentinel Direction
 
 - Decision date: 2026-07-30
-- Status: v0 reliability track retired; v1 constrained-decoding feasibility active
+- Status: v0 reliability track retired; v1 bounded feasibility complete
 - Preserved commits: `c037bd5`, `27f0c69`
 
 ## Current product direction
@@ -10,6 +10,13 @@ OpenAlpha Sentinel v1 is a financial grammar-constrained decoding layer. It seek
 prevent invalid generated K-lines from becoming autoregressive context, without
 retraining or modifying model weights. Structural assurance and auditable repair
 remain; v0 forecast-error risk prediction is retired.
+
+The bounded v1 experiment reached **VALIDITY SUCCEEDS, QUALITY DEGRADES**. Bounded
+valid-candidate resampling produced 36 of 36 structurally valid paths without
+fallback, but failed the locked high-low range-error gate. Stepwise project and
+re-encode returned valid paths when it succeeded but hard-failed 21 of 36 paths.
+No in-loop method passed every continuation criterion, so the model-size canary,
+larger study, and holdout remain unrun.
 
 The v0 product definition below is preserved as historical context.
 
@@ -56,9 +63,14 @@ Phase 2.5 confirmed that the pinned official Kronos predictor can emit reproduci
 
 ## Definition of value
 
-The next measure of value is whether pre-outcome diagnostics predict later forecast failure. Sentinel v0 is useful only if the locked holdout shows that higher risk corresponds to higher Kronos error and that selective acceptance or blending reduces error at declared coverage levels.
+The completed v1 feasibility sample is valuable as a bounded engineering result:
+hard validity can be enforced without retraining, but the tested methods did not
+simultaneously satisfy fidelity, failure-rate, diversity, and operational gates.
+The defensible product surface is therefore structural validation and explicit
+repair, not a claim of improved forecasting.
 
-Plausible explanations, repository size, interface polish, and in-sample fit are not evidence.
+Plausible explanations, repository size, interface polish, and development-only
+accuracy differences are not evidence of general forecasting improvement.
 
 ## V0 closure and v1 question
 
@@ -86,13 +98,9 @@ No functioning infrastructure is redesigned:
 
 Sentinel v0 does not include a frontend, accounts, database, live trading, portfolio optimization, public SDK/API, model marketplace, enterprise MLOps, news or filing interpretation, macro-event ingestion, indicator library, fine-tuning, complex repair, universal protocol schema, many assets/horizons, large local datasets, or committed model weights.
 
-## Delivery gates
+## Completed decision boundary
 
-1. Lock this direction, experiment configuration, targets, continuation criteria, and minimal contracts.
-2. Prove one real SPY context-to-diagnostic-to-outcome chain.
-3. Audit the official integration and lock structural validity before scaling.
-4. Run the chronological development sample and freeze the risk model/action policy.
-5. Run the untouched holdout once and generate the go/no-go decision.
-6. Decide whether any broader product surface is justified.
-
-Protocol v1 remains unfrozen until after the Sentinel v0 decision.
+Sentinel v0 closed without holdout access. Sentinel v1 completed only its 12-origin
+development feasibility experiment. A future decoding study requires a new version
+and preregistration; the existing untouched holdout is not available for iteration.
+Protocol v1 remains unfrozen.

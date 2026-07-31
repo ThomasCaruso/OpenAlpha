@@ -14,6 +14,22 @@ raw autoregression, terminal projection, stepwise project/re-encode, and bounded
 valid-candidate resampling, and judges them on hard validity, path/range/barrier
 quality, diversity, determinism, latency, and memory.
 
+Phase 3B completed all 12 locked development origins and 36 paths per method with
+no origin failure and no holdout access. Raw structural validity was 36.11%.
+Terminal projection and candidate resampling returned 36/36 valid paths. Stepwise
+project/re-encode returned 15/36 valid paths and explicitly hard-failed the other
+21 because the projected-candle tokenizer round trip remained invalid. Candidate
+resampling returned 36/36 valid paths with zero fallback, retained nonzero
+diversity, and operated within the runtime/memory gate, but its high-low range MAE
+of 0.01045756 exceeded the locked limit of 1.05 times the better raw/terminal value
+(0.01007931). The frozen conclusion is **VALIDITY SUCCEEDS, QUALITY DEGRADES**.
+
+The model-size replication canary required an in-loop mini method to pass every
+gate. None did, so Kronos-small and Kronos-base were not downloaded or run. The
+full method, barrier, path, diversity, intervention, and operational results are in
+`research/sentinel-v1/feasibility/feasibility_results.json` and the generated
+report.
+
 ## Status and claim boundary
 
 Sentinel v0 has completed its locked Phase 3A development analysis. It is not a sealed scientific publication, production reliability system, trading strategy, or public claim that Sentinel or Kronos works. No holdout origin has been accessed.

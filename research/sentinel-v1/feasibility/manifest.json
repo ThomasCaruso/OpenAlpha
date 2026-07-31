@@ -1,0 +1,81 @@
+{
+  "schema_version": "sentinel-phase3b-manifest-v1",
+  "claim_boundary": "DEVELOPMENT FEASIBILITY - NOT HOLDOUT EVIDENCE",
+  "experiment_sha256": "55e9d2eb9a9b64feac394c40e295fa16679edc7b8e3cfa803676774e6d86d0a3",
+  "source_revision": "67b630e67f6a18c9e9be918d9b4337c960db1e9a",
+  "model_revision": "f4e68697d9d5aed55cef5c96aabc3376bcad9f81",
+  "tokenizer_revision": "26966d0035065a0cae0ebad7af8ece35bc1fb51c",
+  "eligible_origins": 12,
+  "completed_origins": 12,
+  "failed_origins": 0,
+  "paths_per_method": 36,
+  "holdout_accessed": false,
+  "artifact_chain_verified": true,
+  "conclusion": "VALIDITY_SUCCEEDS_QUALITY_DEGRADES",
+  "model_size_canary_status": "not_run_prerequisite_not_met",
+  "private_run_receipt_sha256": "3c176793e9863496a2796d735095fa616467a539a4d5c02852039353e4f9a99e",
+  "analysis_sha256": "12ba69d8ccdd63efbe862e85b791d8518dc3f5abaeb3b8f97c70536afd5b005a",
+  "report_sha256": "85213205cf8bf96243d88d59565f39cf3341c1461d6f44313717e523c54b8d12",
+  "audit_corrections": {
+    "original_private_run_receipt_sha256": "7a22deda53dd678fe2c76970a0661a4838537fcf60003020ef5df8745e873114",
+    "original_private_analysis_sha256": "c5db13568eb79db17b4ac81c450ffea971943274c2162ee908110c4b51b81505",
+    "original_records_preserved": true,
+    "corrected_fields": [
+      "windows_peak_working_set_bytes",
+      "deterministic_replay_hash_operational_noise"
+    ],
+    "method_paths_and_quality_metrics_changed": false,
+    "final_offline_analysis_additions": [
+      "intervention_step_counts",
+      "projection_magnitude",
+      "reencoded_token_change_rate",
+      "candidate_validation_time",
+      "search_expansion_count",
+      "raw_to_constrained_path_distance"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "research/sentinel-v1/feasibility/feasibility_results.json",
+      "sha256": "12ba69d8ccdd63efbe862e85b791d8518dc3f5abaeb3b8f97c70536afd5b005a",
+      "bytes": 11859
+    },
+    {
+      "path": "research/sentinel-v1/feasibility/origin_summaries.jsonl",
+      "sha256": "c0476d4be6d982a61fa4ec15232ca8841267d58e54dc8640c5c1f1dcd0988a33",
+      "bytes": 240084
+    },
+    {
+      "path": "research/sentinel-v1/feasibility/model_size_canary.json",
+      "sha256": "dc476087fd0632ab480048e3421a87dccabe69c4c4c1c506beb668e0654c8533",
+      "bytes": 232
+    },
+    {
+      "path": "research/sentinel-v1/feasibility/report.md",
+      "sha256": "85213205cf8bf96243d88d59565f39cf3341c1461d6f44313717e523c54b8d12",
+      "bytes": 8005
+    }
+  ],
+  "implementation": [
+    {
+      "path": "scripts/kronos_constrained_worker.py",
+      "sha256": "0d7d967b8010ef7d4f6fb6912b73f893977d9098ce19ec69ee50db802f787028"
+    },
+    {
+      "path": "scripts/run_sentinel_phase3b.py",
+      "sha256": "3d4c4268e8ac1349fc69b876c248a9226f2fd48b59a77cd0a841524cb295974f"
+    },
+    {
+      "path": "packages/sentinel/src/openalpha_sentinel/constrained_decoding.py",
+      "sha256": "bf429a80d09db978358e284e4bc2638cc6b182680d58317de8a203d5e6b620da"
+    },
+    {
+      "path": "packages/sentinel/src/openalpha_sentinel/decoding_metrics.py",
+      "sha256": "bf23a7c39b981a12c27edcbb882dd597f6ea02ab6f4e9ad2f0c942f08ea1f8b1"
+    },
+    {
+      "path": "packages/sentinel/src/openalpha_sentinel/phase3b.py",
+      "sha256": "c99f59c832918b4ff11a83c376e5f2c50c558abe2c21d0134225402b38dce116"
+    }
+  ]
+}

@@ -1,5 +1,17 @@
 # Sentinel v1: Financial Grammar-Constrained Decoding
 
+## Bounded feasibility result
+
+The 12-origin Phase 3B study completed with conclusion **VALIDITY SUCCEEDS,
+QUALITY DEGRADES**. Raw output was valid for 13 of 36 paths. Terminal projection
+made all final paths valid but did not alter autoregressive conditioning. Stepwise
+project/re-encode returned 15 valid paths and hard-failed 21 when the tokenizer
+round trip remained invalid. Bounded candidate resampling returned 36 valid paths
+with no fallback, but failed the preregistered high-low range-error gate. No method
+passed every continuation gate; the model-size canary and larger evaluation were
+not run. The design below remains the pre-execution rationale, not a retroactive
+description of success.
+
 ## Research question
 
 > Can hard financial-domain constraints be enforced inside the autoregressive

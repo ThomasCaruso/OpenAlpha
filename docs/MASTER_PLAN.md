@@ -4,9 +4,12 @@
 
 Sentinel v0 reliability prediction is retired after a negative chronological
 development result. Its frozen policy will not be run on the untouched holdout.
-The active, separately versioned track is Sentinel v1 financial grammar-constrained
-decoding. See `SENTINEL_V0_POSTMORTEM.md` and
-`SENTINEL_CONSTRAINED_DECODING_DESIGN.md`.
+Sentinel v1 Phase 3B is also complete: constrained decoding achieved valid returned
+paths, but no in-loop method passed every locked fidelity and operational gate. The
+result is **VALIDITY SUCCEEDS, QUALITY DEGRADES**. No larger experiment or
+model-size canary is authorized by this result. See `SENTINEL_V0_POSTMORTEM.md`,
+`SENTINEL_CONSTRAINED_DECODING_DESIGN.md`, and
+`research/sentinel-v1/report.md`.
 
 ## Preserved v0 mission and result
 
@@ -30,7 +33,7 @@ Phase 3B succeeds only if an in-loop method can truthfully state:
 
 The decoder may fail its gates. A verified negative conclusion is valid.
 
-## Active Stage 3B - bounded decoder feasibility
+## Completed Stage 3B - bounded decoder feasibility
 
 1. Close v0 and preserve its negative evidence.
 2. Trace and pin the official token-generation boundary.
@@ -39,6 +42,21 @@ The decoder may fail its gates. A verified negative conclusion is valid.
    bounded valid-candidate resampling.
 5. Run the model-size canary only after an in-loop mini method passes all gates.
 6. Stop before a larger experiment or any untouched-holdout access.
+
+All six steps are complete. Across 36 paired seed paths, raw Kronos output was
+structurally valid 36.11% of the time. Terminal projection and both in-loop methods
+returned only valid paths when they returned a path. Stepwise project/re-encode
+hard-failed 21 paths, while candidate resampling returned all 36 paths but exceeded
+the preregistered high-low range-error limit. The model-size canary was therefore
+not run.
+
+## Next justified scope
+
+Retain the structural validator and explicit terminal projection gateway. A more
+principled candidate-selection method may be proposed only as a separately
+versioned development study with new preregistered gates. Do not use the existing
+v0 outcomes for feature mining, do not access the untouched holdout, and do not
+claim improved forecasting from the Phase 3B feasibility sample.
 
 ## Stage 0 — Preserved evidence infrastructure
 
