@@ -20,11 +20,16 @@ bridge-core = ["yfinance==1.5.2"]
 bridge-kronos = ["huggingface-hub>=0.34,<1", "safetensors>=0.4,<1"]
 # Stage C training. Pulls Torch; never required by the base test suite.
 bridge-training = ["torch>=2.5,<3"]
-# Convenience aggregate for a single CUDA host.
+# Control plane and S3-compatible artifact store (Cloudflare R2 by default).
+bridge-cloud = ["boto3>=1.35,<2", "fastapi>=0.115,<1"]
+# Managed compute backend.
+bridge-modal = ["modal>=0.64,<2"]
+# Convenience aggregate for the managed cloud worker.
 bridge-gpu = [
   "openalpha-bridge[bridge-core]",
   "openalpha-bridge[bridge-kronos]",
   "openalpha-bridge[bridge-training]",
+  "openalpha-bridge[bridge-cloud]",
 ]
 
 [project.scripts]

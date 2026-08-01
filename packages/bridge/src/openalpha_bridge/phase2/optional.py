@@ -30,6 +30,8 @@ class BridgeExtra(StrEnum):
     BRIDGE_KRONOS = "bridge-kronos"
     BRIDGE_TRAINING = "bridge-training"
     BRIDGE_GPU = "bridge-gpu"
+    BRIDGE_CLOUD = "bridge-cloud"
+    BRIDGE_MODAL = "bridge-modal"
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +52,9 @@ _KNOWN: dict[str, OptionalDependency] = {
     "yfinance": OptionalDependency("yfinance", BridgeExtra.BRIDGE_CORE),
     "huggingface_hub": OptionalDependency("huggingface_hub", BridgeExtra.BRIDGE_KRONOS),
     "safetensors": OptionalDependency("safetensors", BridgeExtra.BRIDGE_KRONOS),
+    "boto3": OptionalDependency("boto3", BridgeExtra.BRIDGE_CLOUD),
+    "fastapi": OptionalDependency("fastapi", BridgeExtra.BRIDGE_CLOUD),
+    "modal": OptionalDependency("modal", BridgeExtra.BRIDGE_MODAL),
 }
 
 
