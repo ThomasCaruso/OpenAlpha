@@ -13,6 +13,23 @@ dependencies = [
   "pydantic>=2.11,<3",
 ]
 
+[project.optional-dependencies]
+# Base execution: provider retrieval only. No Torch, no model assets.
+bridge-core = ["yfinance==1.5.2"]
+# Pinned Kronos asset resolution and hash verification.
+bridge-kronos = ["huggingface-hub>=0.34,<1", "safetensors>=0.4,<1"]
+# Stage C training. Pulls Torch; never required by the base test suite.
+bridge-training = ["torch>=2.5,<3"]
+# Convenience aggregate for a single CUDA host.
+bridge-gpu = [
+  "openalpha-bridge[bridge-core]",
+  "openalpha-bridge[bridge-kronos]",
+  "openalpha-bridge[bridge-training]",
+]
+
+[project.scripts]
+openalpha-bridge-phase2 = "openalpha_bridge.phase2.cli:main"
+
 [tool.uv.sources]
 openalpha-sentinel = { workspace = true }
 
