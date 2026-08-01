@@ -116,13 +116,6 @@ def _service() -> Any:
     return Phase2ControlService(store=_build_store(), backend=ModalComputeBackend(), config=config)
 
 
-def _authenticate(headers: Any) -> Any:
-    from openalpha_bridge.cloud.auth import TokenAuthenticator
-
-    authenticator = TokenAuthenticator(os.environ.get("OPENALPHA_API_TOKEN"))
-    return authenticator.authenticate(headers.get("authorization"))
-
-
 class ModalComputeBackend:
     """Modal implementation of the narrow ComputeBackend protocol."""
 
@@ -162,66 +155,23 @@ class ModalComputeBackend:
 
 
 @app.function(image=image, secrets=secrets, timeout=CONTROL_TIMEOUT)
-@modal.fastapi_endpoint(method="POST", label="phase2-create-run")
-def create_run(item: dict, headers: dict | None = None) -> dict:
-    """POST /v1/bridge/phase2/runs"""
-    from openalpha_bridge.cloud.auth import log_admin_action
-    from openalpha_bridge.cloud.models import CreateRunRequest
+@modal.asgi_app(label="openalpha-phase2-api")
+def control_api():
+    """The documented REST control plane. See docs/BRIDGE_CLOUD_API.md.
 
-    context = _authenticate(headers or {})
-    request = CreateRunRequest.model_validate(item)
-    log_admin_action("create_run", principal=context.principal, operator=request.operator)
-    return _service().create_run(request).model_dump(mode="json")
+    One ASGI application rather than per-function endpoints: Modal's
+    fastapi_endpoint binds every declared parameter as a body or query field, so
+    a `headers` parameter never receives HTTP headers and a path parameter such
+    as `{run_id}` cannot be expressed at all.
+    """
+    from openalpha_bridge.cloud.http import build_control_api
 
-
-@app.function(image=image, secrets=secrets, timeout=CONTROL_TIMEOUT)
-@modal.fastapi_endpoint(method="GET", label="phase2-run-status")
-def run_status(run_id: str, headers: dict | None = None) -> dict:
-    """GET /v1/bridge/phase2/runs/{run_id}"""
-    _authenticate(headers or {})
-    return _service().get_run(run_id).model_dump(mode="json")
-
-
-@app.function(image=image, secrets=secrets, timeout=CONTROL_TIMEOUT)
-@modal.fastapi_endpoint(method="POST", label="phase2-resume-run")
-def resume_run(run_id: str, item: dict, headers: dict | None = None) -> dict:
-    """POST /v1/bridge/phase2/runs/{run_id}/resume"""
-    from openalpha_bridge.cloud.auth import log_admin_action
-    from openalpha_bridge.cloud.models import ResumeRunRequest
-
-    context = _authenticate(headers or {})
-    request = ResumeRunRequest.model_validate(item)
-    log_admin_action("resume_run", principal=context.principal, run_id=run_id)
-    return _service().resume_run(run_id, request).model_dump(mode="json")
-
-
-@app.function(image=image, secrets=secrets, timeout=CONTROL_TIMEOUT)
-@modal.fastapi_endpoint(method="POST", label="phase2-cancel-run")
-def cancel_run(run_id: str, item: dict, headers: dict | None = None) -> dict:
-    """POST /v1/bridge/phase2/runs/{run_id}/cancel"""
-    from openalpha_bridge.cloud.auth import log_admin_action
-    from openalpha_bridge.cloud.models import CancelRunRequest
-
-    context = _authenticate(headers or {})
-    request = CancelRunRequest.model_validate(item)
-    log_admin_action("cancel_run", principal=context.principal, run_id=run_id)
-    return _service().cancel_run(run_id, request).model_dump(mode="json")
-
-
-@app.function(image=image, secrets=secrets, timeout=CONTROL_TIMEOUT)
-@modal.fastapi_endpoint(method="GET", label="phase2-run-artifacts")
-def run_artifacts(run_id: str, headers: dict | None = None) -> dict:
-    """GET /v1/bridge/phase2/runs/{run_id}/artifacts"""
-    _authenticate(headers or {})
-    return _service().list_artifacts(run_id, signed=True).model_dump(mode="json")
-
-
-@app.function(image=image, secrets=secrets, timeout=CONTROL_TIMEOUT)
-@modal.fastapi_endpoint(method="GET", label="phase2-run-logs")
-def run_logs(run_id: str, headers: dict | None = None) -> dict:
-    """GET /v1/bridge/phase2/runs/{run_id}/logs"""
-    _authenticate(headers or {})
-    return _service().get_logs(run_id).model_dump(mode="json")
+    _register_secrets()
+    return build_control_api(
+        service_factory=_service,
+        token_provider=lambda: os.environ.get("OPENALPHA_API_TOKEN"),
+        version=APP_VERSION,
+    )
 
 
 # ------------------------------------------------------- Phase 2 GPU worker

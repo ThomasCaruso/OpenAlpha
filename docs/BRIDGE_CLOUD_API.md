@@ -7,6 +7,17 @@ input. The public cannot start GPU jobs.
 Base URL is the deployed Modal endpoint, referred to below as
 `$OPENALPHA_API_BASE_URL`.
 
+The control plane is served as a **single ASGI application** (Modal label
+`openalpha-phase2-api`), so every route below lives under one base URL and the
+paths are exactly as written, path parameters included. `modal deploy` prints
+that URL; put it in the `openalpha-api` secret and the `OPENALPHA_API_BASE_URL`
+GitHub variable.
+
+The application is built by `openalpha_bridge.cloud.http.build_control_api`,
+which is covered by tests that drive the real FastAPI app — including
+authentication rejection, path parameters, idempotency conflicts, and typed
+status mapping.
+
 ## Conventions
 
 - Every mutating operation accepts an optional `idempotency_key`.

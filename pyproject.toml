@@ -5,7 +5,7 @@ requires-python = ">=3.13,<3.14"
 dependencies = ["openalpha-bridge", "openalpha-research-core", "openalpha-sentinel"]
 
 [dependency-groups]
-dev = ["hypothesis>=6.0", "jsonschema>=4.23,<5", "openalpha-experiment-spec", "pyright>=1.1", "pytest>=8.0", "pytest-asyncio>=0.25", "ruff>=0.12"]
+dev = ["fastapi>=0.115,<1", "httpx>=0.27", "hypothesis>=6.0", "jsonschema>=4.23,<5", "openalpha-experiment-spec", "pyright>=1.1", "pytest>=8.0", "pytest-asyncio>=0.25", "ruff>=0.12"]
 sentinel-phase2 = ["yfinance==1.5.2"]
 
 sentinel-phase3 = ['scikit-learn==1.7.2']
@@ -27,6 +27,16 @@ markers = ["slow: resource-intensive integration", "network: external network re
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom requires these calls in argument
+# defaults; they are evaluated once at decoration time, not per request.
+extend-immutable-calls = [
+  "fastapi.Depends",
+  "fastapi.Header",
+  "fastapi.Path",
+  "fastapi.Query",
+]
 
 [tool.pyright]
 # scripts/kronos_constrained_worker.py reads Windows-only ctypes.windll behind a

@@ -12,6 +12,7 @@ Importing this package pulls in no cloud SDK. ``boto3``, ``fastapi``, and
 from __future__ import annotations
 
 from .auth import AuthContext, TokenAuthenticator, log_admin_action
+from .http import build_control_api, status_for
 from .identity import CloudRunIdentity, assert_idempotent_match
 from .journal import CloudJournal, CloudJournalEntry
 from .lease import RunLease, acquire_lease, current_lease, release_lease
@@ -72,6 +73,7 @@ __all__ = [
     "TokenAuthenticator",
     "acquire_lease",
     "assert_idempotent_match",
+    "build_control_api",
     "current_lease",
     "experiment_prefix",
     "is_cloud_test_partition_opened",
@@ -81,4 +83,5 @@ __all__ = [
     "register_secret",
     "release_lease",
     "run_prefix",
+    "status_for",
 ]
