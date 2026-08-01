@@ -35,7 +35,9 @@ jobs:
       - run: uv python install 3.13
 
       - name: Sync base dependencies (no Torch, no cloud SDK)
-        run: uv sync --locked --group dev
+        # sentinel-phase3 supplies scikit-learn (and transitively scipy) for the
+        # pre-existing Sentinel tests. Neither pulls Torch or a cloud SDK.
+        run: uv sync --locked --group dev --group sentinel-phase3
 
       - name: Verify locked experiment and amendment hashes
         run: |

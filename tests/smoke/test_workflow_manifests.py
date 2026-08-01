@@ -82,6 +82,32 @@ def test_deploy_workflow_never_starts_a_run() -> None:
     assert "modal deploy" in text
 
 
+@pytest.mark.parametrize("path", _workflows(), ids=lambda p: p.name)
+def test_full_suite_runs_sync_every_group_they_need(path: Path) -> None:
+    """A workflow running the whole suite must install the whole suite's deps.
+
+    `uv run pytest` with no path argument collects the Sentinel tests, which
+    import scikit-learn and scipy from the `sentinel-phase3` group. Syncing only
+    `dev` collects them and then fails on import.
+    """
+    text = path.read_text(encoding="utf-8")
+    runs_full_suite = any(
+        line.strip().startswith("run: uv run pytest")
+        and "tests/" not in line
+        and "packages/" not in line
+        for line in text.splitlines()
+    )
+    if not runs_full_suite:
+        pytest.skip(f"{path.name} does not run the unscoped suite")
+
+    sync_lines = [line for line in text.splitlines() if "uv sync" in line]
+    assert sync_lines, f"{path.name} runs the full suite without syncing dependencies"
+    assert any("sentinel-phase3" in line for line in sync_lines), (
+        f"{path.name} runs the unscoped suite but never syncs the "
+        f"sentinel-phase3 group, so scikit-learn and scipy will be missing"
+    )
+
+
 def test_no_workflow_embeds_a_credential_value() -> None:
     """Credentials may be referenced as secrets, never written literally."""
     for path in _workflows():
