@@ -372,3 +372,29 @@ untouched-holdout access. `test_partition_opened` remains false.
 Stage A, Stage B, and Stage C run together on one GPU host. See
 [BRIDGE_PHASE2_EXECUTION.md](BRIDGE_PHASE2_EXECUTION.md) and
 [BRIDGE_GPU_RUNBOOK.md](BRIDGE_GPU_RUNBOOK.md).
+
+## Cloud-operated execution
+
+Phase 2 is now an API-operated managed cloud job. There is no user-managed GPU
+host: no cloning onto a GPU machine, no VM administration, no SSH, no local CUDA
+or Torch install, no `/etc` configuration, no local caches, and no manual
+artifact copying.
+
+The scientific engine is unchanged and remains cloud-agnostic. The state machine,
+run identity, experiment verification, provider and Kronos contracts,
+feature-cache schema, training interface, metrics, paired bootstrap, gate
+evaluator, test-opening preconditions, append-only journal, resume behaviour, and
+synthetic mode were reused as-is behind a narrow cloud adapter.
+
+Production path: GitHub deployment, an authenticated control API on Modal CPU
+endpoints, one background Modal GPU worker, the market-data API, the Hugging Face
+Hub API, S3-compatible cloud storage, and status and artifact APIs.
+
+Phase 2 has still not executed empirically. Zero provider requests, zero retrieved
+candles, zero Kronos downloads or checkpoint loads, zero optimizer steps, and no
+held-out access. `test_partition_opened` remains false.
+
+See [BRIDGE_CLOUD_ARCHITECTURE.md](BRIDGE_CLOUD_ARCHITECTURE.md),
+[BRIDGE_CLOUD_API.md](BRIDGE_CLOUD_API.md),
+[BRIDGE_MODAL_DEPLOYMENT.md](BRIDGE_MODAL_DEPLOYMENT.md), and
+[BRIDGE_CLOUD_STORAGE.md](BRIDGE_CLOUD_STORAGE.md).

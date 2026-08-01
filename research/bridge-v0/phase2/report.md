@@ -82,3 +82,24 @@ forecast, or untouched-holdout access. `test_partition_opened` remains false.
 No reconstruction-quality result, checkpoint hash, range-MAE improvement,
 bootstrap interval, or per-slice measurement exists. Stage A, Stage B, and Stage
 C remain unexecuted and must run together on one GPU host.
+
+## Cloud deployment addendum
+
+This addendum records deployment design only. The terminal conclusion above is
+unchanged.
+
+The local Phase 2 pipeline was completed and synthetically verified. Empirical
+execution was not attempted. Deployment was then redesigned as an API-operated
+managed cloud job: an authenticated control API, one background GPU worker, cloud
+object storage for journals and artifacts, and a one-time test gate enforced
+through immutable conditional writes rather than filesystem assumptions.
+
+The scientific engine was reused unchanged. No architecture, metric, threshold,
+partition, period, symbol, or training decision was altered by the cloud
+conversion.
+
+All empirical questions remain unanswered. Execution state is unchanged: zero
+provider requests, zero retrieved candles, zero Kronos downloads or checkpoint
+loads, zero tokenizer encodes, zero optimizer steps, and no validation,
+reconstruction-test, external, forecast, or untouched-holdout access.
+`test_partition_opened` remains false.

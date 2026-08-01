@@ -1,172 +1,134 @@
-# Bridge Phase 2 GPU Runbook
+# Bridge Phase 2 Cloud Runbook
 
-One operator, one GPU host, one consistent environment, from checkout to the
-final gate decision.
+> **This document replaced the manually administered GPU-host runbook.**
+> There is no GPU host to rent, configure, or SSH into. Phase 2 is an
+> API-operated cloud job. If you are looking for `scripts/bridge_phase2_run.sh`
+> or `uv sync --extra bridge-gpu` on a workstation, those paths were removed;
+> see [BRIDGE_CLOUD_ARCHITECTURE.md](BRIDGE_CLOUD_ARCHITECTURE.md).
 
-Read [BRIDGE_TEST_OPENING_POLICY.md](BRIDGE_TEST_OPENING_POLICY.md) before
-running. The reconstruction-test partition opens exactly once.
+Read [BRIDGE_TEST_OPENING_POLICY.md](BRIDGE_TEST_OPENING_POLICY.md) before a
+real run. The reconstruction-test partition opens exactly once, ever.
 
-## 1. Host requirements
+## Prerequisites
 
-| Requirement | Value |
-|---|---|
-| Operating system | Linux (Ubuntu 22.04 verified) or Windows |
-| Python | 3.13 |
-| Accelerator | exactly one CUDA device |
-| VRAM | at most 25,769,803,776 bytes (24 GiB) |
-| Free disk | at least 40 GiB |
-| CUDA runtime | 12.4 |
-| Network | Yahoo Finance and huggingface.co reachable |
+One-time setup in [BRIDGE_MODAL_DEPLOYMENT.md](BRIDGE_MODAL_DEPLOYMENT.md):
+Modal and Cloudflare R2 accounts, three Modal secrets, four GitHub
+secrets/variables, and one deployment.
 
-Compute budget from the lock: at most 24 GPU hours for Phase 2, one accelerator.
+On your machine you need only `git`, `python`, and a bearer token. No CUDA, no
+Torch, no `nvidia-smi`, no Linux host, no local cache, no `/etc` files.
 
-### Disk breakdown
+## Step 1 — Deploy
 
-| Item | Approximate size |
-|---|---|
-| Torch and CUDA wheels | 3 GiB |
-| Pinned Kronos Tokenizer-2k assets | under 1 GiB |
-| Feature cache | up to 10 GiB (hard cap, enforced) |
-| Run artifacts and journals | under 100 MiB |
-| Headroom | remainder |
+Push, or dispatch **Deploy Bridge Phase 2 Cloud**. The workflow verifies hashes
+and tests, deploys the Modal app, and confirms the built image carries the
+locked experiment. It never starts an empirical run.
 
-The feature-cache cap is enforced in code at 10,737,418,240 bytes.
+## Step 2 — Synthetic validation
 
-## 2. Choose an environment
-
-### Option A: Docker with a pinned CUDA runtime (recommended)
+Always run this first. It exercises the real state machine, journal, lease,
+cloud test gate, and artifact path against fake components, contacts no provider
+API, and loads no Kronos asset.
 
 ```bash
-git clone <repository> openalpha && cd openalpha
-git checkout feature/openalpha-kronos-bridge
-
-docker build -f docker/bridge-phase2.Dockerfile -t openalpha-bridge-phase2:latest .
+python scripts/bridge_phase2_cloud.py start \
+  --operator your-name --mode synthetic --source-commit "$(git rev-parse HEAD)"
 ```
 
-### Option B: locked uv environment on the host
+Expect a `syn_…` run ID. Poll until `FINALIZED`:
 
 ```bash
-curl -LsSf https://astral.sh/uv/0.11.19/install.sh | sh
-uv python install 3.13
-uv sync --locked --group dev          # base: no Torch
-uv sync --locked --extra bridge-gpu   # adds Torch, hub client, provider client
+python scripts/bridge_phase2_cloud.py status --run-id syn_…
 ```
 
-`bridge-gpu` installs the CUDA build of Torch. On a host whose CUDA runtime is
-not 12.4, install the matching Torch wheel explicitly before syncing the extra.
+Its artifacts live under `openalpha-synthetic/…` and are labelled
+**SYNTHETIC CLOUD PIPELINE VALIDATION - NOT EMPIRICAL EVIDENCE**.
 
-## 3. Configure
+## Step 3 — The real run
+
+This retrieves market data, downloads pinned Kronos assets, trains the locked
+head, and — if confirmed — opens the reconstruction-test partition once and
+seals it forever. Threshold changes after this point are prohibited.
+
+Via GitHub (preferred, because the confirmations are explicit):
+
+dispatch **Start Bridge Phase 2 Run** with
+
+- `operator`: your name
+- `experiment_hash`: `d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2`
+- `execution_mode`: `real`
+- `confirm_real_evidence`: checked
+- `confirm_open_test_partition`: checked only when you intend the one-time gate
+
+Via the client:
 
 ```bash
-cp docker/bridge-phase2.env.template /etc/openalpha/phase2.env   # outside the repo
-$EDITOR /etc/openalpha/phase2.env                                # set OPENALPHA_OPERATOR
-set -a && . /etc/openalpha/phase2.env && set +a
+python scripts/bridge_phase2_cloud.py start \
+  --operator your-name --mode real \
+  --source-commit "$(git rev-parse HEAD)" \
+  --confirm-real-evidence \
+  --confirm-open-test-partition \
+  --idempotency-key "phase2-first-real-run"
 ```
 
-No secret is required. The locked provider is a public interface and
-Tokenizer-2k is a public repository. Never place the run or cache directory
-inside the Git worktree; preflight refuses.
+Creation returns immediately with a `run_id`. The experiment continues in the
+background; no connection is held open.
 
-## 4. Preflight
+To stop before the held-out partition, omit `--confirm-open-test-partition`. The
+run trains, freezes the checkpoint, and stops at `BLOCKED` with
+`TEST_OPENING_NOT_CONFIRMED`, leaving the test sealed and the run resumable.
+
+## Step 4 — Monitor
 
 ```bash
-scripts/bridge_phase2_gpu_preflight.sh "$OPENALPHA_RUN_DIR" "$OPENALPHA_CACHE_DIR"
+python scripts/bridge_phase2_cloud.py status --run-id run_…
+python scripts/bridge_phase2_cloud.py logs   --run-id run_…
 ```
 
-Windows hosts:
+Status shows current state and stage, completed windows, Stage A and Stage B
+results, Stage C epoch and validation progress, checkpoint-selection state,
+whether the test is still sealed, evaluation progress, the final gate result,
+and typed blocker or failure codes. It never exposes raw market data, weights,
+tokens, or credentials.
 
-```powershell
-scripts\bridge_phase2_gpu_preflight.ps1 -RunDir $env:OPENALPHA_RUN_DIR -CacheDir $env:OPENALPHA_CACHE_DIR
-```
-
-Preflight verifies the operating system, Python version, Torch import, CUDA
-availability, exactly one accelerator, VRAM against the lock, free disk, the
-cache location, tracked-artifact hygiene, the source commit, the worktree state,
-and the experiment and amendment hashes. It stops **before** any provider access
-when a hard requirement fails.
-
-Exit 0 means proceed. Exit 2 prints a typed blocker: `NO_ACCELERATOR`,
-`MISSING_OPTIONAL_DEPENDENCY`, `INSUFFICIENT_DISK`, `CACHE_INSIDE_GIT`,
-`ACCELERATOR_COUNT_MISMATCH`, `VRAM_ABOVE_LOCK`, or `EXPERIMENT_HASH_MISMATCH`.
-
-## 5. Run
+## Step 5 — Resume after interruption
 
 ```bash
-scripts/bridge_phase2_run.sh "$OPENALPHA_RUN_DIR" "$OPENALPHA_CACHE_DIR" "$OPENALPHA_OPERATOR"
+python scripts/bridge_phase2_cloud.py resume --run-id run_… --operator your-name
 ```
 
-This executes the locked sequence: preflight, retrieval, validation, windowing,
-coverage audit, asset resolution, Stage A, Stage B, Stage C, checkpoint freeze,
-the one-time test opening, test evaluation, external evaluation, and the final
-gate decision.
+Permitted only from a verified `BLOCKED` or resumable `FAILED` state and only
+when no live lease is held. Resume continues from the last verified journal
+entry and the latest checkpoint. It never recreates the test-opening record.
 
-To stop before the held-out partition, run the stages individually:
+## Step 6 — Retrieve results
 
 ```bash
-python -m openalpha_bridge.phase2 stage-a --run-dir "$OPENALPHA_RUN_DIR" --cache-dir "$OPENALPHA_CACHE_DIR" --json
-python -m openalpha_bridge.phase2 stage-b --run-dir "$OPENALPHA_RUN_DIR" --cache-dir "$OPENALPHA_CACHE_DIR" --json
-python -m openalpha_bridge.phase2 stage-c --run-dir "$OPENALPHA_RUN_DIR" --cache-dir "$OPENALPHA_CACHE_DIR" --json
+python scripts/bridge_phase2_cloud.py artifacts --run-id run_…
 ```
 
-No stage command opens the test partition. Only `run --open-test-partition`
-does, and only once.
+Returns the compact manifest with content hashes and signed download URLs.
+Weights, feature shards, and raw provider data are filtered out. Nothing is
+copied between machines by hand.
 
-## 6. Resume after interruption
+The terminal conclusion comes from `final/gate_table.json`, not from prose.
 
-```bash
-scripts/bridge_phase2_resume.sh "$OPENALPHA_RUN_DIR" "$OPENALPHA_CACHE_DIR" "$OPENALPHA_OPERATOR"
-```
+## Failure modes
 
-Resume continues from the last verified state in `journal.json`. Interrupted
-cache writes are recovered by deleting partial temporaries; committed shards are
-content-verified on read. If the configuration changed, resume fails with
-`RUN_IDENTITY_CHANGED` instead of continuing under different settings.
-
-A run that already opened the test partition cannot reopen it. Resuming past
-that point reuses the sealed record.
-
-## 7. Verify and export
-
-```bash
-python -m openalpha_bridge.phase2 verify --run-dir "$OPENALPHA_RUN_DIR" --cache-dir "$OPENALPHA_CACHE_DIR" --json
-scripts/bridge_phase2_export.sh "$OPENALPHA_RUN_DIR" ./phase2-export
-```
-
-Export copies manifests, hashes, aggregates, the gate table, the journal, and
-the test-opening record. It refuses to export weights, shards, or raw candles
-and writes `SHA256SUMS`.
-
-## 8. Cleanup
-
-```bash
-python -c "
-from pathlib import Path
-from openalpha_bridge.phase2.cache import FeatureCache
-import os
-print(FeatureCache(Path(os.environ['OPENALPHA_CACHE_DIR'])).cleanup(), 'shards removed')
-"
-```
-
-The lock requires automatic cache cleanup after manifests and hashes are sealed.
-Raw provider data and checkpoints are never committed to Git.
-
-## 9. Expected failure modes
-
-| Symptom | Blocker | Action |
+| Blocker | Meaning | Action |
 |---|---|---|
-| `import torch` fails | `MISSING_OPTIONAL_DEPENDENCY` | `uv sync --locked --extra bridge-gpu` |
-| No CUDA device | `NO_ACCELERATOR` | Run on a GPU host; Stage C on CPU is prohibited |
-| Two or more GPUs visible | `ACCELERATOR_COUNT_MISMATCH` | Set `CUDA_VISIBLE_DEVICES=0` |
-| VRAM above the lock | `VRAM_ABOVE_LOCK` | Use a smaller accelerator or amend the lock |
-| Cache under the repository | `CACHE_INSIDE_GIT` | Move the cache outside the worktree |
-| Lock file drift | `EXPERIMENT_HASH_MISMATCH` | Restore the committed experiment and amendments |
-| Second test opening | `TEST_PARTITION_ALREADY_OPENED` | Expected; the record is immutable |
+| `UNAUTHORIZED` | bad or missing bearer token | check `OPENALPHA_API_TOKEN` |
+| `UNKNOWN_EXPERIMENT_HASH` | wrong experiment hash | use the locked value |
+| `REAL_EVIDENCE_NOT_CONFIRMED` | missing confirmation | pass the flag deliberately |
+| `RATE_LIMIT_EXCEEDED` | too many runs this hour | wait |
+| `RUN_LEASE_HELD` | another worker owns the run | wait for expiry, then resume |
+| `TEST_OPENING_NOT_CONFIRMED` | stopped before the gate | expected; resume when ready |
+| `TEST_PARTITION_ALREADY_OPENED` | the gate is one-time | expected; cannot be redone |
+| `GPU_HOUR_BUDGET_EXCEEDED` | past the 24-hour lock | investigate before rerunning |
+| `NO_ACCELERATOR` | worker lacked a GPU | redeploy; check `gpu=` |
 
-## 10. After the run
+## After the run
 
-The terminal conclusion comes from `gate_table.json`, not from prose. Record the
-conclusion, the gate table, the checkpoint hash, and the test-opening record in
-`research/bridge-v0/`, and update `docs/STATUS.md`.
-
-Phase 3 forecast integration requires Phase 2 success and remains unauthorized
-until then.
+Record the conclusion, gate table, checkpoint hash, and test-opening record in
+`research/bridge-v0/`, and update `docs/STATUS.md`. Phase 3 forecast integration
+requires Phase 2 success and remains unauthorized until then.

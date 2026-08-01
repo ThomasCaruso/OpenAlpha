@@ -2,6 +2,48 @@
 
 Last updated: 2026-07-31
 
+## OpenAlpha for Kronos Bridge Phase 2 cloud deployment
+
+**Status: cloud conversion complete and synthetically validated. No empirical
+Phase 2 run has been executed.**
+
+Phase 2 is now an API-operated managed cloud job. There is no user-managed GPU
+host, and nothing heavy is installed on a workstation.
+
+Production path: GitHub deployment, an authenticated control API on Modal CPU
+endpoints, one background Modal GPU worker (T4), the market-data API, the Hugging
+Face Hub API, S3-compatible cloud storage (Cloudflare R2), and status and
+artifact APIs. No Kubernetes, no Terraform, no AWS account.
+
+The scientific engine was reused unchanged and stays cloud-agnostic. The cloud
+package adds only an object store, append-only journal, exclusive run lease,
+cloud-native one-time test gate, secret redaction, control service, and a narrow
+compute-backend protocol with exactly one implementation.
+
+The locked data provider is unchanged: Yahoo Finance through pinned
+`yfinance==1.5.2`, now called from inside the worker. An Alpaca swap was
+evaluated and declined because its coverage begins 2016-01-01 against a locked
+2010-01-01 training start; see [DATA_POLICY.md](DATA_POLICY.md). No pre-data
+amendment was required, and every prior hash is preserved.
+
+Execution counts remain zero:
+
+- provider requests and retrieved candles: 0;
+- Kronos source/checkpoint downloads and checkpoint loads: 0;
+- tokenizer encodes and optimizer steps: 0;
+- opened validation, reconstruction-test, external, forecast, and untouched
+  holdout results: 0.
+
+`test_partition_opened` is **false**.
+
+The remaining user actions are: create Modal and Cloudflare R2 accounts, add the
+API and storage secrets, authorize deployment, and explicitly start the real run.
+See [BRIDGE_CLOUD_ARCHITECTURE.md](BRIDGE_CLOUD_ARCHITECTURE.md),
+[BRIDGE_CLOUD_API.md](BRIDGE_CLOUD_API.md),
+[BRIDGE_MODAL_DEPLOYMENT.md](BRIDGE_MODAL_DEPLOYMENT.md),
+[BRIDGE_CLOUD_STORAGE.md](BRIDGE_CLOUD_STORAGE.md), and
+[BRIDGE_GPU_RUNBOOK.md](BRIDGE_GPU_RUNBOOK.md).
+
 ## OpenAlpha for Kronos Bridge Phase 2 execution pipeline
 
 **Status: pipeline ready, not executed. No empirical Phase 2 result exists.**

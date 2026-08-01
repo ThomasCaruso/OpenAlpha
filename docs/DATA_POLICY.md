@@ -94,3 +94,46 @@ Additional Phase 2 rules:
   transition; see [BRIDGE_TEST_OPENING_POLICY.md](BRIDGE_TEST_OPENING_POLICY.md).
 - Fake-provider fixtures are stamped `provider_mode: fake`, carry no retrieval
   timestamp, and are rejected by any run declaring `evidence_class: real_phase2`.
+
+## Cloud execution and the provider decision
+
+Phase 2 moved to managed cloud execution. The locked provider is **unchanged**:
+Yahoo Finance through pinned `yfinance==1.5.2`, now called from inside the Modal
+worker rather than from a workstation.
+
+An official-API swap to Alpaca was evaluated and deliberately not taken. Alpaca's
+documented historical stock coverage begins 2016-01-01, while the locked training
+period begins 2010-01-01. Adopting it would have cost roughly 60 percent of the
+training corpus (40 to 16 scored suffixes per symbol, 35,840 to 14,336 pooled
+scored candles) and would have required a second methodological change beyond the
+provider swap. Validation, reconstruction test, and external periods were
+unaffected, and both locked sample minima still passed, but shortening the
+training period is a scientific cost that must be chosen explicitly rather than
+absorbed inside a provider amendment.
+
+Keeping `yfinance` therefore preserves the entire hash chain and requires no
+pre-data amendment at all. The provider abstraction is unchanged, so adopting
+Alpaca, Polygon, or Tiingo later is one implementation plus an explicit pre-data
+amendment recording old provider, new provider, reason, feed, adjustment
+behaviour, OHLCV fields, corporate-action handling, pagination, missing-session
+behaviour, timestamp semantics, endpoint class, credentials requirement, and a
+revised experiment hash.
+
+Additional cloud rules:
+
+- Provider credentials, when a future provider needs them, exist only in Modal
+  Secrets. They are never accepted in a run-creation request, never a GitHub
+  workflow input, and never written to journals, logs, artifacts, or exceptions.
+- Provider exception text is still never propagated; failures surface as the
+  typed `PROVIDER_REQUEST_FAILED` code with the exception class name only.
+- Raw provider responses are stored in neither Git nor the immutable artifact
+  store. Normalized derived features live only in the cache volume, under the
+  10 GiB cap, and are cleaned up after manifests and hashes are sealed.
+- `GET /artifacts` filters model weights, feature shards, raw data, and the lease
+  object out of every manifest.
+- Fake-provider fixtures remain stamped `provider_mode: fake` with no retrieval
+  timestamp, write to a separate object-store root, and are rejected by any run
+  declaring `evidence_class: real_phase2`.
+
+As of the cloud-conversion commit, zero provider requests have been issued and
+zero candles retrieved.

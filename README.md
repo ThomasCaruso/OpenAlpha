@@ -13,12 +13,28 @@ for Kronos**.
 ## Current status
 
 OpenAlpha has completed the Sentinel v0, v1, and v1.1 development investigations.
-Phase 1 proved the Bridge mathematical/runtime contract. Phase 2 then stopped at
-its preregistered pre-data gate with `OPERATIONALLY_BLOCKED`: the locked 512-candle
-window cannot fit inside the locked one-year validation partition or the daily
-reconstruction-test partition without prohibited split crossing. No market data or
-Kronos checkpoint was accessed, no Bridge checkpoint was trained, no benchmark was
-evaluated, and the untouched Sentinel holdout remains unaccessed.
+Phase 1 proved the Bridge mathematical/runtime contract.
+
+Phase 2 first stopped at its preregistered pre-data gate with
+`OPERATIONALLY_BLOCKED`. That finding was traced to a protocol-design error
+rather than a data, compute, or Kronos limitation, and Amendment 2 corrected it
+by separating the 448-candle read-only causal context prefix from the 64-candle
+scored suffix. The blocker record is preserved unchanged.
+
+The Phase 2 execution pipeline is now implemented, synthetically validated, and
+deployed as an **API-operated managed cloud job**: GitHub deployment, an
+authenticated control API, one background Modal GPU worker, and S3-compatible
+cloud storage. There is no user-managed GPU host, and nothing heavy is installed
+on a workstation.
+
+Phase 2 has still not executed empirically. No market data has been retrieved, no
+Kronos checkpoint loaded, no Bridge checkpoint trained, no benchmark evaluated,
+`test_partition_opened` is false, and the untouched Sentinel holdout remains
+unaccessed.
+
+Start here: [BRIDGE_CLOUD_ARCHITECTURE.md](docs/BRIDGE_CLOUD_ARCHITECTURE.md),
+[BRIDGE_MODAL_DEPLOYMENT.md](docs/BRIDGE_MODAL_DEPLOYMENT.md), and
+[BRIDGE_GPU_RUNBOOK.md](docs/BRIDGE_GPU_RUNBOOK.md).
 
 ## The problem
 
