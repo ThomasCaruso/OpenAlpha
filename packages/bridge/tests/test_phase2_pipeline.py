@@ -701,6 +701,53 @@ def test_gpu_preflight_fails_safely_without_an_accelerator(tmp_path: Path) -> No
     assert any(check.check_id == "torch_import" for check in report.checks)
 
 
+def test_real_gpu_preflight_still_demands_the_full_disk_budget(tmp_path: Path) -> None:
+    """The GPU worker's disk requirement is unchanged at 40 GiB."""
+    from openalpha_bridge.phase2.preflight import (
+        MINIMUM_FREE_DISK_BYTES,
+        MINIMUM_FREE_DISK_BYTES_NO_ACCELERATOR,
+    )
+
+    assert MINIMUM_FREE_DISK_BYTES == 40 * (1 << 30)
+    assert MINIMUM_FREE_DISK_BYTES_NO_ACCELERATOR < MINIMUM_FREE_DISK_BYTES
+
+    report = run_preflight(
+        research_root=RESEARCH_ROOT,
+        cache_directory=tmp_path,
+        repository_root=REPOSITORY_ROOT,
+        require_accelerator=True,
+    )
+    disk = next(c for c in report.checks if c.check_id == "free_disk")
+    assert str(MINIMUM_FREE_DISK_BYTES) in disk.requirement
+
+
+def test_no_accelerator_preflight_uses_the_smaller_disk_budget(tmp_path: Path) -> None:
+    """Synthetic validation must not be blocked by the GPU worker's budget."""
+    from openalpha_bridge.phase2.preflight import MINIMUM_FREE_DISK_BYTES_NO_ACCELERATOR
+
+    report = run_preflight(
+        research_root=RESEARCH_ROOT,
+        cache_directory=tmp_path,
+        repository_root=REPOSITORY_ROOT,
+        require_accelerator=False,
+    )
+    disk = next(c for c in report.checks if c.check_id == "free_disk")
+    assert str(MINIMUM_FREE_DISK_BYTES_NO_ACCELERATOR) in disk.requirement
+    assert disk.outcome.value == "PASS"
+
+
+def test_explicit_minimum_free_bytes_overrides_the_default(tmp_path: Path) -> None:
+    report = run_preflight(
+        research_root=RESEARCH_ROOT,
+        cache_directory=tmp_path,
+        repository_root=REPOSITORY_ROOT,
+        require_accelerator=False,
+        minimum_free_bytes=1 << 60,  # a petabyte: must fail anywhere
+    )
+    assert not report.passed
+    assert report.blocker_code == "INSUFFICIENT_DISK"
+
+
 def test_preflight_rejects_a_cache_inside_the_repository() -> None:
     report = run_preflight(
         research_root=RESEARCH_ROOT,

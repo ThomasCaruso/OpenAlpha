@@ -30,7 +30,15 @@ __all__ = [
 
 #: experiment.yaml accelerator_memory_bytes_maximum.
 MAXIMUM_VRAM_BYTES = 25_769_803_776
+
+#: Free disk the real GPU worker needs: Torch and CUDA wheels, the pinned Kronos
+#: assets, and the 10 GiB feature cache, plus headroom.
 MINIMUM_FREE_DISK_BYTES = 40 * (1 << 30)
+
+#: A run with no accelerator downloads no Torch wheel, no Kronos asset, and
+#: builds no feature cache, so it needs only working room. Applying the GPU
+#: worker's figure to synthetic validation blocks it on ordinary CI runners.
+MINIMUM_FREE_DISK_BYTES_NO_ACCELERATOR = 2 * (1 << 30)
 _SUPPORTED_SYSTEMS = frozenset({"Linux", "Windows"})
 
 
@@ -155,10 +163,23 @@ def run_preflight(
     repository_root: Path,
     stage: str = "preflight",
     require_accelerator: bool = True,
+    minimum_free_bytes: int | None = None,
 ) -> PreflightReport:
-    """Verify the host before any provider or asset access."""
+    """Verify the host before any provider or asset access.
+
+    ``minimum_free_bytes`` defaults to the real GPU worker's requirement when an
+    accelerator is required, and to the much smaller no-accelerator figure
+    otherwise.
+    """
     checks: list[PreflightCheck] = []
     blocker: str | None = None
+    required_free = minimum_free_bytes
+    if required_free is None:
+        required_free = (
+            MINIMUM_FREE_DISK_BYTES
+            if require_accelerator
+            else MINIMUM_FREE_DISK_BYTES_NO_ACCELERATOR
+        )
 
     system = platform.system()
     checks.append(
@@ -197,13 +218,13 @@ def run_preflight(
 
     try:
         usage = shutil.disk_usage(cache_directory if cache_directory.exists() else Path.cwd())
-        free_ok = usage.free >= MINIMUM_FREE_DISK_BYTES
+        free_ok = usage.free >= required_free
         checks.append(
             _check(
                 "free_disk",
                 free_ok,
                 f"{usage.free} bytes",
-                f"at least {MINIMUM_FREE_DISK_BYTES} bytes free",
+                f"at least {required_free} bytes free",
             )
         )
         if not free_ok:
