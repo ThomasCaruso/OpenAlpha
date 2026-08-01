@@ -348,3 +348,27 @@ begin another conceptual pivot.
 
 These are evaluation questions and release gates, not reasons to weaken the
 structural contract.
+
+## Phase 2 execution pipeline readiness
+
+The Phase 2 blocker was a protocol-design error, corrected by Amendment 2
+(`66f3c8171c2805bccf4b924125bd206edad27c957dfff40a0abf3864fbab10c1`). Under the
+context-prefix / scored-suffix contract the locked periods yield 40 scored
+suffixes per symbol in train, 3 in validation, 5 in reconstruction test, and 3
+in the external period, for a pooled test corpus of 6,400 scored candles against
+the 5,000 minimum.
+
+The complete execution pipeline is now implemented and synthetically validated:
+optional-dependency boundary, versioned state machine, provider contract, Kronos
+integration contract, feature cache, locked training module, evaluation metrics,
+paired bootstrap, gate evaluator, GPU preflight, CLI, and a portable execution
+bundle.
+
+Phase 2 has still not executed. Zero provider requests, zero retrieved candles,
+zero Kronos downloads or checkpoint loads, zero tokenizer encodes, zero optimizer
+steps, and no validation, reconstruction-test, external, forecast, or
+untouched-holdout access. `test_partition_opened` remains false.
+
+Stage A, Stage B, and Stage C run together on one GPU host. See
+[BRIDGE_PHASE2_EXECUTION.md](BRIDGE_PHASE2_EXECUTION.md) and
+[BRIDGE_GPU_RUNBOOK.md](BRIDGE_GPU_RUNBOOK.md).

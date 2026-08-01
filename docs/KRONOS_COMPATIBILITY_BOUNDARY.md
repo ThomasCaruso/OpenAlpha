@@ -267,3 +267,28 @@ Unknown fields, mismatched hashes, out-of-range IDs, nonfinite scale state,
 nonpositive anchors, unordered positions, unsupported feature schemas, or suffixes
 longer than the manifest limit fail closed. No nearest-version or best-effort loading
 is permitted.
+
+## Phase 2 integration contract readiness
+
+The compatibility boundary is now expressed as typed interfaces in
+`openalpha_bridge.phase2.kronos`: asset resolver, pinned revision verifier,
+tokenizer encoder, token-pair extraction, bipolar latent conversion, the frozen
+20-to-256 projection, the three frozen causal decoder blocks, the official
+decoder output, and 269-feature Bridge tensor construction.
+
+No real asset has been resolved or loaded. `OfficialKronosBackend` imports Torch
+and `huggingface_hub` lazily and raises `OFFICIAL_BACKEND_NOT_LOADED` for every
+numerical operation until the pinned assets are downloaded on a GPU host. The
+identities in this document therefore remain expected pinned identities, not a
+runtime manifest.
+
+At runtime the resolver asserts the pinned repository and revision, the expected
+config and weights SHA-256, tensor ranks, dimensions, token ranges, feature
+order, dtype, and mask semantics. A hash mismatch fails with
+`TOKENIZER_CONFIG_HASH_MISMATCH` or `TOKENIZER_WEIGHTS_HASH_MISMATCH` before any
+tensor is produced.
+
+A deterministic fake backend with matching shapes, dtypes, and token ranges
+exercises the pipeline locally. It is rejected outright by any run declaring
+`kronos_mode: pinned_official`, so synthetic components can never produce real
+evidence.

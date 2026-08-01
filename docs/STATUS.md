@@ -2,6 +2,55 @@
 
 Last updated: 2026-07-31
 
+## OpenAlpha for Kronos Bridge Phase 2 execution pipeline
+
+**Status: pipeline ready, not executed. No empirical Phase 2 result exists.**
+
+The earlier `OPERATIONALLY_BLOCKED` finding was traced to a protocol-design
+error rather than a data, compute, or Kronos limitation. Amendment 2
+(`66f3c8171c2805bccf4b924125bd206edad27c957dfff40a0abf3864fbab10c1`) separates
+the 448-candle read-only causal context prefix from the 64-candle scored suffix.
+Only the scored suffix must lie wholly inside its partition.
+
+Corrected pre-retrieval feasibility on the XNYS calendar, per symbol at `1d`:
+
+| Partition | Sessions | Scored suffixes | Scored candles |
+|---|---:|---:|---:|
+| Train 2010-01-01 to 2022-01-01 | 3,021 | 40 | 2,560 |
+| Validation 2022-01-01 to 2023-01-01 | 251 | 3 | 192 |
+| Reconstruction test 2023-01-01 to 2024-06-29 | 374 | 5 | 320 |
+| External 2024-07-01 to 2025-07-01 | 250 | 3 | 192 |
+
+Pooled reconstruction-test corpus is 6,400 scored candles against the 5,000
+minimum, with 1,920 unseen-symbol candles against the 500 minimum. Both gates
+pass. Periods, symbols, architecture, and thresholds are unchanged.
+
+The complete Phase 2 execution pipeline is implemented and synthetically
+validated end to end: optional-dependency boundary, versioned state machine,
+one-time test-partition guard, provider contract with a deterministic fake,
+Kronos integration contract with a deterministic fake, feature cache, locked
+17,605-parameter training module, suffix-only evaluation metrics, paired
+bootstrap, machine-readable gate evaluator, GPU preflight, CLI, and a portable
+GPU execution bundle.
+
+Execution counts remain zero:
+
+- provider requests and retrieved candles: 0;
+- Kronos source/checkpoint downloads and checkpoint loads: 0;
+- tokenizer encodes and frozen-trunk calls: 0;
+- optimizer steps and completed epochs: 0;
+- opened validation, reconstruction-test, external, forecast, and untouched
+  holdout results: 0.
+
+`test_partition_opened` is **false**.
+
+Local execution stopped because this development machine has no CUDA
+accelerator and no Torch installation, and the lock prohibits Stage C on CPU.
+Stage A, Stage B, and Stage C must run together in one accelerator environment.
+See [BRIDGE_PHASE2_EXECUTION.md](BRIDGE_PHASE2_EXECUTION.md),
+[BRIDGE_GPU_RUNBOOK.md](BRIDGE_GPU_RUNBOOK.md), and
+[BRIDGE_TEST_OPENING_POLICY.md](BRIDGE_TEST_OPENING_POLICY.md).
+
 ## OpenAlpha for Kronos Bridge Phase 2
 
 **Terminal conclusion: `OPERATIONALLY_BLOCKED`. No reconstruction-quality result

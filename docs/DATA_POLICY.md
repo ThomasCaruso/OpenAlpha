@@ -63,3 +63,34 @@ A third party may reproduce code and request parameters yet receive corrected Ya
 - [Official Kronos repository](https://github.com/shiyu-coder/Kronos)
 - [Kronos-mini model card](https://huggingface.co/NeoQuasar/Kronos-mini)
 - [Kronos-Tokenizer-2k model card](https://huggingface.co/NeoQuasar/Kronos-Tokenizer-2k)
+
+## Bridge Phase 2 execution pipeline
+
+The Bridge-2K Phase 2 pipeline reuses this policy unchanged. The locked provider
+remains Yahoo Finance through pinned `yfinance==1.5.2`; Binance remains reserved
+for Phase 4 after the continuation and data-policy gates.
+
+As of the pipeline-preparation commit, zero provider requests have been issued
+and zero candles retrieved. The retrieval client is implemented but has never
+been invoked.
+
+Additional Phase 2 rules:
+
+- The provider client resolves `yfinance` lazily. Importing `openalpha_bridge`
+  pulls in no provider client, no Torch, and no Kronos asset.
+- Provider exception text is never propagated into logs or artifacts, because it
+  can carry request URLs and query parameters. Failures surface as the typed
+  `PROVIDER_REQUEST_FAILED` code with the exception class name only.
+- No credential is required. The locked provider is a public interface and the
+  pinned Tokenizer-2k repository is public. The environment template contains
+  paths and execution knobs only, and no filled copy is ever committed.
+- The feature cache lives outside the Git worktree, is content-addressed, and is
+  capped in code at 10,737,418,240 bytes. Both preflight and the cache
+  constructor refuse a cache path inside the repository.
+- Feature-cache shards, checkpoints, and raw candles are never exported. The
+  export script copies manifests, hashes, aggregates, and reports only, and
+  fails with `FORBIDDEN_ARTIFACT_IN_EXPORT` otherwise.
+- Reconstruction-test shards cannot be loaded before the explicit test-opening
+  transition; see [BRIDGE_TEST_OPENING_POLICY.md](BRIDGE_TEST_OPENING_POLICY.md).
+- Fake-provider fixtures are stamped `provider_mode: fake`, carry no retrieval
+  timestamp, and are rejected by any run declaring `evidence_class: real_phase2`.
