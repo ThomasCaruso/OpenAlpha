@@ -1,0 +1,107 @@
+name: Start Bridge Phase 2 Run
+
+# Manual only. Calls the authenticated control API and prints the run ID and
+# status URL. No provider or storage credential is ever a workflow input;
+# those live only in Modal Secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      operator:
+        description: "Operator identity, recorded in the immutable test-opening record"
+        type: string
+        required: true
+      experiment_hash:
+        description: "Must equal the locked experiment SHA-256"
+        type: string
+        required: true
+        default: d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2
+      execution_mode:
+        description: "synthetic validates the pipeline; real produces empirical evidence"
+        type: choice
+        required: true
+        default: synthetic
+        options: [synthetic, real]
+      confirm_real_evidence:
+        description: "Required for a real run. Confirms this produces empirical evidence."
+        type: boolean
+        default: false
+      confirm_open_test_partition:
+        description: "Required to open the one-time reconstruction-test partition."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-phase2-start-${{ inputs.execution_mode }}
+  cancel-in-progress: false
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+    environment: bridge-phase2-cloud
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate confirmations
+        run: |
+          if [ "${{ inputs.execution_mode }}" = "real" ]; then
+            if [ "${{ inputs.confirm_real_evidence }}" != "true" ]; then
+              echo "a real run requires confirm_real_evidence"
+              exit 1
+            fi
+            echo "REAL RUN: this produces empirical Phase 2 evidence."
+            if [ "${{ inputs.confirm_open_test_partition }}" = "true" ]; then
+              echo "The reconstruction-test partition will be opened ONCE and sealed."
+            fi
+          fi
+
+      - name: Create the run
+        id: create
+        env:
+          OPENALPHA_API_BASE_URL: ${{ vars.OPENALPHA_API_BASE_URL }}
+          OPENALPHA_API_TOKEN: ${{ secrets.OPENALPHA_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          payload="$(jq -nc \
+            --arg hash '${{ inputs.experiment_hash }}' \
+            --arg commit "${GITHUB_SHA}" \
+            --arg operator '${{ inputs.operator }}' \
+            --arg mode '${{ inputs.execution_mode }}' \
+            --arg key "gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --argjson real ${{ inputs.confirm_real_evidence }} \
+            --argjson opentest ${{ inputs.confirm_open_test_partition }} \
+            '{experiment_hash:$hash, source_commit:$commit, operator:$operator,
+              execution_mode:$mode, idempotency_key:$key,
+              confirm_real_evidence:$real, confirm_open_test_partition:$opentest}')"
+
+          # The token is passed via header only; it is never echoed.
+          response="$(curl -sS -X POST \
+            -H "Authorization: Bearer ${OPENALPHA_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "${payload}" \
+            "${OPENALPHA_API_BASE_URL}/v1/bridge/phase2/runs")"
+
+          run_id="$(echo "${response}" | jq -r '.run_id')"
+          status_url="$(echo "${response}" | jq -r '.status_url')"
+          state="$(echo "${response}" | jq -r '.state')"
+
+          echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+          echo "status_url=${status_url}" >> "$GITHUB_OUTPUT"
+          echo "state=${state}" >> "$GITHUB_OUTPUT"
+
+      - name: Report
+        run: |
+          {
+            echo "### Bridge Phase 2 run started"
+            echo ""
+            echo "- run ID: \`${{ steps.create.outputs.run_id }}\`"
+            echo "- state: \`${{ steps.create.outputs.state }}\`"
+            echo "- mode: \`${{ inputs.execution_mode }}\`"
+            echo "- status URL: ${{ steps.create.outputs.status_url }}"
+            echo ""
+            echo "Run creation returns immediately. Poll the status URL for progress;"
+            echo "the experiment continues in the managed cloud worker."
+          } >> "$GITHUB_STEP_SUMMARY"

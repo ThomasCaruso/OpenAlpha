@@ -1,0 +1,114 @@
+name: Deploy Bridge Phase 2 Cloud
+
+# Deploys the Modal application. It NEVER starts an empirical run: starting a
+# real Phase 2 run is a separate, explicitly confirmed workflow.
+
+on:
+  push:
+    branches: [main, feature/openalpha-kronos-bridge]
+    paths:
+      - "cloud/modal/**"
+      - "packages/bridge/**"
+      - "research/bridge-v0/**"
+      - ".github/workflows/deploy-bridge-phase2-cloud.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-phase2-deploy
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      lock_sha256: ${{ steps.lock.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv python install 3.13
+
+      - name: Sync base dependencies (no Torch, no cloud SDK)
+        run: uv sync --locked --group dev
+
+      - name: Verify locked experiment and amendment hashes
+        run: |
+          uv run python -c "
+          from pathlib import Path
+          from openalpha_bridge.phase2.identity import verify_locked_hashes
+          from openalpha_bridge.windowing import score_mask_sha256
+          observed = verify_locked_hashes(Path('research/bridge-v0'))
+          for name, digest in observed.items():
+              print(f'{name}: {digest}')
+          print('score_mask:', score_mask_sha256())
+          "
+
+      - name: Base test suite
+        run: uv run pytest -q
+
+      - name: Lint and typecheck
+        run: |
+          uv run ruff check .
+          uv run pyright
+
+      - name: Record dependency lock hash
+        id: lock
+        run: |
+          digest="$(sha256sum uv.lock | cut -d' ' -f1)"
+          echo "sha256=${digest}" >> "$GITHUB_OUTPUT"
+          echo "dependency lock sha256: ${digest}"
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: bridge-phase2-cloud
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv python install 3.13
+
+      - name: Install the Modal client
+        run: uv pip install --system "modal>=0.64,<2"
+
+      - name: Deploy the Modal application
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          OPENALPHA_DEPENDENCY_LOCK_SHA256: ${{ needs.verify.outputs.lock_sha256 }}
+        run: modal deploy cloud/modal/bridge_phase2_app.py
+
+      - name: Verify the deployed image agrees with the committed locks
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          modal run cloud/modal/bridge_phase2_app.py::verify_deployment \
+            | tee deployment-verification.txt
+          if ! grep -q "d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2" \
+               deployment-verification.txt; then
+            echo "deployed image does not carry the locked experiment"
+            exit 1
+          fi
+
+      - name: Record deployment identity
+        run: |
+          {
+            echo "### Bridge Phase 2 cloud deployment"
+            echo ""
+            echo "- commit: \`${GITHUB_SHA}\`"
+            echo "- dependency lock: \`${{ needs.verify.outputs.lock_sha256 }}\`"
+            echo "- application: \`openalpha-bridge-phase2\`"
+            echo ""
+            echo "No empirical run was started. Use the"
+            echo "\`Start Bridge Phase 2 Run\` workflow to start one."
+          } >> "$GITHUB_STEP_SUMMARY"
