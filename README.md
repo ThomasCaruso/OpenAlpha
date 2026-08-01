@@ -13,9 +13,12 @@ for Kronos**.
 ## Current status
 
 OpenAlpha has completed the Sentinel v0, v1, and v1.1 development investigations.
-The repository is now in the design-only phase for OpenAlpha Bridge-2K. No Bridge
-checkpoint has been trained, no Bridge benchmark has been evaluated, and the
-untouched Sentinel holdout has not been accessed.
+Phase 1 proved the Bridge mathematical/runtime contract. Phase 2 then stopped at
+its preregistered pre-data gate with `OPERATIONALLY_BLOCKED`: the locked 512-candle
+window cannot fit inside the locked one-year validation partition or the daily
+reconstruction-test partition without prohibited split crossing. No market data or
+Kronos checkpoint was accessed, no Bridge checkpoint was trained, no benchmark was
+evaluated, and the untouched Sentinel holdout remains unaccessed.
 
 ## The problem
 
@@ -154,8 +157,10 @@ checkpoint combinations that do not match the checkpoint compatibility manifest.
 
 ## Benchmarks
 
-Bridge benchmarks have not been run. The locked feasibility experiment will compare
-the same official token sequences under four reconstruction paths:
+Bridge benchmarks have not been run. Phase 2 stopped before data access because the
+locked chronological partitions cannot form the locked 512-candle validation and
+test sequences. The preserved experiment was intended to compare the same official
+token sequences under four reconstruction paths:
 
 | Decoder | Validity mechanism | Current evidence |
 |---|---|---|

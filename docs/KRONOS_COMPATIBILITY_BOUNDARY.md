@@ -235,6 +235,20 @@ contract can be proven without loading protected model assets, while the Phase 2
 adapter remains obligated to reuse the pinned full-sequence trunk and unchanged
 tokens described above.
 
+## Phase 2 boundary status
+
+The compatibility boundary remains selected but was not instantiated in Phase 2.
+The pre-data window audit found that the locked daily validation and reconstruction
+test partitions cannot contain one complete 512-candle sequence while the
+no-crossing and purge rules remain in force. Phase 2 therefore stopped
+`OPERATIONALLY_BLOCKED` without downloading or loading the pinned source,
+Tokenizer-2k weights, codebooks, projection, decoder trunk, or output head.
+
+No runtime hash observation, token extraction, hidden-state extraction, frozen
+parameter comparison, or checkpoint compatibility claim exists. The identities in
+this document remain expected pinned identities from the preserved source trace,
+not a Phase 2 runtime manifest.
+
 ## Runtime rejection rules
 
 A Bridge checkpoint is loadable only when its manifest matches all of the following:

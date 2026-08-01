@@ -1,0 +1,22 @@
+{
+  "schema_version": "openalpha.bridge.phase2.reconstruction_metrics.v1",
+  "terminal_conclusion": "OPERATIONALLY_BLOCKED",
+  "scientific_result_available": false,
+  "original_experiment_sha256": "d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2",
+  "phase2_amendment_sha256": "4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8",
+  "status": "NOT_EVALUATED",
+  "test_partition_opened": false,
+  "evaluated_sequence_count": 0,
+  "evaluated_candle_count": 0,
+  "structurally_invalid_bridge_candles": null,
+  "structurally_invalid_bridge_sequences": null,
+  "range_mae_improvement_fraction": null,
+  "method_metrics": {
+    "OFFICIAL_DECODER": null,
+    "TERMINAL_PROJECTION": null,
+    "RESIDUAL_PROJECTION_BASELINE": null,
+    "OPENALPHA_BRIDGE_2K": null
+  },
+  "decision_gates": null,
+  "reason": "The locked test partition cannot form a 512-candle sequence without crossing a boundary."
+}

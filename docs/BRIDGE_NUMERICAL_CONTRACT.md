@@ -160,3 +160,13 @@ These results prove the implemented mathematical/runtime contract only. They do 
 show that the future learned head is accurate, that frozen Kronos tokens contain
 enough wick/range information, or that Bridge improves any reconstruction or
 forecast metric.
+
+## Phase 2 evidence boundary
+
+Phase 2 produced no learned numerical evidence. It stopped
+`OPERATIONALLY_BLOCKED` before data or checkpoint access because the locked
+512-candle example cannot fit inside the locked validation or reconstruction-test
+partitions without crossing a chronological boundary. The Phase 1 caps,
+activations, dtype tolerances, recursion, and serialization contract remain
+unchanged. No saturation distribution, coverage measurement, learned round trip,
+latency, memory, range error, or close-drift result was measured.

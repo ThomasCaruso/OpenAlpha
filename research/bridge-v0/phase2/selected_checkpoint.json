@@ -1,0 +1,16 @@
+{
+  "schema_version": "openalpha.bridge.phase2.selected_checkpoint.v1",
+  "terminal_conclusion": "OPERATIONALLY_BLOCKED",
+  "scientific_result_available": false,
+  "original_experiment_sha256": "d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2",
+  "phase2_amendment_sha256": "4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8",
+  "status": "NOT_CREATED",
+  "checkpoint_selected": false,
+  "checkpoint_path": null,
+  "checkpoint_sha256": null,
+  "checkpoint_size_bytes": 0,
+  "selection_epoch": null,
+  "selection_validation_loss": null,
+  "safe_serialization_format": null,
+  "reason": "Training never began."
+}

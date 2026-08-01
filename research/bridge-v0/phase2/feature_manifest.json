@@ -1,0 +1,22 @@
+{
+  "schema_version": "openalpha.bridge.phase2.feature_manifest.v1",
+  "terminal_conclusion": "OPERATIONALLY_BLOCKED",
+  "scientific_result_available": false,
+  "original_experiment_sha256": "d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2",
+  "phase2_amendment_sha256": "4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8",
+  "status": "NOT_RUN",
+  "kronos_source_downloads": 0,
+  "kronos_checkpoint_downloads": 0,
+  "kronos_checkpoint_loads": 0,
+  "tokenizer_encode_calls": 0,
+  "frozen_trunk_forward_calls": 0,
+  "feature_cache_created": false,
+  "feature_cache_path": null,
+  "feature_cache_sha256": null,
+  "feature_cache_bytes": 0,
+  "sequence_count": 0,
+  "expected_bridge_input_dimension": 269,
+  "expected_token_window": 512,
+  "expected_supervised_suffix": 64,
+  "reason_code": "PRE_DATA_PARTITION_FEASIBILITY_FAILURE"
+}

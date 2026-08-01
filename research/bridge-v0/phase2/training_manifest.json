@@ -1,0 +1,22 @@
+{
+  "schema_version": "openalpha.bridge.phase2.training_manifest.v1",
+  "terminal_conclusion": "OPERATIONALLY_BLOCKED",
+  "scientific_result_available": false,
+  "original_experiment_sha256": "d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2",
+  "phase2_amendment_sha256": "4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8",
+  "status": "NOT_RUN",
+  "architecture": "Linear(269,64)-SiLU-Linear(64,5)",
+  "expected_trainable_parameter_count": 17605,
+  "observed_trainable_parameter_count": null,
+  "training_started": false,
+  "optimizer_steps": 0,
+  "epochs_started": 0,
+  "epochs_completed": 0,
+  "checkpoint_candidates": 0,
+  "validation_checkpoint_selected": false,
+  "frozen_parameter_hash_before": null,
+  "frozen_parameter_hash_after": null,
+  "frozen_weight_verification": "NOT_RUN",
+  "test_access_before_checkpoint_seal": false,
+  "reason_code": "NO_VALIDATION_OR_TEST_SEQUENCE_CAN_EXIST_UNDER_LOCK"
+}

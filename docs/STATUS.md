@@ -2,6 +2,48 @@
 
 Last updated: 2026-07-31
 
+## OpenAlpha for Kronos Bridge Phase 2
+
+**Terminal conclusion: `OPERATIONALLY_BLOCKED`. No reconstruction-quality result
+exists.**
+
+Phase 2 stopped at its committed pre-data gate. The original experiment SHA-256
+remains byte-identical at
+`d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2`;
+the single Phase 2 amendment SHA-256 is
+`4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8`.
+
+The locked Candidate C example consumes 512 daily candles: 448 prefix candles and
+64 supervised suffix candles. Raw series must be partitioned before window
+construction, no sequence may cross a boundary, and at least 512 candles must be
+purged at time boundaries. The locked validation year has at most 365 calendar days
+and 260 weekdays. The reconstruction-test period has at most 390 weekdays. Thus
+validation and test each have an upper bound of zero complete sequences, before
+exchange holidays, and the required 5,000 test and 500 unseen-symbol target candles
+cannot be formed.
+
+Execution counts are therefore:
+
+- provider requests and retrieved candles: 0;
+- source/checkpoint downloads and checkpoint loads: 0;
+- tokenizer encodes and frozen-trunk calls: 0;
+- optimizer steps and completed epochs: 0;
+- selected checkpoints and committed checkpoint bytes: 0;
+- opened validation, reconstruction-test, external, forecast, and untouched
+  holdout results: 0.
+
+No trainable or frozen parameter was instantiated, so 17,605 remains the expected
+architecture count rather than a runtime count; frozen-weight parity was not run.
+Official, projection, residual, and Bridge reconstruction metrics, range
+improvement, bootstrap intervals, per-slice gates, latency, memory, and deterministic
+checkpoint replay are all not evaluated.
+
+Changing the window, periods, frequency, purge, or split-crossing rule would change
+the locked method. None was changed. The result does not establish that Bridge is
+feasible, partially feasible, or that Kronos tokens are insufficient. Phase 3
+forecast integration is not authorized. There is no next training task under the
+current lock.
+
 ## OpenAlpha for Kronos Bridge Phase 1
 
 **Claim boundary: MATHEMATICAL AND RUNTIME CONTRACT ONLY - NO TRAINING,

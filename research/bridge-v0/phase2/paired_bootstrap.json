@@ -1,0 +1,19 @@
+{
+  "schema_version": "openalpha.bridge.phase2.paired_bootstrap.v1",
+  "terminal_conclusion": "OPERATIONALLY_BLOCKED",
+  "scientific_result_available": false,
+  "original_experiment_sha256": "d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2",
+  "phase2_amendment_sha256": "4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8",
+  "status": "NOT_RUN",
+  "configured_unit": "nonoverlapping_target_suffix_sequence",
+  "configured_resamples": 10000,
+  "configured_seed": 20260731,
+  "configured_confidence_level": 0.95,
+  "executed_resamples": 0,
+  "paired_sequence_count": 0,
+  "range_mae_interval": null,
+  "official_ohlc_mae_interval": null,
+  "official_close_mae_interval": null,
+  "official_close_return_mae_interval": null,
+  "confirmation_result": null
+}

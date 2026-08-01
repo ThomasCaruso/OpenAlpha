@@ -23,6 +23,26 @@ ran no forecast, trained no head, created no checkpoint, and accessed no untouch
 holdout. It proves the hard output contract only; learned reconstruction and
 forecast quality remain entirely unmeasured.
 
+## Phase 2 terminal status
+
+Phase 2 ended `OPERATIONALLY_BLOCKED` at the pre-data feasibility gate. The locked
+contract requires each 512-candle example to remain wholly inside its chronological
+partition. The validation period contains at most 365 calendar days and 260
+weekdays; the reconstruction-test period contains at most 390 weekdays. Neither can
+contain one 512-candle daily sequence before exchange holidays or the required purge
+are applied.
+
+OpenAlpha did not change the 448/64 split, periods, daily frequency, purge, or
+no-crossing rule. It made zero provider requests, retrieved zero candles, loaded no
+Kronos asset, trained no parameter, selected no checkpoint, and opened no test,
+external, forecast, or untouched-holdout result. This is not evidence for or against
+token information sufficiency or Bridge reconstruction quality.
+
+The original experiment remains byte-identical at
+`d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2`.
+The single pre-data amendment is
+`4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8`.
+
 ## Product contract
 
 Kronos remains responsible for predicting hierarchical market-token sequences.
@@ -236,9 +256,9 @@ post-output projection. No training data was loaded and no decoder head was fitt
 
 ### Phase 2: Bridge-2K reconstruction feasibility
 
-Freeze the official Tokenizer-2k encoder and decoder trunk. Train the fixed small
-head. Compare paired held-out reconstruction under the four decoders. Stop unless
-all Phase 2 gates in `experiment.yaml` pass.
+Terminal status: `OPERATIONALLY_BLOCKED` before data access. The fixed
+17,605-parameter head was not instantiated or trained, and none of the four
+reconstruction methods was evaluated.
 
 ### Phase 3: fixed Kronos forecast integration
 

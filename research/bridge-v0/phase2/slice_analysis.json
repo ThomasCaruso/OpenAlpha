@@ -1,0 +1,24 @@
+{
+  "schema_version": "openalpha.bridge.phase2.slice_analysis.v1",
+  "terminal_conclusion": "OPERATIONALLY_BLOCKED",
+  "scientific_result_available": false,
+  "original_experiment_sha256": "d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2",
+  "phase2_amendment_sha256": "4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8",
+  "status": "NOT_EVALUATED",
+  "counting_convention": "Half-open date range; weekdays are an upper bound before exchange holidays.",
+  "token_window_length": 512,
+  "slices": {
+    "train": {"calendar_days": 4383, "weekday_upper_bound": 3131, "can_form_sequence": true},
+    "validation": {"calendar_days": 365, "weekday_upper_bound": 260, "can_form_sequence": false},
+    "reconstruction_test": {"calendar_days": 545, "weekday_upper_bound": 390, "can_form_sequence": false},
+    "external_later_period": {"calendar_days": 365, "weekday_upper_bound": 261, "can_form_sequence": false}
+  },
+  "per_symbol_metrics": null,
+  "per_interval_metrics": null,
+  "per_volatility_regime_metrics": null,
+  "per_external_slice_metrics": null,
+  "required_test_target_candles": 5000,
+  "possible_test_target_candles_under_lock": 0,
+  "required_unseen_symbol_target_candles": 500,
+  "possible_unseen_symbol_target_candles_under_lock": 0
+}
