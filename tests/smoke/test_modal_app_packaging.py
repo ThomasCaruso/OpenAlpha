@@ -91,8 +91,30 @@ def test_every_sibling_package_the_bridge_imports_is_mounted() -> None:
 def test_local_paths_are_resolved_against_the_repository_root() -> None:
     """A relative path would depend on the directory `modal deploy` runs from."""
     source = _source()
-    assert "REPO_ROOT = Path(__file__).resolve()" in source
-    assert "REPO_ROOT /" in source
+    assert "def _repo_root()" in source
+    assert "Path(__file__).resolve()" in source
+    assert "root / local_path" in source
+
+
+def test_repository_root_lookup_tolerates_a_shallow_path() -> None:
+    """Modal flattens the module to /root/<name>.py, which has only two parents.
+
+    Indexing parents[2] unconditionally raises IndexError there and every
+    container crash-loops on startup.
+    """
+    source = _source()
+    assert "len(here.parents) < 3" in source, (
+        "the repository-root lookup must tolerate a flattened container path"
+    )
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if "REPO_ROOT" in names:
+                pytest.fail(
+                    "REPO_ROOT must not be computed at module level; the "
+                    "container re-imports this module from a flattened path"
+                )
 
 
 def test_research_lock_directory_is_mounted() -> None:
@@ -148,6 +170,50 @@ def test_app_imports_where_the_workspace_is_not_installed() -> None:
         f"{result.stdout}\n{result.stderr}"
     )
     assert "OK 3" in result.stdout
+
+
+@pytest.mark.network
+def test_app_imports_when_flattened_like_the_container(tmp_path: Path) -> None:
+    """Reproduce the container layout exactly: the module alone at /root.
+
+    The previous isolated-import test ran the file from its repository location,
+    where parents[2] resolves, so it could not catch the flattening failure.
+    """
+    if shutil.which("uvx") is None and shutil.which("uv") is None:
+        pytest.skip("uv is required to build an isolated environment")
+
+    # A temporary directory is far too deep to reproduce this: the container
+    # path /root/<name>.py has exactly two parents, which is what makes
+    # parents[2] raise. Rebinding the module's __file__ reproduces that depth
+    # faithfully on both Linux and Windows.
+    probe = "\n".join(
+        (
+            "import importlib.util",
+            f"spec = importlib.util.spec_from_file_location('app', r'{APP_PATH}')",
+            "mod = importlib.util.module_from_spec(spec)",
+            "spec.loader.exec_module(mod)",
+            "mod.__file__ = '/root/bridge_phase2_app.py'",
+            "assert mod._repo_root() is None, 'a flattened module must find no repository'",
+            "img = mod._build_image()",
+            "assert img is not None, 'image construction must survive flattening'",
+            "print('FLATTENED OK')",
+        )
+    )
+
+    result = subprocess.run(
+        ["uvx", "--from", "modal>=0.64,<2", "python", "-c", probe],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        timeout=600,
+        check=False,
+    )
+    assert result.returncode == 0, (
+        "the Modal app crashes when imported from a flattened container path, "
+        "which makes every container crash-loop on startup:\n"
+        f"{result.stdout}\n{result.stderr}"
+    )
+    assert "FLATTENED OK" in result.stdout
 
 
 def test_app_module_imports_nothing_from_the_workspace_at_module_level() -> None:

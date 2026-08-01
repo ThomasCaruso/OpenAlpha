@@ -35,10 +35,21 @@ PYTHON_VERSION = "3.13"
 TORCH_VERSION = "2.5.1"
 CUDA_INDEX = "https://download.pytorch.org/whl/cu124"
 
-# Every local path is resolved against the repository root rather than the
-# process working directory, so `modal deploy` behaves identically from a fresh
-# checkout regardless of where it is invoked.
-REPO_ROOT = Path(__file__).resolve().parents[2]
+def _repo_root() -> Path | None:
+    """The repository root when deploying, or None inside the container.
+
+    Modal re-imports this module in the container to resolve a function, where
+    it is flattened to /root/<name>.py. Unconditionally taking parents[2] there
+    raises IndexError and every container crash-loops on startup.
+
+    The client imports it from cloud/modal/, so the root is two levels up. The
+    layout check keeps this honest rather than trusting the depth alone.
+    """
+    here = Path(__file__).resolve()
+    if len(here.parents) < 3:
+        return None
+    candidate = here.parents[2]
+    return candidate if (candidate / "packages" / "bridge").is_dir() else None
 
 #: Workspace packages copied into the image, and their import locations.
 #:
@@ -81,15 +92,25 @@ def _build_image() -> Any:
         # copied packages importable regardless of how a function is invoked.
         .env({"PYTHONPATH": "/root"})
     )
+
+    root = _repo_root()
+    if root is None:
+        # Container: the image is already built and no repository is present, so
+        # there is nothing to add. Returning the base keeps module import safe.
+        return built
+
     # Source is added last so edits do not invalidate the dependency layers.
     for local_path, remote_path in LOCAL_PACKAGES:
-        built = built.add_local_dir(
-            str(REPO_ROOT / local_path), remote_path=remote_path, ignore=_IGNORE
-        )
+        source = root / local_path
+        if not source.is_dir():
+            raise FileNotFoundError(f"declared local package is missing: {source}")
+        built = built.add_local_dir(str(source), remote_path=remote_path, ignore=_IGNORE)
+
+    research = root / "research" / "bridge-v0"
+    if not research.is_dir():
+        raise FileNotFoundError(f"locked research directory is missing: {research}")
     return built.add_local_dir(
-        str(REPO_ROOT / "research" / "bridge-v0"),
-        remote_path="/root/research/bridge-v0",
-        ignore=_IGNORE,
+        str(research), remote_path="/root/research/bridge-v0", ignore=_IGNORE
     )
 
 
