@@ -27,3 +27,11 @@ markers = ["slow: resource-intensive integration", "network: external network re
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+
+[tool.pyright]
+# scripts/kronos_constrained_worker.py reads Windows-only ctypes.windll behind a
+# platform.system() guard, so the branch is unreachable on Linux. It is also
+# hash-sealed by research/sentinel-v1/feasibility/manifest.json and therefore
+# cannot be edited to add a suppression without invalidating preserved research
+# evidence. Ignoring the single sealed file keeps CI platform-independent.
+ignore = ["scripts/kronos_constrained_worker.py"]
