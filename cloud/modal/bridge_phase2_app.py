@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import modal
@@ -34,27 +35,65 @@ PYTHON_VERSION = "3.13"
 TORCH_VERSION = "2.5.1"
 CUDA_INDEX = "https://download.pytorch.org/whl/cu124"
 
-image = (
-    modal.Image.debian_slim(python_version=PYTHON_VERSION)
-    .apt_install("git")
-    .pip_install(
-        f"torch=={TORCH_VERSION}",
-        extra_index_url=CUDA_INDEX,
-    )
-    .pip_install(
-        "numpy>=2.5,<3",
-        "pydantic>=2.11,<3",
-        "yfinance==1.5.2",
-        "huggingface-hub>=0.34,<1",
-        "safetensors>=0.4,<1",
-        "boto3>=1.35,<2",
-        "fastapi>=0.115,<1",
-    )
-    # The repository is added last so source edits do not invalidate the
-    # dependency layers.
-    .add_local_python_source("openalpha_bridge")
-    .add_local_dir("research/bridge-v0", remote_path="/root/research/bridge-v0")
+# Every local path is resolved against the repository root rather than the
+# process working directory, so `modal deploy` behaves identically from a fresh
+# checkout regardless of where it is invoked.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: Workspace packages copied into the image, and their import locations.
+#:
+#: `add_local_python_source` is deliberately not used: it resolves a package by
+#: importing it in the deploying process. `modal deploy` runs from an isolated
+#: uvx environment where the workspace packages are not installed, so it fails
+#: with "openalpha_bridge has no spec - might not be installed?". Explicit
+#: directory copies have no such dependency.
+#:
+#: openalpha_bridge.validation imports openalpha_sentinel.structural_validity,
+#: so sentinel is a runtime requirement, not merely a declared one.
+LOCAL_PACKAGES: tuple[tuple[str, str], ...] = (
+    ("packages/bridge/src/openalpha_bridge", "/root/openalpha_bridge"),
+    ("packages/sentinel/src/openalpha_sentinel", "/root/openalpha_sentinel"),
+    ("packages/research-core/src/openalpha_research", "/root/openalpha_research"),
 )
+
+#: Bytecode from the host Python must never shadow the image's own.
+_IGNORE = ["__pycache__", "**/__pycache__", "*.pyc", "*.pyo"]
+
+
+def _build_image() -> Any:
+    built = (
+        modal.Image.debian_slim(python_version=PYTHON_VERSION)
+        .apt_install("git")
+        .pip_install(
+            f"torch=={TORCH_VERSION}",
+            extra_index_url=CUDA_INDEX,
+        )
+        .pip_install(
+            "numpy>=2.5,<3",
+            "pydantic>=2.11,<3",
+            "yfinance==1.5.2",
+            "huggingface-hub>=0.34,<1",
+            "safetensors>=0.4,<1",
+            "boto3>=1.35,<2",
+            "fastapi>=0.115,<1",
+        )
+        # /root is the container working directory; making it explicit keeps the
+        # copied packages importable regardless of how a function is invoked.
+        .env({"PYTHONPATH": "/root"})
+    )
+    # Source is added last so edits do not invalidate the dependency layers.
+    for local_path, remote_path in LOCAL_PACKAGES:
+        built = built.add_local_dir(
+            str(REPO_ROOT / local_path), remote_path=remote_path, ignore=_IGNORE
+        )
+    return built.add_local_dir(
+        str(REPO_ROOT / "research" / "bridge-v0"),
+        remote_path="/root/research/bridge-v0",
+        ignore=_IGNORE,
+    )
+
+
+image = _build_image()
 
 app = modal.App(APP_NAME)
 
