@@ -35,7 +35,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: bridge-phase2-start-${{ inputs.execution_mode }}
+  # Workflow-level keys cannot read the `inputs` context on workflow_dispatch;
+  # only `github.event.inputs` is available here. Using `inputs` makes GitHub
+  # reject the file, so the workflow never registers.
+  group: bridge-phase2-start-${{ github.event.inputs.execution_mode }}
   cancel-in-progress: false
 
 jobs:
