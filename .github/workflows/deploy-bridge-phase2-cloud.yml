@@ -79,22 +79,38 @@ jobs:
 
       - run: uv python install 3.13
 
-      - name: Install the Modal client
-        run: uv pip install --system "modal>=0.64,<2"
+      - name: Confirm Modal credentials are present
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          missing=""
+          [ -z "${MODAL_TOKEN_ID}" ] && missing="${missing} MODAL_TOKEN_ID"
+          [ -z "${MODAL_TOKEN_SECRET}" ] && missing="${missing} MODAL_TOKEN_SECRET"
+          if [ -n "${missing}" ]; then
+            echo "missing required secret(s) in environment bridge-phase2-cloud:${missing}"
+            echo "add them under Settings > Environments > bridge-phase2-cloud"
+            exit 1
+          fi
+          echo "Modal credentials present"
 
       - name: Deploy the Modal application
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
           OPENALPHA_DEPENDENCY_LOCK_SHA256: ${{ needs.verify.outputs.lock_sha256 }}
-        run: modal deploy cloud/modal/bridge_phase2_app.py
+        # The runner's system Python is externally managed (PEP 668), so
+        # `uv pip install --system` fails. uvx runs Modal from an isolated,
+        # pinned environment instead.
+        run: uvx --from "modal>=0.64,<2" modal deploy cloud/modal/bridge_phase2_app.py
 
       - name: Verify the deployed image agrees with the committed locks
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         run: |
-          modal run cloud/modal/bridge_phase2_app.py::verify_deployment \
+          uvx --from "modal>=0.64,<2" modal run \
+            cloud/modal/bridge_phase2_app.py::verify_deployment \
             | tee deployment-verification.txt
           if ! grep -q "d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2" \
                deployment-verification.txt; then

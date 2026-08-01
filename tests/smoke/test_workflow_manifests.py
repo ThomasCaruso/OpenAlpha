@@ -108,6 +108,25 @@ def test_full_suite_runs_sync_every_group_they_need(path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("path", _workflows(), ids=lambda p: p.name)
+def test_no_workflow_installs_into_the_system_python(path: Path) -> None:
+    """GitHub runners ship an externally managed Python (PEP 668).
+
+    `uv pip install --system` fails there. Tools must run through `uvx` or a
+    virtual environment instead.
+    """
+    offenders = [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        # A comment naming the antipattern is documentation, not an invocation.
+        if not line.strip().startswith("#") and "uv pip install --system" in line
+    ]
+    assert not offenders, (
+        f"{path.name} installs into the runner's system Python, which PEP 668 "
+        f"rejects. Use `uvx --from <pkg> <cmd>` instead. Offending: {offenders}"
+    )
+
+
 def test_no_workflow_embeds_a_credential_value() -> None:
     """Credentials may be referenced as secrets, never written literally."""
     for path in _workflows():
