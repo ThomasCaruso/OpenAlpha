@@ -1,0 +1,328 @@
+schema_version: openalpha-bridge-v0-phase2-amendment-v2
+experiment_id: openalpha-kronos-bridge-2k-feasibility
+phase: phase_2_reconstruction_feasibility
+status: pre_data_correction_of_split_interpretation
+amended_on: 2026-07-31
+supersedes_interpretation_only: research/bridge-v0/phase2-preregistration-amendment.yaml
+claim_boundary: DEVELOPMENT COMPATIBILITY RESEARCH - NO RECONSTRUCTION RESULT
+
+original_lock:
+  path: research/bridge-v0/experiment.yaml
+  sha256: d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2
+  bytes_modified: false
+  controlling_except_for_explicit_clarifications_below: true
+
+amendment_1:
+  path: research/bridge-v0/phase2-preregistration-amendment.yaml
+  sha256: 4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8
+  bytes_modified: false
+  preserved: true
+  clarifications_still_controlling:
+    - primary_provider
+    - binance_phase_2_access
+    - learning_rate_policy
+    - validation_checkpoint_tie_break
+    - stage_a
+    - stage_b
+    - representation_coverage
+    - cpu_compute_gate
+    - latency_measurement_if_reached
+    - phase_scope
+  superseded_block: literal_split_contract
+  superseded_reason: >-
+    The literal_split_contract recorded a protocol-design error, not an
+    observation. It required a complete 512-candle example to lie wholly inside
+    one chronological partition and set
+    context_prefix_borrowing_from_another_partition to false. The original lock
+    never stated that; it declares causal_prefix_length 448 and
+    supervised_suffix_length 64 separately, and split_crossing referred to the
+    scored target, not the read-only warm-up context.
+
+blocker_record:
+  path: research/bridge-v0/phase2/
+  terminal_conclusion: OPERATIONALLY_BLOCKED
+  preserved_byte_identical: true
+  rewritten_or_discarded: false
+  commit: e684c72
+
+execution_state_at_amendment:
+  provider_requests: 0
+  retrieved_candles: 0
+  kronos_source_downloads: 0
+  kronos_checkpoint_downloads: 0
+  kronos_checkpoint_loads: 0
+  tokenizer_encodes: 0
+  bridge_optimizer_steps: 0
+  market_data_accessed: false
+  model_assets_accessed: false
+  training_outcomes_observed: false
+  validation_metrics_inspected: false
+  reconstruction_test_opened: false
+  external_slices_opened: false
+  sentinel_untouched_holdout_opened: false
+
+unchanged_by_this_amendment:
+  bridge_architecture: true
+  candidate_c_selection: true
+  trainable_parameter_count_17605: true
+  official_frozen_trunk: true
+  representation_formulas: true
+  numerical_caps: true
+  loss_and_weights: true
+  optimizer_and_seed: true
+  metrics: true
+  paired_bootstrap_procedure: true
+  success_thresholds: true
+  failure_thresholds: true
+  source_universe: true
+  chronological_periods: true
+  compute_and_corpus_limits: true
+  test_outcomes: true
+
+context_prefix_scored_suffix_contract:
+  example_length: 512
+  context_prefix_positions: [0, 447]
+  scored_suffix_positions: [448, 511]
+  context_prefix_length: 448
+  scored_suffix_length: 64
+  score_mask:
+    positions_0_to_447: false
+    positions_448_to_511: true
+    immutable: true
+  partition_isolation_applies_to:
+    - trainable_targets
+    - losses
+    - model_fitting
+    - preprocessing_fitting
+    - checkpoint_selection
+    - threshold_selection
+    - final_metrics
+  partition_isolation_does_not_prohibit:
+    - earlier_chronological_observations_as_read_only_causal_context
+  train_examples:
+    all_64_scored_candles_inside_train: required
+    context_precedes_scored_suffix_chronologically: required
+    context_may_come_from_earlier_training_history: true
+    validation_or_test_candle_anywhere_in_example: prohibited
+  validation_examples:
+    all_64_scored_candles_inside_validation: required
+    prefix_may_include_earlier_training_history: true
+    candle_at_or_after_scored_suffix_start_in_context_or_normalization: prohibited
+    influence_on_optimizer_updates: prohibited
+    permitted_use: locked_checkpoint_selection_and_early_stopping_only
+  test_examples:
+    all_64_scored_candles_inside_test: required
+    prefix_may_include_earlier_training_and_validation_history: true
+    influence_on_training: prohibited
+    influence_on_preprocessing_fitting: prohibited
+    influence_on_checkpoint_selection: prohibited
+    influence_on_threshold_or_configuration: prohibited
+    evaluation_count: exactly_once_after_checkpoint_selection_frozen
+  external_and_unseen_symbol_slices:
+    all_scored_targets_inside_declared_slice: required
+    historical_warm_up_context_may_precede_slice: true
+    unseen_symbol_remains_unseen_during_training: true
+    unseen_symbol_data_fitting_bridge_parameters: prohibited
+    unseen_symbol_data_fitting_bridge_preprocessing: prohibited
+  forbidden_flows:
+    - validation_target_into_training_loss
+    - test_target_into_validation_selection
+    - future_target_candle_into_earlier_causal_hidden_state
+
+loss_and_metric_masking:
+  preregistered_training_loss_already_suffix_only: true
+  training_mask_preserved_exactly: true
+  training_and_evaluation_mask_identical: true
+  training_mask_distinct_from_evaluation_mask: false
+  distinction_documentation_required: false
+  validation_reconstruction_loss_scored_on: suffix_only
+  test_reconstruction_loss_scored_on: suffix_only
+  reported_reconstruction_metrics_scored_on: suffix_only
+  terminal_projection_baseline_scored_on: identical_suffix
+  residual_projection_baseline_scored_on: identical_suffix
+  official_decoder_baseline_scored_on: identical_suffix
+  warm_up_context_in_any_metric: prohibited
+  artifact_must_record:
+    - context_prefix_length
+    - scored_suffix_length
+    - score_mask_sha256
+
+score_mask_identity:
+  definition: 512 booleans, false for positions 0-447, true for positions 448-511
+  encoding: ascii_string_of_0_and_1_characters_in_position_order_no_separator
+  sha256: 2fe5b1b3c66dfd7c7e8af2612d69d3c2337a4a0f6dd3896a4d7c2f69911f3711
+
+causality_requirements:
+  context_timestamps_strictly_earlier_or_equal_to_causal_decoding_position: required
+  later_target_candle_influencing_current_bridge_input: prohibited
+  initial_anchor: close_immediately_preceding_scored_reconstruction_sequence
+  later_anchor: previous_reconstructed_bridge_close
+  true_future_close_injection_during_evaluation: prohibited
+  bridge_scalers_and_statistics_fitted_on: training_partition_only
+  frozen_official_kronos_state: used_exactly_as_documented
+  normalization: causal_prefix_feature_population_mean_and_std_as_originally_locked
+
+target_overlap:
+  final_evaluation_target_suffixes_nonoverlapping: required
+  evaluation_stride: 64
+  scored_suffixes_share_target_candles: false
+  warm_up_prefixes_may_overlap: true
+  bootstrap_resampling_unit: scored_sequence_or_instrument_time_block_identifier
+  dependence_aware_alternative_in_preregistration: false
+  recorded_per_sequence:
+    - target_start
+    - target_end
+    - prefix_start
+    - prefix_end
+    - target_overlap_status
+    - sequence_id
+    - partition
+    - symbol
+    - interval
+
+calendar_verification:
+  locked_source: yahoo_finance
+  locked_interval: 1d
+  instrument_class: exchange_traded_equity_etf
+  calendar: XNYS
+  crypto_24_7_calendar_applicable_to_phase_2: false
+  binance_calendar_scope: phase_4_only_after_data_policy_review
+  binance_phase_2_access: prohibited
+  weekend_sessions_counted: false
+  holiday_rules:
+    - new_years_day_sunday_observed_following_monday
+    - martin_luther_king_third_monday_january
+    - washingtons_birthday_third_monday_february
+    - good_friday
+    - memorial_day_last_monday_may
+    - juneteenth_from_2022_saturday_to_friday_sunday_to_monday
+    - independence_day_saturday_to_friday_sunday_to_monday
+    - labor_day_first_monday_september
+    - thanksgiving_fourth_thursday_november
+    - christmas_saturday_to_friday_sunday_to_monday
+  ad_hoc_closures: [2012-10-29, 2012-10-30, 2018-12-05, 2025-01-09]
+  counting_convention: half_open_start_inclusive_end_exclusive
+
+held_out_target_candle_interpretation:
+  phrase_source: research/bridge-v0/preregistration.md
+  phrase: >-
+    Evaluation requires at least 5,000 unique held-out target candles and at
+    least 500 unique unseen-symbol target candles.
+  declared_interpretation: >-
+    The 5,000 minimum counts the whole reconstruction-test scored corpus, which
+    comprises both the 14 training symbols and the 6 unseen symbols. The 500
+    minimum is a composition floor on the unseen-symbol subset of that same
+    corpus.
+  rationale: >-
+    minimum_unique_unseen_symbol_test_candles is declared inside the Phase 2
+    windowing block of the original lock, which places unseen symbols inside the
+    Phase 2 reconstruction-test pass rather than only inside Phase 4.
+  declared_before_any_data_access: true
+  threshold_value_changed: false
+  interpretation_declared_after_seeing_outcomes: false
+
+pre_retrieval_feasibility_table:
+  derived_from: committed_dates_and_xnys_calendar_only
+  provider_access_used: false
+  market_observation_used: false
+  interval: 1d
+  identical_for_every_declared_symbol: true
+  symbol_history_assumption: >-
+    Every declared symbol is assumed to have continuous XNYS history from
+    2010-01-01. All 20 declared ETFs listed before that date. This assumption is
+    verifiable only at retrieval and is a Stage A gate, not a claim.
+  train:
+    period: [2010-01-01, 2022-01-01]
+    expected_sessions: 3021
+    prefix_sessions_available_before_partition: 0
+    warm_up_source: within_partition
+    nonoverlapping_scored_suffixes_per_symbol: 40
+    scored_candles_per_symbol: 2560
+    first_eligible_target_suffix: [2011-10-12, 2012-01-12]
+    last_eligible_target_suffix: [2021-09-14, 2021-12-13]
+    first_prefix_start: 2010-01-04
+    unused_tail_sessions: 13
+    causal_warm_up_448_available: true
+    terminal_feasibility_status: FEASIBLE
+  validation:
+    period: [2022-01-01, 2023-01-01]
+    expected_sessions: 251
+    prefix_sessions_available_before_partition: 3021
+    warm_up_source: earlier_training_history
+    nonoverlapping_scored_suffixes_per_symbol: 3
+    scored_candles_per_symbol: 192
+    first_eligible_target_suffix: [2022-01-03, 2022-04-04]
+    last_eligible_target_suffix: [2022-07-08, 2022-10-06]
+    unused_tail_sessions: 59
+    causal_warm_up_448_available: true
+    terminal_feasibility_status: FEASIBLE
+  reconstruction_test:
+    period: [2023-01-01, 2024-06-29]
+    expected_sessions: 374
+    prefix_sessions_available_before_partition: 3272
+    warm_up_source: earlier_training_and_validation_history
+    nonoverlapping_scored_suffixes_per_symbol: 5
+    scored_candles_per_symbol: 320
+    first_eligible_target_suffix: [2023-01-03, 2023-04-04]
+    last_eligible_target_suffix: [2024-01-10, 2024-04-11]
+    unused_tail_sessions: 54
+    causal_warm_up_448_available: true
+    terminal_feasibility_status: FEASIBLE
+  external_later_period:
+    period: [2024-07-01, 2025-07-01]
+    expected_sessions: 250
+    prefix_sessions_available_before_partition: 3646
+    warm_up_source: earlier_training_validation_and_test_history
+    nonoverlapping_scored_suffixes_per_symbol: 3
+    scored_candles_per_symbol: 192
+    first_eligible_target_suffix: [2024-07-01, 2024-09-30]
+    last_eligible_target_suffix: [2025-01-02, 2025-04-04]
+    unused_tail_sessions: 58
+    causal_warm_up_448_available: true
+    terminal_feasibility_status: FEASIBLE
+
+pooled_corpus_counts:
+  training_symbol_count: 14
+  unseen_symbol_count: 6
+  train_scored_sequences: 560
+  train_scored_candles: 35840
+  validation_scored_sequences: 42
+  validation_scored_candles: 2688
+  reconstruction_test_scored_sequences_training_symbols: 70
+  reconstruction_test_scored_candles_training_symbols: 4480
+  reconstruction_test_scored_sequences_unseen_symbols: 30
+  reconstruction_test_scored_candles_unseen_symbols: 1920
+  reconstruction_test_scored_sequences_total: 100
+  reconstruction_test_scored_candles_total: 6400
+  external_scored_sequences_total: 60
+  external_scored_candles_total: 3840
+
+minimum_sample_gates:
+  required_unique_test_target_candles: 5000
+  available_unique_test_target_candles: 6400
+  test_gate: PASS
+  required_unique_unseen_symbol_test_target_candles: 500
+  available_unique_unseen_symbol_test_target_candles: 1920
+  unseen_gate: PASS
+  required_candles_per_external_volatility_regime: 500
+  available_external_scored_candles_total: 3840
+  external_regime_gate: CONTINGENT_ON_OBSERVED_REGIME_BALANCE
+  external_regime_gate_note: >-
+    Regime thresholds are pooled-training-split quantiles, so per-regime external
+    counts cannot be derived before retrieval. An even three-way split yields
+    about 1280 per regime. This gate is evaluated at Phase 4, not Phase 2.
+  window_compatibility_reduced_to_fit_split: false
+  periods_changed: false
+  symbols_changed: false
+  thresholds_changed: false
+
+terminal_decision:
+  conclusion: PRE_DATA_GATE_PASSES_UNDER_CORRECTED_CONTRACT
+  phase_2_permanently_terminated: false
+  data_retrieval_authorized_after_this_commit: true
+  stage_order: [stage_a_pipeline_smoke, stage_b_information_sufficiency_probe, stage_c_locked_training_and_one_time_test]
+  test_partition_access_before_checkpoint_selection_frozen: prohibited
+  architecture_change_authorized: false
+  period_change_authorized: false
+  window_change_authorized: false
+  threshold_change_authorized: false
