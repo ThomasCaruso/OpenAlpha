@@ -689,3 +689,104 @@ def frozen_inference_diagnostic(source_commit: str, run_id: str) -> dict[str, An
     )
     cache_volume.commit()
     return result.model_dump(mode="json")
+
+
+# --------------------------------- frozen inference runtime probe (GPU only)
+
+
+@app.function(
+    image=image,
+    gpu=GPU_CONFIG,
+    volumes={CACHE_ROOT: cache_volume},
+    secrets=secrets,
+    timeout=30 * 60,
+    retries=0,
+)
+def verify_frozen_inference_runtime() -> dict[str, Any]:
+    """Does the deployed image actually execute the official frozen path?
+
+    A compatibility probe, not a diagnostic and not empirical evidence. It
+    retrieves no market data, computes no forecast metric, writes no scientific
+    conclusion, and authorizes nothing, including the diagnostic itself.
+
+    Its result carries its own schema and its own outcome code, and nothing
+    here can write under the frozen diagnostic's key.
+    """
+    from pathlib import Path
+
+    from openalpha_bridge.diagnostic.official_backend import (
+        OfficialForecastModel,
+        OfficialTokenizerCodec,
+        isolated_official_source,
+        load_official_components,
+        parameter_digest,
+    )
+    from openalpha_bridge.diagnostic.runtime_probe import (
+        RuntimeEnvironment,
+        run_frozen_inference_runtime_probe,
+    )
+    from openalpha_bridge.phase2.kronos import TOKENIZER_SPEC
+
+    _register_secrets()
+    cache_root = Path(CACHE_ROOT)
+    os.environ.setdefault("HF_HOME", str(cache_root / "huggingface"))
+    source_root = Path(os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH", KRONOS_SOURCE_ROOT))
+
+    import numpy
+    import torch
+    from huggingface_hub import snapshot_download
+
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "RUNTIME_PROBE_NO_CUDA: the probe exists to exercise the deployed GPU path"
+        )
+
+    environment = RuntimeEnvironment(
+        torch_version=torch.__version__,
+        torch_cuda_version=torch.version.cuda,
+        cuda_available=True,
+        device_name=torch.cuda.get_device_name(0),
+        device_capability=".".join(str(part) for part in torch.cuda.get_device_capability(0)),
+        numpy_version=numpy.__version__,
+    )
+
+    # Only the two files that are needed and hash-verified. allow_patterns
+    # keeps the download to those; without it the whole repository is pulled,
+    # including files nothing verifies.
+    wanted = ["config.json", "model.safetensors"]
+    tokenizer_dir = snapshot_download(
+        repo_id=TOKENIZER_SPEC.repository,
+        revision=TOKENIZER_SPEC.revision,
+        cache_dir=str(cache_root / "huggingface"),
+        allow_patterns=wanted,
+    )
+    model_dir = snapshot_download(
+        repo_id=KRONOS_MINI_REPOSITORY,
+        revision=KRONOS_MINI_REVISION,
+        cache_dir=str(cache_root / "huggingface"),
+        allow_patterns=wanted,
+    )
+
+    tokenizer, model, assets = load_official_components(
+        source_root=source_root,
+        tokenizer_directory=tokenizer_dir,
+        model_directory=model_dir,
+        tokenizer_spec=TOKENIZER_SPEC,
+        device="cuda",
+    )
+
+    with isolated_official_source(source_root) as official:
+        result = run_frozen_inference_runtime_probe(
+            codec=OfficialTokenizerCodec(tokenizer=tokenizer, official=official, device="cuda"),
+            model=OfficialForecastModel(
+                model=model, tokenizer=tokenizer, official=official, device="cuda"
+            ),
+            assets=assets,
+            parameter_digest=lambda: parameter_digest(tokenizer, model),
+            environment=environment,
+            run_id="runtime_probe",
+            deployed_commit=_require_deployed_commit(),
+        )
+
+    cache_volume.commit()
+    return result.model_dump(mode="json")
