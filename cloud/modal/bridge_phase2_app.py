@@ -432,3 +432,77 @@ def verify_deployment() -> dict[str, Any]:
         "locked_hashes": observed,
         "verified_at": _now().isoformat(),
     }
+
+
+# ------------------------------------------- Stage A official canary (GPU)
+
+
+@app.function(
+    image=image,
+    gpu=GPU_CONFIG,
+    volumes={CACHE_ROOT: cache_volume},
+    secrets=secrets,
+    timeout=30 * 60,
+    retries=0,
+)
+def stage_a_official_canary(source_commit: str, run_id: str) -> dict[str, Any]:
+    """One isolated Stage A compatibility check on the amended SPY window.
+
+    Deliberately NOT routed through CloudRunner: that runner continues into the
+    default-driven Stage B and Stage C. This function has no code path into
+    training, checkpoint creation, checkpoint selection, metric or gate
+    evaluation, or test opening. It retrieves only the single amended SPY
+    training window and stops after extraction.
+
+    Evidence lands under a development/compatibility prefix that cannot be
+    confused with a complete real_phase2 run.
+    """
+    from pathlib import Path
+
+    from openalpha_bridge.cloud.objectstore import put_json
+    from openalpha_bridge.phase2.cache import FeatureCache
+    from openalpha_bridge.phase2.canary import (
+        CANARY_EVIDENCE_CLASS,
+        run_stage_a_canary,
+    )
+    from openalpha_bridge.phase2.kronos import OfficialKronosBackend
+    from openalpha_bridge.phase2.provider import YahooDailyProvider
+    from openalpha_bridge.phase2.states import EvidenceClass
+
+    _register_secrets()
+    store = _build_store()
+    cache_root = Path(CACHE_ROOT)
+    os.environ.setdefault("HF_HOME", str(cache_root / "huggingface"))
+
+    report = run_stage_a_canary(
+        provider=YahooDailyProvider(stage="stage-a-canary"),
+        backend=OfficialKronosBackend(
+            stage="stage-a-canary",
+            device="cuda",
+            cache_dir=str(cache_root / "huggingface"),
+            source_path=os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH", KRONOS_SOURCE_ROOT),
+        ),
+        cache=FeatureCache(cache_root / "canary" / run_id),
+        research_root=Path("/root/research/bridge-v0"),
+        source_commit=source_commit,
+        run_id=run_id,
+    )
+
+    # A prefix distinct from both the real and the synthetic run namespaces.
+    key = f"openalpha-compatibility/stage-a-canary/{run_id}/canary_report.json"
+    put_json(
+        store,
+        key,
+        report.model_dump(mode="json"),
+        schema_version=report.schema_version,
+        run_id=run_id,
+        experiment_hash=report.experiment_sha256,
+        evidence_class=EvidenceClass.SYNTHETIC_PIPELINE_VALIDATION,
+        immutable=True,
+    )
+    cache_volume.commit()
+
+    payload = report.model_dump(mode="json")
+    payload["artifact_key"] = key
+    payload["evidence_class"] = CANARY_EVIDENCE_CLASS
+    return payload
