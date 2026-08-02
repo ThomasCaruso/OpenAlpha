@@ -22,7 +22,7 @@ from ..phase2.measurement import GpuMeasurement, gpu_snapshot, reset_gpu_statist
 from .backends import ResolvedDiagnosticAssets
 from .normalization import NormalizationState, context_matrix, fit_context_state
 from .official_input import OFFICIAL_COLUMNS, OfficialRow, official_stamp
-from .spec import KRONOS_MINI_SPEC
+from .spec import OFFICIAL_TOKEN_VOCABULARY
 
 __all__ = [
     "PROBE_ARTIFACT_NAME",
@@ -200,8 +200,8 @@ def run_frozen_inference_runtime_probe(
     coarse = [t.coarse for t in tokens]
     fine = [t.fine for t in tokens]
     for name, values, vocabulary in (
-        ("coarse", coarse, KRONOS_MINI_SPEC.coarse_vocabulary),
-        ("fine", fine, KRONOS_MINI_SPEC.fine_vocabulary),
+        ("coarse", coarse, OFFICIAL_TOKEN_VOCABULARY),
+        ("fine", fine, OFFICIAL_TOKEN_VOCABULARY),
     ):
         if min(values) < 0 or max(values) >= vocabulary:
             raise _fail(

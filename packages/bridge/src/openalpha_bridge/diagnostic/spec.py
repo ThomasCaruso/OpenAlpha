@@ -29,6 +29,7 @@ __all__ = [
     "OFFICIAL_INFERENCE_SETTINGS",
     "OFFICIAL_SNAPSHOT_ALLOW_PATTERNS",
     "OFFICIAL_SOURCE_FILES",
+    "OFFICIAL_TOKEN_VOCABULARY",
     "PRIMARY_METRIC",
     "ROLLOUT_COUNT",
     "ROLLOUT_SEEDS",
@@ -83,6 +84,13 @@ OFFICIAL_SNAPSHOT_ALLOW_PATTERNS: Final[tuple[str, ...]] = (
 )
 
 CLAIM_BOUNDARY: Final[str] = "DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"
+
+#: Every released Kronos tokenizer encodes with s1_bits = s2_bits = 10, so both
+#: token streams span [0, 1023]. Named here because that is a property of the
+#: token space, not of one model family: the codec's bound check should not have
+#: to borrow Kronos-mini's spec to describe something Kronos-base shares. A test
+#: asserts each pinned spec agrees with this value rather than assuming it.
+OFFICIAL_TOKEN_VOCABULARY: Final[int] = 1024
 
 TOTAL_CANDLES: Final[int] = 512
 CONTEXT_CANDLES: Final[int] = 448

@@ -33,7 +33,7 @@ from .backends import GeneratedPath, ResolvedDiagnosticAssets, StepSampling, Tok
 from .normalization import NormalizationState
 from .official_input import OfficialRow, TimeStamp
 from .source_conformance import SOURCE_REVISION, verify_source_files
-from .spec import KRONOS_MINI_SPEC
+from .spec import KRONOS_MINI_SPEC, OFFICIAL_TOKEN_VOCABULARY
 
 __all__ = [
     "OFFICIAL_ALIASES",
@@ -274,8 +274,8 @@ class OfficialTokenizerCodec:
             )
         coarse, fine = encoded
         for name, ids, vocabulary in (
-            ("coarse", coarse, KRONOS_MINI_SPEC.coarse_vocabulary),
-            ("fine", fine, KRONOS_MINI_SPEC.fine_vocabulary),
+            ("coarse", coarse, OFFICIAL_TOKEN_VOCABULARY),
+            ("fine", fine, OFFICIAL_TOKEN_VOCABULARY),
         ):
             if tuple(ids.shape) != (1, len(rows)):
                 raise _fail(
@@ -447,12 +447,12 @@ class OfficialForecastModel:
                 s2_logits = self._model.decode_s2(decoded_context, sampled_coarse)
                 fine_index, fine_probability = draw(s2_logits[:, -1, :])
 
-                if not 0 <= coarse_index < KRONOS_MINI_SPEC.coarse_vocabulary:
+                if not 0 <= coarse_index < OFFICIAL_TOKEN_VOCABULARY:
                     raise _fail(
                         "OFFICIAL_TOKEN_OUT_OF_VOCABULARY",
                         f"coarse token {coarse_index} outside the vocabulary",
                     )
-                if not 0 <= fine_index < KRONOS_MINI_SPEC.fine_vocabulary:
+                if not 0 <= fine_index < OFFICIAL_TOKEN_VOCABULARY:
                     raise _fail(
                         "OFFICIAL_TOKEN_OUT_OF_VOCABULARY",
                         f"fine token {fine_index} outside the vocabulary",
@@ -623,8 +623,16 @@ def verify_official_assets(
     tokenizer_directory: Path | str,
     model_directory: Path | str,
     tokenizer_spec: Any,
+    model_spec: Any = KRONOS_MINI_SPEC,
 ) -> OfficialAssetDigests:
-    """Hash all four resolved files, or fail closed. Loads nothing."""
+    """Hash all four resolved files, or fail closed. Loads nothing.
+
+    ``model_spec`` defaults to the Kronos-mini pin, which is what the mini
+    diagnostic and its probe have always verified against. A second study
+    passes its own fully pinned spec; nothing here falls back from one model
+    family to another, and a spec pointed at the wrong directory fails on the
+    digest rather than loading something unexpected.
+    """
     tokenizer_dir = Path(tokenizer_directory)
     model_dir = Path(model_directory)
     return OfficialAssetDigests(
@@ -639,11 +647,11 @@ def verify_official_assets(
             label="tokenizer weights",
         ),
         model_config_sha256=verify_asset_file(
-            model_dir / "config.json", KRONOS_MINI_SPEC.config_sha256, label="model config"
+            model_dir / "config.json", model_spec.config_sha256, label="model config"
         ),
         model_weights_sha256=verify_asset_file(
-            model_dir / KRONOS_MINI_SPEC.weights_file,
-            KRONOS_MINI_SPEC.weights_sha256,
+            model_dir / model_spec.weights_file,
+            model_spec.weights_sha256,
             label="model weights",
         ),
     )
@@ -695,6 +703,7 @@ def official_runtime(
     tokenizer_directory: Path | str,
     model_directory: Path | str,
     tokenizer_spec: Any,
+    model_spec: Any = KRONOS_MINI_SPEC,
     device: str = "cuda",
 ) -> Iterator[OfficialRuntime]:
     """One context that owns the whole official runtime lifetime.
@@ -715,6 +724,7 @@ def official_runtime(
         tokenizer_directory=tokenizer_directory,
         model_directory=model_directory,
         tokenizer_spec=tokenizer_spec,
+        model_spec=model_spec,
     )
     source_digests = verify_source_files(source_root)
 
@@ -730,8 +740,8 @@ def official_runtime(
             tokenizer_revision=tokenizer_spec.revision,
             tokenizer_config_sha256=digests.tokenizer_config_sha256,
             tokenizer_weights_sha256=digests.tokenizer_weights_sha256,
-            model_repository=KRONOS_MINI_SPEC.repository,
-            model_revision=KRONOS_MINI_SPEC.revision,
+            model_repository=model_spec.repository,
+            model_revision=model_spec.revision,
             model_config_sha256=digests.model_config_sha256,
             model_weights_sha256=digests.model_weights_sha256,
             source_revision=SOURCE_REVISION,

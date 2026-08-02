@@ -85,6 +85,14 @@ KRONOS_SOURCE_ROOT = "/opt/kronos"
 # authority; a packaging test asserts these agree.
 KRONOS_MINI_REPOSITORY = "NeoQuasar/Kronos-mini"
 KRONOS_MINI_REVISION = "f4e68697d9d5aed55cef5c96aabc3376bcad9f81"
+# The pinned Kronos-base pair, for the separate base replication study.
+# openalpha_bridge.base_study.spec is the authority; a packaging test asserts
+# these agree. Kronos-base is released paired with Kronos-Tokenizer-base, and a
+# crossed pair is refused at runtime rather than silently measured.
+KRONOS_BASE_REPOSITORY = "NeoQuasar/Kronos-base"
+KRONOS_BASE_REVISION = "2b554741eca47781b64468546e77fef3e85130e6"
+KRONOS_BASE_TOKENIZER_REPOSITORY = "NeoQuasar/Kronos-Tokenizer-base"
+KRONOS_BASE_TOKENIZER_REVISION = "0e0117387f39004a9016484a186a908917e22426"
 
 KRONOS_SOURCE_FILES: dict[str, str] = {
     "model/kronos.py": "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a",
@@ -247,6 +255,16 @@ app = modal.App(APP_NAME)
 # Reusable cache: Hugging Face assets, derived features, resumable checkpoints.
 cache_volume = modal.Volume.from_name("openalpha-bridge-phase2-cache", create_if_missing=True)
 CACHE_ROOT = "/cache"
+
+# The base study gets its own volume rather than a subdirectory of the mini
+# one. Two reasons: the 409 MB base weights should not grow a volume whose
+# retention is governed by the completed mini study, and a later maintenance
+# session is expected to delete the mini snapshots -- which is a far safer
+# operation when the two studies cannot share a directory tree by accident.
+# It holds Hugging Face assets and regenerable execution caches only; terminal
+# scientific evidence is written to immutable object storage, never here.
+base_cache_volume = modal.Volume.from_name("openalpha-kronos-base-cache", create_if_missing=True)
+BASE_CACHE_ROOT = "/base-cache"
 
 # ------------------------------------------------------------------- secrets
 
@@ -795,3 +813,329 @@ def verify_frozen_inference_runtime() -> dict[str, Any]:
 
     cache_volume.commit()
     return result.model_dump(mode="json")
+
+
+# ======================================================================
+# Kronos-base replication study
+#
+# A separate study with its own preregistration, its own artifact namespace,
+# its own run-identifier space and its own remote volume. Nothing below reads
+# or writes anything belonging to the completed Kronos-mini study, and no
+# function here is named as though it were a mini function.
+# ======================================================================
+
+
+@app.function(image=image, secrets=secrets, timeout=CONTROL_TIMEOUT)
+def verify_base_deployment() -> dict[str, Any]:
+    """Fail deployment when the image and the base preregistration disagree.
+
+    Deliberately separate from ``verify_deployment``. That function is the mini
+    study's gate and its meaning is fixed by what has already been run under
+    it; conflating the two would let a base drift be reported as a mini failure
+    or the reverse. Both are returned here so one call can show that the mini
+    chain is still intact alongside the base document, without either check
+    depending on the other.
+    """
+    from pathlib import Path
+
+    from openalpha_bridge.base_study.spec import (
+        BASE_ARTIFACT_ROOT,
+        BASE_EXPERIMENT_ID,
+        BASE_FAILURE_SCHEMA_VERSION,
+        BASE_PROBE_SCHEMA_VERSION,
+        BASE_SUCCESS_SCHEMA_VERSION,
+        KRONOS_BASE_SPEC,
+        KRONOS_BASE_TOKENIZER_SPEC,
+        MAXIMUM_CONTEXT,
+        prove_context_budget,
+        verify_base_specification,
+    )
+    from openalpha_bridge.diagnostic.spec import (
+        CONTEXT_CANDLES,
+        TARGET_CANDLES,
+        verify_diagnostic_specifications,
+    )
+    from openalpha_bridge.phase2.identity import verify_locked_hashes
+
+    research_root = Path("/root/research/bridge-v0")
+    base_hashes = verify_base_specification(research_root)
+    # The mini chain must still verify: this study replicates it and a drifted
+    # mini document would make the comparison meaningless.
+    mini_sealed = verify_locked_hashes(research_root)
+    mini_diagnostic = verify_diagnostic_specifications(research_root)
+
+    if KRONOS_BASE_SPEC.repository != KRONOS_BASE_REPOSITORY:
+        raise RuntimeError("BASE_MODEL_REPOSITORY_DRIFT")
+    if KRONOS_BASE_SPEC.revision != KRONOS_BASE_REVISION:
+        raise RuntimeError("BASE_MODEL_REVISION_DRIFT")
+    if KRONOS_BASE_TOKENIZER_SPEC.repository != KRONOS_BASE_TOKENIZER_REPOSITORY:
+        raise RuntimeError("BASE_TOKENIZER_REPOSITORY_DRIFT")
+    if KRONOS_BASE_TOKENIZER_SPEC.revision != KRONOS_BASE_TOKENIZER_REVISION:
+        raise RuntimeError("BASE_TOKENIZER_REVISION_DRIFT")
+
+    return {
+        "app": APP_NAME,
+        "version": APP_VERSION,
+        "gpu": GPU_CONFIG,
+        "python": PYTHON_VERSION,
+        "torch": TORCH_VERSION,
+        "experiment_id": BASE_EXPERIMENT_ID,
+        "base_specification_hashes": base_hashes,
+        "mini_locked_hashes": mini_sealed,
+        "mini_diagnostic_specification_hashes": mini_diagnostic,
+        "artifact_namespace": BASE_ARTIFACT_ROOT,
+        "run_id_pattern": "^base_[0-9a-f]{8,32}$",
+        "success_schema": BASE_SUCCESS_SCHEMA_VERSION,
+        "failure_schema": BASE_FAILURE_SCHEMA_VERSION,
+        "runtime_probe_schema": BASE_PROBE_SCHEMA_VERSION,
+        "model": {
+            "repository": KRONOS_BASE_SPEC.repository,
+            "revision": KRONOS_BASE_SPEC.revision,
+            "config_sha256": KRONOS_BASE_SPEC.config_sha256,
+            "weights_sha256": KRONOS_BASE_SPEC.weights_sha256,
+            "weights_size_bytes": KRONOS_BASE_SPEC.weights_size_bytes,
+            "model_dimension": KRONOS_BASE_SPEC.model_dimension,
+            "layers": KRONOS_BASE_SPEC.layers,
+            "attention_heads": KRONOS_BASE_SPEC.attention_heads,
+        },
+        "tokenizer": {
+            "repository": KRONOS_BASE_TOKENIZER_SPEC.repository,
+            "revision": KRONOS_BASE_TOKENIZER_SPEC.revision,
+            "config_sha256": KRONOS_BASE_TOKENIZER_SPEC.config_sha256,
+            "weights_sha256": KRONOS_BASE_TOKENIZER_SPEC.weights_sha256,
+        },
+        "maximum_context": MAXIMUM_CONTEXT,
+        "context_budget": prove_context_budget(
+            context_candles=CONTEXT_CANDLES, target_candles=TARGET_CANDLES
+        ),
+        "remote_cache_volume": "openalpha-kronos-base-cache",
+        "deployed_commit": _require_deployed_commit(),
+        "verified_at": _now().isoformat(),
+    }
+
+
+def _download_base_pair(cache_root: Path) -> tuple[str, str]:
+    """Fetch only config.json and model.safetensors, into the base volume.
+
+    The 409 MB base weights exist in exactly one place: this remote volume.
+    They are never copied into the repository, the image, Git LFS, a local
+    temporary directory, a test fixture, or a terminal artifact.
+    """
+    from huggingface_hub import snapshot_download
+    from openalpha_bridge.diagnostic.spec import OFFICIAL_SNAPSHOT_ALLOW_PATTERNS
+
+    tokenizer_dir = snapshot_download(
+        repo_id=KRONOS_BASE_TOKENIZER_REPOSITORY,
+        revision=KRONOS_BASE_TOKENIZER_REVISION,
+        cache_dir=str(cache_root / "huggingface"),
+        allow_patterns=list(OFFICIAL_SNAPSHOT_ALLOW_PATTERNS),
+    )
+    model_dir = snapshot_download(
+        repo_id=KRONOS_BASE_REPOSITORY,
+        revision=KRONOS_BASE_REVISION,
+        cache_dir=str(cache_root / "huggingface"),
+        allow_patterns=list(OFFICIAL_SNAPSHOT_ALLOW_PATTERNS),
+    )
+    return tokenizer_dir, model_dir
+
+
+@app.function(
+    image=image,
+    gpu=GPU_CONFIG,
+    volumes={BASE_CACHE_ROOT: base_cache_volume},
+    secrets=secrets,
+    timeout=30 * 60,
+    retries=0,
+)
+def verify_base_frozen_inference_runtime() -> dict[str, Any]:
+    """Does the deployed image execute the official Kronos-base path?
+
+    A compatibility probe, not a replication and not empirical evidence. It
+    retrieves no market data, computes no forecast metric, writes no scientific
+    conclusion and authorizes nothing, including the base diagnostic itself.
+    """
+    from pathlib import Path
+
+    from openalpha_bridge.base_study.runtime_probe import run_base_runtime_probe
+    from openalpha_bridge.base_study.spec import KRONOS_BASE_SPEC, KRONOS_BASE_TOKENIZER_SPEC
+    from openalpha_bridge.diagnostic.official_backend import official_runtime
+    from openalpha_bridge.diagnostic.runtime_probe import RuntimeEnvironment
+
+    _register_secrets()
+    cache_root = Path(BASE_CACHE_ROOT)
+    os.environ.setdefault("HF_HOME", str(cache_root / "huggingface"))
+    source_root = Path(os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH", KRONOS_SOURCE_ROOT))
+
+    import numpy
+    import torch
+
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "BASE_RUNTIME_PROBE_NO_CUDA: the probe exists to exercise the deployed GPU path"
+        )
+
+    environment = RuntimeEnvironment(
+        torch_version=torch.__version__,
+        torch_cuda_version=torch.version.cuda,
+        cuda_available=True,
+        device_name=torch.cuda.get_device_name(0),
+        device_capability=".".join(str(part) for part in torch.cuda.get_device_capability(0)),
+        numpy_version=numpy.__version__,
+    )
+
+    tokenizer_dir, model_dir = _download_base_pair(cache_root)
+
+    with official_runtime(
+        source_root=source_root,
+        tokenizer_directory=tokenizer_dir,
+        model_directory=model_dir,
+        tokenizer_spec=KRONOS_BASE_TOKENIZER_SPEC,
+        model_spec=KRONOS_BASE_SPEC,
+        device="cuda",
+    ) as runtime:
+        result = run_base_runtime_probe(
+            codec=runtime.codec,
+            model=runtime.model,
+            assets=runtime.assets,
+            parameter_digest=runtime.parameter_digest,
+            environment=environment,
+            run_id="base_runtime_probe",
+            deployed_commit=_require_deployed_commit(),
+        )
+
+    base_cache_volume.commit()
+    return result.model_dump(mode="json")
+
+
+@app.function(
+    image=image,
+    gpu=GPU_CONFIG,
+    volumes={BASE_CACHE_ROOT: base_cache_volume},
+    secrets=secrets,
+    timeout=60 * 60,
+    retries=0,
+)
+def kronos_base_frozen_inference_diagnostic(source_commit: str, run_id: str) -> dict[str, Any]:
+    """The Kronos-base replication, and nothing else.
+
+    Its own function rather than a flag on the mini diagnostic, so the two can
+    never share a code path, an artifact key, a run identifier or a failure
+    mode. There is no import of and no call into the mini worker, CloudRunner,
+    training, an optimizer, checkpoint code, Stage B, Stage C, test opening, or
+    held-out evaluation. Execution stops after the artifact is written.
+
+    This is a shell. Everything it does lives in
+    openalpha_bridge.base_study.worker, which tests exercise with doubles.
+    """
+    from pathlib import Path
+
+    from openalpha_bridge.base_study.spec import KRONOS_BASE_SPEC, KRONOS_BASE_TOKENIZER_SPEC
+    from openalpha_bridge.base_study.worker import run_base_study_worker
+    from openalpha_bridge.diagnostic.official_backend import official_runtime
+    from openalpha_bridge.phase2.provider import YahooDailyProvider
+
+    _register_secrets()
+    cache_root = Path(BASE_CACHE_ROOT)
+    os.environ.setdefault("HF_HOME", str(cache_root / "huggingface"))
+    source_root = Path(os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH", KRONOS_SOURCE_ROOT))
+
+    def resolve_runtime():
+        """The one official runtime context, entered only when there is work."""
+        tokenizer_dir, model_dir = _download_base_pair(cache_root)
+        return official_runtime(
+            source_root=source_root,
+            tokenizer_directory=tokenizer_dir,
+            model_directory=model_dir,
+            tokenizer_spec=KRONOS_BASE_TOKENIZER_SPEC,
+            model_spec=KRONOS_BASE_SPEC,
+            device="cuda",
+        )
+
+    result = run_base_study_worker(
+        store=_build_store(),
+        resolve_runtime=resolve_runtime,
+        provider_factory=lambda: YahooDailyProvider(stage="kronos-base-diagnostic"),
+        research_root=Path("/root/research/bridge-v0"),
+        source_commit=source_commit,
+        deployed_commit=_require_deployed_commit(),
+        run_id=run_id,
+    )
+    base_cache_volume.commit()
+    return result.model_dump(mode="json")
+
+
+@app.function(
+    image=image,
+    volumes={BASE_CACHE_ROOT: base_cache_volume},
+    secrets=secrets,
+    timeout=CONTROL_TIMEOUT,
+)
+def inventory_base_remote_cache() -> dict[str, Any]:
+    """Report what the base cache volume holds. Read-only, always.
+
+    Deliberately has no delete mode and is not reachable through the control
+    API. Removing a cached snapshot is a maintenance action that has to be
+    taken deliberately, with the artifacts and revisions it depends on proved
+    first -- not something an ordinary endpoint can be talked into.
+
+    Invoke with:
+        modal run cloud/modal/bridge_phase2_app.py::inventory_base_remote_cache
+    """
+    from pathlib import Path
+
+    root = Path(BASE_CACHE_ROOT) / "huggingface"
+    repositories: list[dict[str, Any]] = []
+    total = 0
+
+    if root.is_dir():
+        for repo_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+            if not repo_dir.name.startswith("models--"):
+                continue
+            snapshots_root = repo_dir / "snapshots"
+            snapshots: list[dict[str, Any]] = []
+            repo_bytes = 0
+            for item in repo_dir.rglob("*"):
+                if item.is_file() and not item.is_symlink():
+                    repo_bytes += item.stat().st_size
+            if snapshots_root.is_dir():
+                for snapshot in sorted(p for p in snapshots_root.iterdir() if p.is_dir()):
+                    resolved_bytes = 0
+                    files: list[str] = []
+                    for item in sorted(snapshot.rglob("*")):
+                        if item.is_file() or item.is_symlink():
+                            files.append(item.relative_to(snapshot).as_posix())
+                            try:
+                                resolved_bytes += item.resolve().stat().st_size
+                            except OSError:
+                                pass
+                    snapshots.append(
+                        {
+                            "revision": snapshot.name,
+                            "path": str(snapshot),
+                            "files": files,
+                            "resolved_bytes": resolved_bytes,
+                        }
+                    )
+            total += repo_bytes
+            repositories.append(
+                {
+                    "cache_directory": repo_dir.name,
+                    "repository": repo_dir.name.removeprefix("models--").replace("--", "/", 1),
+                    "path": str(repo_dir),
+                    "bytes_on_volume": repo_bytes,
+                    "snapshots": snapshots,
+                }
+            )
+
+    return {
+        "volume": "openalpha-kronos-base-cache",
+        "mount": BASE_CACHE_ROOT,
+        "root": str(root),
+        "exists": root.is_dir(),
+        "repositories": repositories,
+        "total_bytes": total,
+        "read_only": True,
+        "deletion_supported": False,
+        "deployed_commit": _require_deployed_commit(),
+        "inspected_at": _now().isoformat(),
+    }

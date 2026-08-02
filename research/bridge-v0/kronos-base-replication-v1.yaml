@@ -1,0 +1,318 @@
+experiment_id: openalpha-kronos-base-replication-v1
+schema_version: openalpha.research.kronos_base_replication.v1
+title: >-
+  Does the Kronos-mini structural-invalidity result persist with Kronos-base,
+  and does restoring structural validity improve predictive performance?
+status: preregistered
+preregistered_before_execution: true
+
+relationship_to_prior_work:
+  # This is a separate study with its own identity, not an amendment to the
+  # completed Kronos-mini work. The mini specifications, artifacts, run
+  # identifiers and hashes are immutable and are referenced here only so the
+  # two can be compared honestly.
+  prior_study: bridge-v0 frozen inference diagnostic (Kronos-mini)
+  prior_operative_specification: phase2-frozen-inference-diagnostic-v4.yaml
+  prior_operative_specification_sha256: bd407722adfc3ebf92eb187828d42c2c9cfa57b2fdc0406121f27d39a5c44977
+  prior_specification_chain:
+    - name: phase2-frozen-inference-diagnostic.yaml
+      sha256: c909e156a61ac5b5323de9e794aad20521839c0f43f491fb356c1968f730101b
+    - name: phase2-frozen-inference-diagnostic-v2.yaml
+      sha256: c39fff4541afcc948cd80fcc545398312897efe723deca26554143989e4a175e
+    - name: phase2-frozen-inference-diagnostic-v3.yaml
+      sha256: f10076b6676a72552b1c9c96720d0087c009fc939e4667509bfcfccf7929bcb6
+    - name: phase2-frozen-inference-diagnostic-v4.yaml
+      sha256: bd407722adfc3ebf92eb187828d42c2c9cfa57b2fdc0406121f27d39a5c44977
+  prior_completed_run_id: canary_0a92fde788bd685c
+  prior_completed_artifact_sha256: 8e3d8a333c11c1939c5d182db73012fc3e0fc01da42368eb23f71661aadab18c
+  prior_primary_conclusion: ROUNDTRIP_MATERIAL_INVALIDITY
+  prior_recommended_next_experiment: ABANDON_STRUCTURAL_VALIDITY_DIRECTION
+  prior_spent_failed_run_id: canary_a91fcd689de78428
+  interchangeability: >-
+    A Kronos-base result and a Kronos-mini result are never interchangeable.
+    They use different model weights, a different tokenizer, different
+    architectures and different artifact schemas. Neither may be substituted
+    for the other, quoted as the other, or pooled with the other. A comparison
+    between them is a comparison between two studies, not two runs of one.
+
+question: >-
+  Does the structural invalidity observed when Kronos-mini and
+  Kronos-Tokenizer-2k reconstruct and forecast SPY daily candles persist when
+  the stronger publicly released Kronos-base model is used with its officially
+  paired Kronos-Tokenizer-base, and does restoring structural validity by
+  deterministic terminal projection improve predictive performance?
+
+# Declared before any base weight is loaded. No threshold, seed or rule below
+# may be changed after a result is observed.
+predeclared_interpretations:
+  - id: I1
+    label: INVALIDITY_PERSISTS_AND_REPAIR_GIVES_NO_SKILL
+    statement: >-
+      Kronos-base reproduces material structural invalidity and deterministic
+      terminal projection still yields no improvement in the primary metric.
+      This would replicate the mini finding at a larger model scale and would
+      support treating structural invalidity as a property of the token
+      representation rather than of model capacity.
+  - id: I2
+    label: INVALIDITY_MATERIALLY_REDUCED_BUT_NO_SKILL
+    statement: >-
+      Kronos-base materially reduces the invalid-candle fraction relative to
+      the mini study, but forecasting still fails to beat the zero-return
+      persistence baseline. This would separate representation quality from
+      predictive skill.
+  - id: I3
+    label: INVALIDITY_REDUCED_AND_SKILL_OR_RELATIONSHIP_OBSERVED
+    statement: >-
+      Kronos-base materially reduces invalidity and either demonstrates skill
+      against persistence or demonstrates a relationship between structural
+      validity and forecast error. This would be the only outcome that
+      supports continuing the constraint-preserving decoder direction.
+
+pinned_assets:
+  official_source:
+    repository: https://github.com/shiyu-coder/Kronos
+    revision: 67b630e67f6a18c9e9be918d9b4337c960db1e9a
+    files:
+      - relative_path: model/kronos.py
+        sha256_crlf_normalized: 638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a
+      - relative_path: model/module.py
+        sha256_crlf_normalized: a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f
+    note: >-
+      The same pinned official source as the mini study. It is the source that
+      is shared, not the weights: the identical decode and sampling code is
+      what makes a model-family comparison meaningful.
+  forecast_model:
+    model_family: kronos-base
+    name: Kronos-base
+    repository: NeoQuasar/Kronos-base
+    revision: 2b554741eca47781b64468546e77fef3e85130e6
+    config_sha256: 77ebc3038b647709b92be002f801d72e1a385f4c8c2c5aa1cc6cf21fcfe44eb2
+    config_size_bytes: 228
+    weights_file: model.safetensors
+    weights_sha256: abff193acab6db1a0368e9773e75799d11403b6d054ee6d5f0a11aeabc5f4b83
+    weights_size_bytes: 409264008
+    architecture:
+      model_dimension: 832
+      layers: 12
+      attention_heads: 16
+      feedforward_dimension: 2048
+      s1_bits: 10
+      s2_bits: 10
+      coarse_vocabulary: 1024
+      fine_vocabulary: 1024
+      learned_temporal_embedding: true
+  tokenizer:
+    name: Kronos-Tokenizer-base
+    repository: NeoQuasar/Kronos-Tokenizer-base
+    revision: 0e0117387f39004a9016484a186a908917e22426
+    config_sha256: 2366e7ccfec76cbc19cf3c4c1b9c5d901be336ca1e83f2d2292c9bff381b77a2
+    config_size_bytes: 301
+    weights_file: model.safetensors
+    weights_sha256: 59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee
+    weights_size_bytes: 15842368
+    architecture:
+      input_channels: 6
+      model_dimension: 256
+      encoder_layers: 4
+      decoder_layers: 4
+      group_size: 4
+      s1_bits: 10
+      s2_bits: 10
+  pairing_note: >-
+    Kronos-base is released paired with Kronos-Tokenizer-base. Pairing
+    Kronos-base with Kronos-Tokenizer-2k, or Kronos-mini with
+    Kronos-Tokenizer-base, is prohibited: the tokenizer defines the token
+    space the forecaster was trained against, so a crossed pair measures
+    neither model.
+  allowed_downloaded_files:
+    - config.json
+    - model.safetensors
+  download_location: >-
+    Inside the deployed Modal GPU container only, into the dedicated remote
+    volume openalpha-kronos-base-cache. No official weight is ever downloaded
+    to a workstation, committed to the repository, baked into the image,
+    stored in Git LFS, or written into a terminal artifact.
+
+# Held identical to the mini study wherever the base model does not make a
+# change mathematically mandatory, so that any difference in result is
+# attributable to the model family.
+window:
+  symbol: SPY
+  frequency: 1d
+  calendar: XNYS
+  retrieval_start_inclusive: '2015-05-07'
+  retrieval_end_exclusive: '2017-05-18'
+  total_candles: 512
+  context_candles: 448
+  target_candles: 64
+  provider_retrievals_permitted: 1
+
+context_budget_proof:
+  maximum_context: 512
+  context_candles: 448
+  generated_candles: 64
+  sum: 512
+  truncation_occurs: false
+  argument: >-
+    The official predictor selects the final max_context tokens of the
+    concatenated context and generated sequence before decoding. With 448
+    context rows and 64 generated rows the concatenated length is exactly 512,
+    which equals max_context, so the selection is the identity and no context
+    row is dropped. The final generated step is produced from a window of
+    length 511 plus itself, still within budget. This is asserted structurally
+    in code rather than assumed.
+
+normalization:
+  fitted_on: context_rows_only
+  fitted_candle_count: 448
+  dtype: float32
+  mean: numpy.mean(axis=0)
+  standard_deviation: numpy.std(axis=0)
+  standard_deviation_ddof: 0
+  epsilon: 1.0e-05
+  formula: (x - mean) / (std + epsilon)
+  clip_policy: symmetric_clip_after_standardization
+  clip_value: 5.0
+  inverse: x * (std + epsilon) + mean
+
+inference_settings:
+  temperature: 1.0
+  top_k: 0
+  top_p: 0.9
+  sample_count_per_call: 1
+  prediction_length: 64
+  max_context: 512
+  clip: 5.0
+  context_length_used: 448
+  verbose: false
+  parameters_frozen: true
+  gradient_mode: inference_mode
+  note: >-
+    Identical to the mini study. These are KronosPredictor.predict defaults in
+    the pinned source and are properties of the call, not of the checkpoint.
+
+methods:
+  - id: A
+    name: A_TOKENIZER_ROUND_TRIP
+    description: >-
+      Encode and decode all 512 normalized rows with the base tokenizer and
+      measure structural validity and reconstruction error of the result.
+  - id: B
+    name: B_OFFICIAL_FROZEN_FORECAST
+    description: >-
+      One official frozen autoregressive forecast of 64 steps from the 448
+      context rows, seed 20150507, recording coarse and fine token ids and
+      sampling log probabilities.
+  - id: C
+    name: C_DETERMINISTIC_TERMINAL_PROJECTION
+    description: >-
+      Deterministically repair every structural violation in the Method B path
+      and re-measure both validity and forecast error.
+  - id: D
+    name: D_VALID_ROLLOUT_FILTERING
+    description: >-
+      64 seeded rollouts, filtering to structurally valid paths, compared
+      against size-matched control ensembles drawn without replacement.
+
+rollouts:
+  count: 64
+  seed_base: 20150507
+  seeds: consecutive integers from the seed base, seed_base + index
+  control_seed: 20170518
+  control_repetitions: 200
+  control_sampling: without_replacement_within_each_repetition
+
+metrics:
+  primary_metric: close_return_mae
+  persistence_baseline: zero_return
+  skill_definition: 1 - candidate_error / persistence_error
+  directional_accuracy: >-
+    Agreement of predicted and actual return sign, with zero-return steps
+    counted explicitly rather than silently assigned a direction.
+  sampling_probability_definition: >-
+    log_softmax_of_temperature_scaled_then_top_k_top_p_filtered_logits_renormalized
+
+structural_validity_rules:
+  - high >= open
+  - high >= close
+  - high >= low
+  - low <= open
+  - low <= close
+  - volume >= 0
+  - amount >= 0
+
+# Identical to the mini study. Fixed before execution and not revisable after
+# a result is observed.
+thresholds:
+  roundtrip_material_invalid_fraction: 0.01
+  minimum_relative_improvement: 0.05
+  valid_rollout_support_fraction_minimum: 0.25
+  material_clipping_row_fraction: 0.01
+  minimum_persistence_skill: 0.0
+
+decision_rules:
+  note: >-
+    The same multi-finding rule set as mini v4, applied to base measurements.
+    Every rule is evaluated and recorded; one primary conclusion is selected;
+    matched findings are reported in full. The rule identifiers and their
+    order are unchanged so the two studies can be compared rule by rule.
+  rule_ids:
+    - R0
+    - R0b
+    - R1
+    - R2
+    - R2a
+    - R2b
+    - R2c
+    - R2d
+    - R3
+    - R4
+    - R5
+    - R6
+    - R7
+    - R8
+    - R9
+    - R10
+
+artifacts:
+  namespace: openalpha-compatibility/kronos-base-diagnostic/runs/<run_id>
+  object_name: kronos_base_diagnostic_terminal.json
+  run_id_pattern: ^base_[0-9a-f]{8,32}$
+  success_schema: openalpha.bridge.base_study.kronos_base_diagnostic.v1
+  failure_schema: openalpha.bridge.base_study.kronos_base_failure.v1
+  runtime_probe_schema: openalpha.bridge.base_study.runtime_probe.v1
+  immutability: >-
+    Exactly one terminal artifact per run identifier, written immutably. A run
+    identifier is spent on first use regardless of outcome and is never
+    retried or reused. Terminal evidence is written to immutable object
+    storage, never only to a cache volume.
+  namespace_separation: >-
+    The base namespace shares no prefix with the mini namespace
+    (openalpha-compatibility/bridge-phase2/runs/<run_id>/
+    frozen-inference-diagnostic/), and the base run-identifier pattern shares
+    no accepted string with the mini canary_ pattern, so an artifact of one
+    study can never be written or read under the identity of the other.
+
+prohibitions:
+  - no training
+  - no optimizer construction
+  - no checkpointing
+  - no held-out partition opening
+  - no production inference
+  - no trading claims
+  - no retries
+  - no run-identifier reuse
+  - no local download of official weights
+  - no substitution of the mini tokenizer or the mini model
+  - no modification of any mini specification, artifact, run identifier or hash
+
+claim_boundary: DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE
+
+authorizations:
+  authorizes_training: false
+  authorizes_stage_b: false
+  authorizes_stage_c: false
+  authorizes_test_opening: false
+  authorizes_production_inference: false
+  authorizes_trading_claims: false
+  scientific_result_available: false
