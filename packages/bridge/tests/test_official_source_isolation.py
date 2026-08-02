@@ -75,12 +75,39 @@ def test_upstream_init_is_never_executed(tmp_path: Path) -> None:
     assert set(versions) >= {"numpy"}
 
 
-def test_relative_imports_resolve_inside_the_synthetic_package(tmp_path: Path) -> None:
+def test_absolute_model_import_resolves_without_the_upstream_package(
+    tmp_path: Path,
+) -> None:
+    """The pinned source does `from model.module import *`, not a relative import."""
     root = _fake_source(tmp_path)
-    load_official_kronos(root, _hashes(root), required_dependencies=("numpy",))
+    module, _, _ = load_official_kronos(
+        root, _hashes(root), required_dependencies=("numpy",)
+    )
+    assert module.MODULE_MARKER == "module"
     assert f"{SYNTHETIC_PACKAGE}.module" in sys.modules
     assert f"{SYNTHETIC_PACKAGE}.kronos" in sys.modules
+
+
+def test_the_model_alias_is_removed_afterwards(tmp_path: Path) -> None:
+    """The alias exists only while verified code executes."""
+    root = _fake_source(tmp_path)
+    load_official_kronos(root, _hashes(root), required_dependencies=("numpy",))
     assert "model" not in sys.modules
+    assert "model.module" not in sys.modules
+
+
+def test_an_occupied_model_namespace_is_refused(tmp_path: Path) -> None:
+    """Aliasing over somebody else's `model` package would be reckless."""
+    import types as _types
+
+    root = _fake_source(tmp_path)
+    sys.modules["model"] = _types.ModuleType("model")
+    try:
+        with pytest.raises(BridgeTransformError) as excinfo:
+            load_official_kronos(root, _hashes(root), required_dependencies=("numpy",))
+        assert excinfo.value.failures[0].code == "KRONOS_MODEL_NAMESPACE_OCCUPIED"
+    finally:
+        sys.modules.pop("model", None)
 
 
 def test_a_tampered_locked_file_is_rejected_before_execution(tmp_path: Path) -> None:

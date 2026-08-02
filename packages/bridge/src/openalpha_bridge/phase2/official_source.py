@@ -141,8 +141,24 @@ def load_official_kronos(
             f"expected a model/ directory under {root}",
         )
 
-    # A synthetic package with no executable body. The upstream __init__.py is
-    # never read, so its imports and side effects never happen.
+    # The pinned kronos.py does NOT use a relative import. It contains:
+    #     sys.path.append("../")
+    #     from model.module import *
+    # So an absolute `model.module` must resolve. Rather than let Python find
+    # the upstream package, which would execute the unverified model/__init__.py,
+    # a non-executable alias package is installed for the duration of the load
+    # and mapped to the module we have already verified and executed ourselves.
+    for occupied in ("model", "model.module"):
+        if occupied in sys.modules:
+            raise _fail(
+                "KRONOS_MODEL_NAMESPACE_OCCUPIED",
+                (
+                    f"sys.modules already contains {occupied!r}; refusing to alias over "
+                    "an unrelated package"
+                ),
+                field=occupied,
+            )
+
     package = sys.modules.get(SYNTHETIC_PACKAGE)
     if package is None:
         package = types.ModuleType(SYNTHETIC_PACKAGE)
@@ -152,13 +168,10 @@ def load_official_kronos(
         )
         sys.modules[SYNTHETIC_PACKAGE] = package
 
-    loaded: Any = None
-    for name in _VERIFIED_MODULES:
+    def _execute(name: str) -> Any:
         qualified = f"{SYNTHETIC_PACKAGE}.{name}"
         if qualified in sys.modules:
-            loaded = sys.modules[qualified]
-            continue
-        path = model_dir / f"{name}.py"
+            return sys.modules[qualified]
         relative = f"model/{name}.py"
         if relative not in observed:
             raise _fail(
@@ -166,7 +179,7 @@ def load_official_kronos(
                 f"{relative} is executed but not hash-locked; refusing to run it",
                 field=relative,
             )
-        spec = importlib.util.spec_from_file_location(qualified, path)
+        spec = importlib.util.spec_from_file_location(qualified, model_dir / f"{name}.py")
         if spec is None or spec.loader is None:
             raise _fail(
                 "KRONOS_SOURCE_IMPORT_FAILED",
@@ -181,10 +194,26 @@ def load_official_kronos(
             sys.modules.pop(qualified, None)
             raise _fail(
                 "KRONOS_SOURCE_IMPORT_FAILED",
-                f"executing {relative} failed: {type(error).__name__}",
+                f"executing {relative} failed: {type(error).__name__}: {error}",
                 field=relative,
             ) from error
-        loaded = module
+        return module
+
+    verified_module = _execute("module")
+
+    # A bare namespace object with no loader and no __path__: nothing can be
+    # imported *through* it, and its body is never executed.
+    alias = types.ModuleType("model")
+    alias.__doc__ = "Temporary alias to hash-verified official modules. Not the upstream package."
+    sys.modules["model"] = alias
+    sys.modules["model.module"] = verified_module
+    alias.module = verified_module  # type: ignore[attr-defined]
+    try:
+        loaded: Any = _execute("kronos")
+    finally:
+        # The alias exists only for the duration of the verified execution.
+        sys.modules.pop("model.module", None)
+        sys.modules.pop("model", None)
 
     if loaded is None or not hasattr(loaded, "KronosTokenizer"):
         available = sorted(n for n in dir(loaded) if not n.startswith("_")) if loaded else []
