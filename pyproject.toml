@@ -27,6 +27,10 @@ markers = ["slow: resource-intensive integration", "network: external network re
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+# Verbatim third-party source, kept byte-exact so its digests still match what
+# experiment.yaml seals. Formatting or fixing it would change the bytes and
+# break the conformance verification it exists for.
+extend-exclude = ["vendor"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection idiom requires these calls in argument
@@ -44,4 +48,12 @@ extend-immutable-calls = [
 # hash-sealed by research/sentinel-v1/feasibility/manifest.json and therefore
 # cannot be edited to add a suppression without invalidating preserved research
 # evidence. Ignoring the single sealed file keeps CI platform-independent.
-ignore = ["scripts/kronos_constrained_worker.py"]
+# vendor/ holds verbatim copies of third-party source, kept byte-exact so their
+# digests still match what experiment.yaml seals. They are never imported and
+# never shipped; editing them to satisfy a type checker would break the very
+# thing they exist to prove.
+ignore = ["scripts/kronos_constrained_worker.py", "vendor"]
+# Specifying `exclude` replaces pyright's defaults rather than adding to them,
+# so the default patterns are repeated here. Dropping `**/.*` makes pyright
+# walk .venv and effectively hang.
+exclude = ["vendor", "**/node_modules", "**/__pycache__", "**/.*"]
