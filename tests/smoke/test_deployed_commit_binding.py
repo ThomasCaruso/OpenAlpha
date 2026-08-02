@@ -166,8 +166,9 @@ def test_the_image_bakes_the_binding_at_build_time() -> None:
 
 def test_the_worker_requires_the_binding_and_passes_it_through() -> None:
     source = _app_source()
-    assert "deployed_commit = _require_deployed_commit()" in source
-    assert "deployed_commit=deployed_commit," in source
+    # The worker body now lives in openalpha_bridge.phase2.canary_worker, so the
+    # shell reads the binding out of the image and hands it straight over.
+    assert "deployed_commit=_require_deployed_commit()," in source
     # Never accepted from the caller, and never defaulted away.
     assert "def stage_a_official_canary(source_commit: str, run_id: str)" in source
     assert 'os.environ.get(DEPLOYED_COMMIT_VARIABLE, "")' in source

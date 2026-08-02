@@ -542,65 +542,35 @@ def stage_a_official_canary(source_commit: str, run_id: str) -> dict[str, Any]:
     """
     from pathlib import Path
 
-    from openalpha_bridge.phase2.cache import FeatureCache
-    from openalpha_bridge.phase2.canary import run_stage_a_canary
-    from openalpha_bridge.phase2.canary_artifact import publish_terminal_artifact
+    from openalpha_bridge.phase2.canary_worker import run_canary_worker
     from openalpha_bridge.phase2.kronos import OfficialKronosBackend
     from openalpha_bridge.phase2.provider import YahooDailyProvider
 
     _register_secrets()
-    store = _build_store()
     cache_root = Path(CACHE_ROOT)
     os.environ.setdefault("HF_HOME", str(cache_root / "huggingface"))
 
-    # The image says what code it was built from. That is not negotiable and it
-    # is not defaulted: a worker that cannot identify its own code cannot
-    # attribute its result to anything.
-    deployed_commit = _require_deployed_commit()
-
-    def execute():
-        return run_stage_a_canary(
-            provider=YahooDailyProvider(stage="stage-a-canary"),
-            backend=OfficialKronosBackend(
-                stage="stage-a-canary",
-                device="cuda",
-                cache_dir=str(cache_root / "huggingface"),
-                source_path=os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH", KRONOS_SOURCE_ROOT),
-            ),
-            cache=FeatureCache(cache_root / "canary" / run_id),
-            research_root=Path("/root/research/bridge-v0"),
-            source_commit=source_commit,
-            deployed_commit=deployed_commit,
-            run_id=run_id,
-            # Measured from this directory before and after asset resolution, so
-            # the reported download size is filesystem truth, not an estimate.
-            asset_cache_root=cache_root / "huggingface",
-        )
-
-    # Exactly one immutable terminal artifact, whatever happens: success, a
-    # contract the official path did not satisfy, or an operational death. The
-    # key is derived from run_prefix under the compatibility evidence class, so
-    # it cannot land in the real or synthetic namespace. A duplicate invocation
-    # verifies what is already stored rather than replacing it.
-    artifact = publish_terminal_artifact(
-        store,
-        run_id=run_id,
+    # This function is a shell. Everything it does lives in
+    # openalpha_bridge.phase2.canary_worker, which is exercised directly by
+    # tests with fakes; a worker whose only tests assert on its source text is
+    # a worker nobody has run.
+    result = run_canary_worker(
+        store=_build_store(),
+        provider=YahooDailyProvider(stage="stage-a-canary"),
+        backend=OfficialKronosBackend(
+            stage="stage-a-canary",
+            device="cuda",
+            cache_dir=str(cache_root / "huggingface"),
+            source_path=os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH", KRONOS_SOURCE_ROOT),
+        ),
+        feature_cache_root=cache_root / "canary",
+        asset_cache_root=cache_root / "huggingface",
+        research_root=Path("/root/research/bridge-v0"),
         source_commit=source_commit,
-        deployed_commit=deployed_commit,
-        execute=execute,
+        # The image says what code it was built from. Not negotiable, not
+        # defaulted, and never supplied by the caller.
+        deployed_commit=_require_deployed_commit(),
+        run_id=run_id,
     )
     cache_volume.commit()
-
-    # The return value describes the stored artifact. It is a convenience for
-    # the caller, never the evidence: the artifact in the object store is.
-    return {
-        "artifact_key": artifact.key,
-        "content_sha256": artifact.content_sha256,
-        "outcome": artifact.outcome,
-        "evidence_class": artifact.evidence_class.value,
-        "already_existed": artifact.already_existed,
-        "authorizes_stage_b": artifact.authorizes_stage_b,
-        "authorizes_real_run": artifact.authorizes_real_run,
-        "deployed_commit": deployed_commit,
-        "report": artifact.payload,
-    }
+    return result.model_dump(mode="json")
