@@ -35,6 +35,17 @@ PYTHON_VERSION = "3.13"
 TORCH_VERSION = "2.5.1"
 CUDA_INDEX = "https://download.pytorch.org/whl/cu124"
 
+# The pinned official Kronos source. Mirrors experiment.yaml official_source;
+# openalpha_bridge.phase2.kronos.SOURCE_SPEC is the authority and a deployment
+# test asserts the two agree.
+KRONOS_SOURCE_REPOSITORY = "https://github.com/shiyu-coder/Kronos"
+KRONOS_SOURCE_REVISION = "67b630e67f6a18c9e9be918d9b4337c960db1e9a"
+KRONOS_SOURCE_ROOT = "/opt/kronos"
+KRONOS_SOURCE_FILES: dict[str, str] = {
+    "model/kronos.py": "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a",
+    "model/module.py": "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f",
+}
+
 def _repo_root() -> Path | None:
     """The repository root when deploying, or None inside the container.
 
@@ -87,7 +98,34 @@ def _build_image() -> Any:
             "safetensors>=0.4,<1",
             "boto3>=1.35,<2",
             "fastapi>=0.115,<1",
+            # Runtime dependencies of the pinned official Kronos source. Pinned
+            # explicitly rather than relied on transitively.
+            "pandas>=2.2,<3",
+            "tqdm>=4.66,<5",
+            "einops>=0.8,<1",
         )
+        # Clone the pinned official source, check out the exact detached
+        # revision, and verify both the revision and every locked file hash.
+        # Any mismatch fails the image build rather than surfacing at runtime.
+        .run_commands(
+            f"git clone --no-checkout {KRONOS_SOURCE_REPOSITORY} {KRONOS_SOURCE_ROOT}",
+            f"cd {KRONOS_SOURCE_ROOT} && git checkout --detach {KRONOS_SOURCE_REVISION}",
+            (
+                f"cd {KRONOS_SOURCE_ROOT} && "
+                f'test "$(git rev-parse HEAD)" = "{KRONOS_SOURCE_REVISION}" '
+                f'|| (echo "KRONOS_SOURCE_REVISION_MISMATCH" && exit 1)'
+            ),
+            (
+                f"cd {KRONOS_SOURCE_ROOT} && git status --porcelain | tee /tmp/kronos_dirty && "
+                f'test ! -s /tmp/kronos_dirty || (echo "KRONOS_WORKTREE_DIRTY" && exit 1)'
+            ),
+            *(
+                f'cd {KRONOS_SOURCE_ROOT} && echo "{digest}  {relative}" | sha256sum -c - '
+                f'|| (echo "KRONOS_SOURCE_HASH_MISMATCH {relative}" && exit 1)'
+                for relative, digest in KRONOS_SOURCE_FILES.items()
+            ),
+        )
+        .env({"OPENALPHA_KRONOS_SOURCE_PATH": KRONOS_SOURCE_ROOT})
         # /root is the container working directory; making it explicit keeps the
         # copied packages importable regardless of how a function is invoked.
         .env({"PYTHONPATH": "/root"})

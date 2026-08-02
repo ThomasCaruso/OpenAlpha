@@ -232,3 +232,52 @@ def test_app_module_imports_nothing_from_the_workspace_at_module_level() -> None
     assert not offenders, (
         f"workspace imports must stay inside functions, found: {offenders}"
     )
+
+
+def test_image_pins_and_verifies_the_official_kronos_source() -> None:
+    """The image must clone, detach, and verify before anything can run."""
+    source = _source()
+    assert "git clone" in source
+    assert "git checkout --detach" in source
+    assert "67b630e67f6a18c9e9be918d9b4337c960db1e9a" in source
+    assert "KRONOS_SOURCE_REVISION_MISMATCH" in source
+    assert "KRONOS_WORKTREE_DIRTY" in source
+    assert "KRONOS_SOURCE_HASH_MISMATCH" in source
+    assert "sha256sum -c" in source
+    assert "OPENALPHA_KRONOS_SOURCE_PATH" in source
+
+
+def test_image_pins_official_runtime_dependencies_explicitly() -> None:
+    """The official source imports these; none may be transitive."""
+    source = _source()
+    for package in ("pandas", "tqdm", "einops"):
+        assert f'"{package}' in source, f"{package} is not pinned in the image"
+
+
+def test_image_source_constants_match_the_locked_spec() -> None:
+    """The Modal constants must not drift from openalpha_bridge SOURCE_SPEC."""
+    tree = ast.parse(_source())
+    found: dict[str, object] = {}
+    for node in tree.body:
+        if isinstance(node, ast.AnnAssign | ast.Assign):
+            targets = [node.target] if isinstance(node, ast.AnnAssign) else node.targets
+            for target in targets:
+                if (
+                    isinstance(target, ast.Name)
+                    and target.id.startswith("KRONOS_SOURCE")
+                    and node.value is not None
+                ):
+                    found[target.id] = ast.literal_eval(node.value)
+
+    assert found["KRONOS_SOURCE_REVISION"] == "67b630e67f6a18c9e9be918d9b4337c960db1e9a"
+    assert found["KRONOS_SOURCE_REPOSITORY"] == "https://github.com/shiyu-coder/Kronos"
+    files = found["KRONOS_SOURCE_FILES"]
+    assert isinstance(files, dict)
+    assert files == {
+        "model/kronos.py": (
+            "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a"
+        ),
+        "model/module.py": (
+            "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f"
+        ),
+    }

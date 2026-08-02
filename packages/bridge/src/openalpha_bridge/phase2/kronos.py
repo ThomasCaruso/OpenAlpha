@@ -260,36 +260,18 @@ class OfficialKronosBackend:
         self._cache_dir = cache_dir
         self._source_path = source_path
         self._model = None
+        self._observed_source_files: dict[str, str] = {}
+        self._dependency_versions: dict[str, str] = {}
 
-    def _verify_source(self) -> dict[str, str]:
-        """Verify the pinned official source files before importing them."""
-        import os
+    @property
+    def observed_source_files(self) -> dict[str, str]:
+        """Hashes of the official files actually executed; empty until resolved."""
+        return dict(self._observed_source_files)
 
-        root = self._source_path or os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH")
-        if not root:
-            raise _fail(
-                "KRONOS_SOURCE_UNAVAILABLE",
-                (
-                    "the pinned official source checkout is required; set "
-                    "OPENALPHA_KRONOS_SOURCE_PATH or pass source_path"
-                ),
-            )
-        observed: dict[str, str] = {}
-        for relative, expected in SOURCE_SPEC.files.items():
-            path = os.path.join(root, *relative.split("/"))
-            if not os.path.isfile(path):
-                raise _fail(
-                    "KRONOS_SOURCE_FILE_MISSING",
-                    f"pinned source file not found: {relative} under {root}",
-                )
-            digest = _file_sha256(path)
-            observed[relative] = digest
-            if digest != expected:
-                raise _fail(
-                    "KRONOS_SOURCE_HASH_MISMATCH",
-                    f"{relative} expected {expected}, observed {digest}",
-                )
-        return observed
+    @property
+    def dependency_versions(self) -> dict[str, str]:
+        """Observed versions of the pinned official runtime dependencies."""
+        return dict(self._dependency_versions)
 
     @property
     def mode(self) -> KronosMode:
@@ -325,21 +307,26 @@ class OfficialKronosBackend:
                 f"expected {TOKENIZER_SPEC.weights_sha256}, observed {observed_weights}",
             )
 
-        # Import the pinned source only after both files verify byte-for-byte.
+        # Execute only the hash-verified files, inside a synthetic package, so
+        # the unverified upstream model/__init__.py never runs.
         import os
-        import sys
+        from pathlib import Path as _Path
 
-        self._verify_source()
-        source_root = self._source_path or os.environ["OPENALPHA_KRONOS_SOURCE_PATH"]
-        if source_root not in sys.path:
-            sys.path.insert(0, source_root)
-        try:
-            from model import KronosTokenizer  # type: ignore[import-not-found]
-        except ImportError as error:
+        from .official_source import load_official_kronos
+
+        root = self._source_path or os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH")
+        if not root:
             raise _fail(
-                "KRONOS_SOURCE_IMPORT_FAILED",
-                f"could not import the pinned official model package: {type(error).__name__}",
-            ) from error
+                "KRONOS_SOURCE_UNAVAILABLE",
+                (
+                    "the pinned official source checkout is required; set "
+                    "OPENALPHA_KRONOS_SOURCE_PATH or pass source_path"
+                ),
+            )
+        official, self._observed_source_files, self._dependency_versions = (
+            load_official_kronos(_Path(root), dict(SOURCE_SPEC.files))
+        )
+        KronosTokenizer = official.KronosTokenizer
 
         torch = require_module("torch", stage=self._stage)
         snapshot = os.path.dirname(weights_path)
