@@ -91,6 +91,7 @@ class CloudRunner:
         training_backend: TrainingBackend,
         guards: ResourceGuards | None = None,
         clock: Callable[[], datetime] | None = None,
+        stage_a_report: Any | None = None,
     ) -> None:
         self._store = store
         self._identity = identity
@@ -100,6 +101,9 @@ class CloudRunner:
         self._training_backend = training_backend
         self._guards = guards or ResourceGuards()
         self._clock = clock or (lambda: datetime.now(UTC))
+        # Stage A evidence. Absent means Stage A blocks; it never advances on a
+        # default. Synthetic runs supply a synthetic report explicitly.
+        self._stage_a_report = stage_a_report
         self._journal = CloudJournal(
             store,
             run_id=identity.run_id,
@@ -263,7 +267,18 @@ class CloudRunner:
                       "openalpha.bridge.phase2.assets.v1")
         self._record(Phase2State.ASSETS_RESOLVED, stage="assets")
 
-        stage_a = pipeline.stage_a()
+        stage_a = pipeline.stage_a(self._stage_a_report)
+        if stage_a.state is Phase2State.BLOCKED:
+            blocker = str(stage_a.detail.get("blocker", "STAGE_A_EXTRACTION_NOT_PERFORMED"))
+            self._record(Phase2State.BLOCKED, stage="stage_a", reason=blocker)
+            return self._blocked(blocker)
+        if self._stage_a_report is not None:
+            self._publish(
+                "stages",
+                "stage_a.json",
+                self._stage_a_report.model_dump(mode="json"),
+                self._stage_a_report.schema_version,
+            )
         self._record(Phase2State.STAGE_A_PASSED, stage="stage_a", progress=stage_a.detail)
 
         stage_b = pipeline.stage_b()

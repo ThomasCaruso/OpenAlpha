@@ -127,6 +127,60 @@ def _create(mode: ExecutionMode = ExecutionMode.SYNTHETIC, **overrides: Any) -> 
     return CreateRunRequest.model_validate(payload)
 
 
+def _stage_a_report(sequences: int = 1):
+    """A minimal valid Stage A report for orchestration tests.
+
+    Stage A no longer advances without evidence, so pipeline-level tests must
+    supply one. Extraction itself is covered by test_phase2_features.py.
+    """
+    from openalpha_bridge.phase2.stage_a import StageAReport, StageASequenceRecord
+
+    records = tuple(
+        StageASequenceRecord(
+            sequence_id=f"{index:016d}",
+            symbol="SPY",
+            interval="1d",
+            partition="train",
+            target_start="2022-01-03",
+            target_end="2022-04-04",
+            prefix_start="2020-01-02",
+            prefix_end="2021-12-31",
+            bridge_input_shape=(512, 269),
+            bridge_input_dtype="float32",
+            canonical_sha256="a" * 64,
+            shard_relative_path=f"train/{index:016d}.npz",
+            shard_content_sha256="b" * 64,
+            shard_size_bytes=1024,
+            deterministic_replay_matched=True,
+        )
+        for index in range(sequences)
+    )
+    return StageAReport(
+        run_id="syn_orchestration",
+        experiment_sha256="d" * 64,
+        source_commit="a" * 40,
+        evidence_class="synthetic_pipeline_validation",
+        provider="deterministic_fake",
+        provider_mode="fake",
+        provider_client_version="fake-1",
+        kronos_mode="fake",
+        kronos_repository="fake/kronos-tokenizer-2k",
+        kronos_revision="0" * 40,
+        kronos_config_sha256=None,
+        kronos_weights_sha256=None,
+        frozen_parameter_sha256="c" * 64,
+        representation_version="openalpha.bridge.financial.v1",
+        prefix_length=448,
+        suffix_length=64,
+        score_mask_sha256="2fe5b1b3c66dfd7c7e8af2612d69d3c2337a4a0f6dd3896a4d7c2f69911f3711",
+        bridge_input_dimension=269,
+        retrieved_candles=512,
+        sequences=records,
+        completed_at=datetime(2026, 8, 2, tzinfo=UTC),
+        passed=True,
+    )
+
+
 # ------------------------------------------------------ dependency boundary
 
 
@@ -722,6 +776,7 @@ def _runner(store: InMemoryObjectStore, tmp_path: Path) -> CloudRunner:
         training_backend=NumpyTrainingBackend(),
         guards=ResourceGuards(),
         clock=_Clock(),
+        stage_a_report=_stage_a_report(),
     )
 
 

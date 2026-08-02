@@ -299,11 +299,41 @@ class Phase2Pipeline:
         self._advance(Phase2State.ASSETS_RESOLVED)
         return StageResult(Phase2State.ASSETS_RESOLVED, {"assets": resolved.model_dump(mode="json")})
 
-    def stage_a(self) -> StageResult:
+    def stage_a(self, report: object | None = None) -> StageResult:
+        """Advance only on validated feature-extraction evidence.
+
+        Stage A previously advanced on a pure state transition, which let a run
+        reach training with no features ever produced. A report is now required
+        and must carry validated sequences.
+        """
         self._require(Phase2State.ASSETS_RESOLVED)
+
+        passed = bool(getattr(report, "passed", False))
+        sequences = tuple(getattr(report, "sequences", ()) or ())
+        if report is None or not passed or not sequences:
+            reason = (
+                "STAGE_A_EXTRACTION_NOT_PERFORMED"
+                if report is None
+                else "STAGE_A_EXTRACTION_INCOMPLETE"
+            )
+            self._advance(Phase2State.BLOCKED, reason=reason)
+            return StageResult(Phase2State.BLOCKED, {"blocker": reason})
+
+        dimension = getattr(report, "bridge_input_dimension", None)
+        if dimension != 269:
+            self._advance(Phase2State.BLOCKED, reason="STAGE_A_INVALID_FEATURE_DIMENSION")
+            return StageResult(
+                Phase2State.BLOCKED, {"blocker": "STAGE_A_INVALID_FEATURE_DIMENSION"}
+            )
+
         self._advance(Phase2State.STAGE_A_PASSED)
         return StageResult(
-            Phase2State.STAGE_A_PASSED, {"symbols": list(self.config.stage_a_symbols)}
+            Phase2State.STAGE_A_PASSED,
+            {
+                "symbols": list(self.config.stage_a_symbols),
+                "sequences": len(sequences),
+                "bridge_input_dimension": dimension,
+            },
         )
 
     def stage_b(self, *, relative_improvement: float = 0.05) -> StageResult:

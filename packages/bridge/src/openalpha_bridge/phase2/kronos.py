@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import hashlib
 from enum import StrEnum
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -25,9 +25,12 @@ from .optional import require_module
 __all__ = [
     "BRIDGE_INPUT_DIMENSION",
     "DECODER_HIDDEN_DIMENSION",
+    "EFFECTIVE_DECODER_BLOCKS",
     "QUANTIZED_LATENT_DIMENSION",
     "SCALE_FEATURE_COUNT",
     "SCALE_FEATURE_ORDER",
+    "SOURCE_SPEC",
+    "TOKENIZER_INPUT_DIMENSION",
     "TOKENIZER_SPEC",
     "DeterministicFakeKronosBackend",
     "KronosBackend",
@@ -45,6 +48,11 @@ QUANTIZED_LATENT_DIMENSION = 20
 SCALE_FEATURE_COUNT = 13
 COARSE_VOCABULARY_SIZE = 1024
 FINE_VOCABULARY_SIZE = 1024
+
+#: experiment.yaml official_tokenizer.input_dimension
+TOKENIZER_INPUT_DIMENSION = 6
+#: configured_decoder_layers is 4, but the implementation builds range(n - 1).
+EFFECTIVE_DECODER_BLOCKS = 3
 
 SCALE_FEATURE_ORDER: tuple[str, ...] = (
     "log_anchor_close",
@@ -86,6 +94,45 @@ class PinnedAssetSpec(BaseModel):
     revision: str = Field(min_length=40, max_length=40)
     config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     weights_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class PinnedSourceSpec(BaseModel):
+    """The pinned official source checkout, verified file by file."""
+
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
+
+    repository: str
+    revision: str = Field(min_length=40, max_length=40)
+    files: dict[str, str]
+
+
+#: experiment.yaml official_source
+SOURCE_SPEC = PinnedSourceSpec(
+    repository="https://github.com/shiyu-coder/Kronos",
+    revision="67b630e67f6a18c9e9be918d9b4337c960db1e9a",
+    files={
+        "model/kronos.py": (
+            "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a"
+        ),
+        "model/module.py": (
+            "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f"
+        ),
+    },
+)
+
+
+def _assert_linear(module: Any, in_features: int, out_features: int) -> None:
+    """Confirm a resolved component really is the pinned projection."""
+    observed_in = getattr(module, "in_features", None)
+    observed_out = getattr(module, "out_features", None)
+    if observed_in != in_features or observed_out != out_features:
+        raise _fail(
+            "UNEXPECTED_COMPONENT_SHAPE",
+            (
+                f"expected Linear({in_features}, {out_features}), observed "
+                f"Linear({observed_in}, {observed_out})"
+            ),
+        )
 
 
 #: Pinned in research/bridge-v0/experiment.yaml.
@@ -200,11 +247,49 @@ class OfficialKronosBackend:
     local pipeline preparation.
     """
 
-    def __init__(self, *, stage: str, device: str = "cuda", cache_dir: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        stage: str,
+        device: str = "cuda",
+        cache_dir: str | None = None,
+        source_path: str | None = None,
+    ) -> None:
         self._stage = stage
         self._device = device
         self._cache_dir = cache_dir
+        self._source_path = source_path
         self._model = None
+
+    def _verify_source(self) -> dict[str, str]:
+        """Verify the pinned official source files before importing them."""
+        import os
+
+        root = self._source_path or os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH")
+        if not root:
+            raise _fail(
+                "KRONOS_SOURCE_UNAVAILABLE",
+                (
+                    "the pinned official source checkout is required; set "
+                    "OPENALPHA_KRONOS_SOURCE_PATH or pass source_path"
+                ),
+            )
+        observed: dict[str, str] = {}
+        for relative, expected in SOURCE_SPEC.files.items():
+            path = os.path.join(root, *relative.split("/"))
+            if not os.path.isfile(path):
+                raise _fail(
+                    "KRONOS_SOURCE_FILE_MISSING",
+                    f"pinned source file not found: {relative} under {root}",
+                )
+            digest = _file_sha256(path)
+            observed[relative] = digest
+            if digest != expected:
+                raise _fail(
+                    "KRONOS_SOURCE_HASH_MISMATCH",
+                    f"{relative} expected {expected}, observed {digest}",
+                )
+        return observed
 
     @property
     def mode(self) -> KronosMode:
@@ -240,40 +325,191 @@ class OfficialKronosBackend:
                 f"expected {TOKENIZER_SPEC.weights_sha256}, observed {observed_weights}",
             )
 
+        # Import the pinned source only after both files verify byte-for-byte.
+        import os
+        import sys
+
+        self._verify_source()
+        source_root = self._source_path or os.environ["OPENALPHA_KRONOS_SOURCE_PATH"]
+        if source_root not in sys.path:
+            sys.path.insert(0, source_root)
+        try:
+            from model import KronosTokenizer  # type: ignore[import-not-found]
+        except ImportError as error:
+            raise _fail(
+                "KRONOS_SOURCE_IMPORT_FAILED",
+                f"could not import the pinned official model package: {type(error).__name__}",
+            ) from error
+
+        torch = require_module("torch", stage=self._stage)
+        snapshot = os.path.dirname(weights_path)
+        tokenizer = KronosTokenizer.from_pretrained(snapshot)
+        tokenizer = tokenizer.to(self._device)
+        tokenizer.eval()
+        # Nothing in Bridge may train a Kronos parameter.
+        for parameter in tokenizer.parameters():
+            parameter.requires_grad_(False)
+        self._model = tokenizer
+
+        _assert_linear(
+            self._component("post_quant_embed"),
+            QUANTIZED_LATENT_DIMENSION,
+            DECODER_HIDDEN_DIMENSION,
+        )
+        _ = torch  # the import is required for device placement above
+
         return ResolvedAssets(
             kronos_mode=self.mode,
             repository=TOKENIZER_SPEC.repository,
             revision=TOKENIZER_SPEC.revision,
             observed_config_sha256=observed_config,
             observed_weights_sha256=observed_weights,
-            frozen_parameter_sha256=None,
+            frozen_parameter_sha256=self.frozen_parameter_sha256(),
             revisions_verified=True,
         )
+
+    # ------------------------------------------------------------ components
+
+    def _tokenizer(self) -> Any:
+        if self._model is None:
+            raise _fail(
+                "OFFICIAL_BACKEND_NOT_LOADED",
+                "call resolve_assets before using the official numerical path",
+            )
+        return self._model
+
+    def _component(self, *names: str) -> Any:
+        """Resolve a pinned submodule, failing closed with what was found."""
+        tokenizer = self._tokenizer()
+        for name in names:
+            found = getattr(tokenizer, name, None)
+            if found is not None:
+                return found
+        available = sorted(n for n in dir(tokenizer) if not n.startswith("_"))
+        raise _fail(
+            "KRONOS_COMPONENT_NOT_FOUND",
+            (
+                f"none of {names} exist on the pinned tokenizer; the checkpoint "
+                f"layout does not match the audited boundary. Available: {available}"
+            ),
+        )
+
+    @staticmethod
+    def _as_float32(tensor: Any) -> NDArray[np.float32]:
+        array = tensor.detach().to("cpu").float().numpy().astype(np.float32)
+        if not np.isfinite(array).all():
+            raise _fail("NON_FINITE_KRONOS_OUTPUT", "official component emitted non-finite values")
+        return array
+
+    # ------------------------------------------------------------- numerical
 
     def encode_tokens(
         self, features: NDArray[np.float32]
     ) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
-        raise _fail(
-            "OFFICIAL_BACKEND_NOT_LOADED",
-            "call resolve_assets and load the pinned tokenizer before encoding",
-        )
+        """Official ``KronosTokenizer.encode(x, half=True)``.
+
+        Input is the normalized, clipped six-channel window; output is the pair
+        of official 10-bit identifier streams.
+        """
+        torch = require_module("torch", stage=self._stage)
+        tokenizer = self._tokenizer()
+
+        if features.ndim != 2 or features.shape[1] != TOKENIZER_INPUT_DIMENSION:
+            raise _fail(
+                "INVALID_TOKENIZER_INPUT_SHAPE",
+                f"encoder input must be [T, {TOKENIZER_INPUT_DIMENSION}], got {features.shape}",
+            )
+        batch = torch.from_numpy(np.ascontiguousarray(features, dtype=np.float32))
+        batch = batch.unsqueeze(0).to(self._device)
+
+        with torch.no_grad():
+            encoded = tokenizer.encode(batch, half=True)
+        if not isinstance(encoded, (tuple, list)) or len(encoded) != 2:
+            raise _fail(
+                "UNEXPECTED_ENCODE_RESULT",
+                "official encode(half=True) must return exactly two identifier tensors",
+            )
+        coarse = encoded[0].detach().to("cpu").reshape(-1).to(torch.int64).numpy()
+        fine = encoded[1].detach().to("cpu").reshape(-1).to(torch.int64).numpy()
+        assert_token_ranges(coarse, fine)
+        return coarse, fine
 
     def bipolar_latent(
         self, coarse_ids: NDArray[np.int64], fine_ids: NDArray[np.int64]
     ) -> NDArray[np.float32]:
-        raise _fail("OFFICIAL_BACKEND_NOT_LOADED", "pinned tokenizer is not loaded")
+        """Official ``indices_to_bits(..., half=True)``: [T, 20] scaled by 1/sqrt(20)."""
+        torch = require_module("torch", stage=self._stage)
+        assert_token_ranges(coarse_ids, fine_ids)
+        convert = self._component("indices_to_bits")
+
+        coarse = torch.from_numpy(np.ascontiguousarray(coarse_ids)).unsqueeze(0).to(self._device)
+        fine = torch.from_numpy(np.ascontiguousarray(fine_ids)).unsqueeze(0).to(self._device)
+        with torch.no_grad():
+            bits = convert([coarse, fine], half=True)
+        latent = self._as_float32(bits).reshape(-1, QUANTIZED_LATENT_DIMENSION)
+        return latent
 
     def project_latent(self, latent: NDArray[np.float32]) -> NDArray[np.float32]:
-        raise _fail("OFFICIAL_BACKEND_NOT_LOADED", "pinned projection is not loaded")
+        """Official learned ``post_quant_embed``: Linear(20, 256)."""
+        torch = require_module("torch", stage=self._stage)
+        projection = self._component("post_quant_embed")
+        _assert_linear(projection, QUANTIZED_LATENT_DIMENSION, DECODER_HIDDEN_DIMENSION)
+
+        tensor = torch.from_numpy(np.ascontiguousarray(latent, dtype=np.float32))
+        tensor = tensor.unsqueeze(0).to(self._device)
+        with torch.no_grad():
+            projected = projection(tensor)
+        return self._as_float32(projected).reshape(-1, DECODER_HIDDEN_DIMENSION)
 
     def decoder_trunk(self, projected: NDArray[np.float32]) -> NDArray[np.float32]:
-        raise _fail("OFFICIAL_BACKEND_NOT_LOADED", "pinned decoder trunk is not loaded")
+        """The three official causal decoder blocks, applied to the ordered window.
+
+        The whole window is processed at once. Attention is causal, so position
+        t depends only on positions <= t; decoding pairs in isolation would be
+        incompatible with the audited architecture.
+        """
+        torch = require_module("torch", stage=self._stage)
+        blocks = self._component("decoder", "decoder_blocks", "dec_blocks")
+        try:
+            block_count = len(blocks)
+        except TypeError as error:
+            raise _fail(
+                "KRONOS_DECODER_NOT_ITERABLE",
+                "the official decoder trunk is not an iterable block sequence",
+            ) from error
+        if block_count != EFFECTIVE_DECODER_BLOCKS:
+            raise _fail(
+                "UNEXPECTED_DECODER_BLOCK_COUNT",
+                f"expected {EFFECTIVE_DECODER_BLOCKS} frozen decoder blocks, found {block_count}",
+            )
+
+        tensor = torch.from_numpy(np.ascontiguousarray(projected, dtype=np.float32))
+        hidden = tensor.unsqueeze(0).to(self._device)
+        with torch.no_grad():
+            for block in blocks:
+                hidden = block(hidden)
+        return self._as_float32(hidden).reshape(-1, DECODER_HIDDEN_DIMENSION)
 
     def official_decode(self, hidden: NDArray[np.float32]) -> NDArray[np.float32]:
-        raise _fail("OFFICIAL_BACKEND_NOT_LOADED", "pinned output head is not loaded")
+        """The official unrestricted ``head``: Linear(256, 6). Baseline only."""
+        torch = require_module("torch", stage=self._stage)
+        head = self._component("head")
+        _assert_linear(head, DECODER_HIDDEN_DIMENSION, TOKENIZER_INPUT_DIMENSION)
+
+        tensor = torch.from_numpy(np.ascontiguousarray(hidden, dtype=np.float32))
+        tensor = tensor.unsqueeze(0).to(self._device)
+        with torch.no_grad():
+            decoded = head(tensor)
+        return self._as_float32(decoded).reshape(-1, TOKENIZER_INPUT_DIMENSION)
 
     def frozen_parameter_sha256(self) -> str:
-        raise _fail("OFFICIAL_BACKEND_NOT_LOADED", "pinned weights are not loaded")
+        """Hash over every frozen parameter, for before/after parity checks."""
+        tokenizer = self._tokenizer()
+        digest = hashlib.sha256()
+        for name, parameter in sorted(tokenizer.state_dict().items()):
+            digest.update(name.encode("utf-8"))
+            digest.update(parameter.detach().to("cpu").float().numpy().tobytes())
+        return digest.hexdigest()
 
 
 def _file_sha256(path: str) -> str:
