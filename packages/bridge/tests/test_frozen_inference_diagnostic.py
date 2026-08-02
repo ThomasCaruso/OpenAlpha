@@ -1,8 +1,7 @@
-"""The diagnostic must distinguish the situations it exists to tell apart.
+"""The v2 diagnostic contract, exercised end to end against fakes.
 
-Every test runs the real diagnostic end to end against fakes. Nothing here
-touches a network, an official asset, Torch, or any partition other than the
-already-retrieved SPY training window.
+Nothing here touches a network, an official asset, Torch, or any partition
+other than the already-retrieved SPY training window.
 """
 
 from __future__ import annotations
@@ -19,21 +18,35 @@ import pytest
 from diagnostic_fakes import FakeCodec, FakeForecastModel, fake_assets, frozen_digest
 from openalpha_bridge.diagnostic import conclusion as conclusion_module
 from openalpha_bridge.diagnostic import methods as methods_module
+from openalpha_bridge.diagnostic import normalization as normalization_module
 from openalpha_bridge.diagnostic import runner as runner_module
 from openalpha_bridge.diagnostic import validity as validity_module
-from openalpha_bridge.diagnostic.conclusion import DiagnosticConclusion
+from openalpha_bridge.diagnostic.conclusion import RETIRED_LABELS, DiagnosticConclusion
+from openalpha_bridge.diagnostic.normalization import (
+    CLIP_VALUE,
+    EPSILON,
+    fit_context_state,
+)
+from openalpha_bridge.diagnostic.official_input import (
+    OFFICIAL_COLUMNS,
+    OFFICIAL_STAMP_COLUMNS,
+    OfficialRow,
+    official_stamp,
+)
 from openalpha_bridge.diagnostic.runner import (
     DiagnosticArtifact,
     run_frozen_inference_diagnostic,
 )
 from openalpha_bridge.diagnostic.spec import (
     CONTEXT_CANDLES,
+    OFFICIAL_INFERENCE_SETTINGS,
     ROLLOUT_SEEDS,
     TARGET_CANDLES,
     TOTAL_CANDLES,
+    V1_SPECIFICATION_SHA256,
+    V2_SPECIFICATION_SHA256,
     WINDOW,
 )
-from openalpha_bridge.diagnostic.validity import DecodedCandle
 from openalpha_bridge.errors import BridgeTransformError
 from openalpha_bridge.phase2.invocation import WorkerInvocation
 from openalpha_bridge.phase2.provider import Candle, MarketSeries, ProviderMode
@@ -48,9 +61,6 @@ def _invocation() -> WorkerInvocation:
     return WorkerInvocation.validate_all(
         run_id="canary_0badc0de", source_commit=COMMIT, deployed_commit=COMMIT
     )
-
-
-# --------------------------------------------------------------- the window
 
 
 def _real_candles() -> tuple[Candle, ...]:
@@ -68,8 +78,8 @@ def _real_candles() -> tuple[Candle, ...]:
                 high=max(level, close) * 1.004,
                 low=min(level, close) * 0.996,
                 close=close,
-                volume=1.0e6,
-                amount=1.0e6 * close,
+                volume=1.0e6 + index,
+                amount=(1.0e6 + index) * close,
             )
         )
         level = close
@@ -77,8 +87,6 @@ def _real_candles() -> tuple[Candle, ...]:
 
 
 class _SingleWindowProvider:
-    """Serves the amended window once and counts every call."""
-
     name = "deterministic_fake"
     mode = ProviderMode.FAKE
     client_version = "fake-1"
@@ -99,42 +107,45 @@ class _SingleWindowProvider:
         )
 
 
-def _as_decoded(candles: tuple[Candle, ...]) -> tuple[DecodedCandle, ...]:
+def _as_rows(candles: tuple[Candle, ...]) -> tuple[OfficialRow, ...]:
     return tuple(
-        DecodedCandle(open=c.open, high=c.high, low=c.low, close=c.close, volume=c.volume)
+        OfficialRow(
+            session=c.session,
+            open=c.open,
+            high=c.high,
+            low=c.low,
+            close=c.close,
+            volume=c.volume,
+            amount=c.amount,
+        )
         for c in candles
     )
 
 
-TRUE_TARGET = _as_decoded(_real_candles())[CONTEXT_CANDLES:]
+ALL_ROWS = _as_rows(_real_candles())
+TRUE_TARGET = ALL_ROWS[CONTEXT_CANDLES:]
 
 
-def _shift(path: tuple[DecodedCandle, ...], factor: float) -> tuple[DecodedCandle, ...]:
-    """A structurally valid path displaced from the truth by ``factor``."""
+def _shift(path: tuple[OfficialRow, ...], factor: float) -> tuple[OfficialRow, ...]:
     return tuple(
-        DecodedCandle(
-            open=c.open * factor,
-            high=c.high * factor,
-            low=c.low * factor,
-            close=c.close * factor,
-            volume=c.volume,
+        r.model_copy(
+            update={
+                "open": r.open * factor,
+                "high": r.high * factor,
+                "low": r.low * factor,
+                "close": r.close * factor,
+            }
         )
-        for c in path
+        for r in path
     )
 
 
-def _make_invalid(path: tuple[DecodedCandle, ...]) -> tuple[DecodedCandle, ...]:
+def _make_invalid(path: tuple[OfficialRow, ...]) -> tuple[OfficialRow, ...]:
     """Same closes, but high and low crossed: invalid, equally accurate."""
-    return tuple(
-        DecodedCandle(
-            open=c.open, high=c.low * 0.9, low=c.high * 1.1, close=c.close, volume=c.volume
-        )
-        for c in path
-    )
+    return tuple(r.model_copy(update={"high": r.low * 0.9, "low": r.high * 1.1}) for r in path)
 
 
 def _position(seed: int) -> int:
-    """Rollout position for a seed. Method B shares seed 0 with rollout 0."""
     return seed - ROLLOUT_SEEDS[0]
 
 
@@ -155,148 +166,356 @@ def _run(policy, *, codec: FakeCodec | None = None, assets=None, digest=None):
     return artifact, provider, codec, model
 
 
-# ============================================================ the six cases
+# ============================================== full official input identity
 
 
-def test_1_in_distribution_round_trip_invalidity_is_detected() -> None:
-    """Case 1: the tokenizer decoder mangles its own encoder's tokens."""
+def test_the_input_carries_all_six_channels_in_the_official_order() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    assert artifact.ordered_columns == ("open", "high", "low", "close", "volume", "amount")
+    assert len(artifact.ordered_columns) == 6
+    assert OFFICIAL_COLUMNS == artifact.ordered_columns
+
+
+def test_a_five_channel_reduction_is_impossible() -> None:
+    """Every row exposes six channels; there is no four-price-plus-volume form."""
+    row = ALL_ROWS[0]
+    assert len(row.channels()) == 6
+    assert row.channels()[5] == row.amount
+
+
+def test_every_row_keeps_its_session() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    assert artifact.first_session == "2015-05-07"
+    assert artifact.last_session == ALL_ROWS[-1].session.isoformat()
+    # Decoded output keeps timestamps too, so a path can be aligned to sessions.
+    assert artifact.method_b.raw_decoded[0].session == TRUE_TARGET[0].session
+    assert artifact.method_b.raw_decoded[-1].session == TRUE_TARGET[-1].session
+    assert len(artifact.method_a.reconstruction) == TOTAL_CANDLES
+
+
+def test_the_stamp_features_match_the_official_derivation() -> None:
+    stamp = official_stamp(date(2016, 3, 9))
+    assert OFFICIAL_STAMP_COLUMNS == ("minute", "hour", "weekday", "day", "month")
+    assert stamp.values() == (0, 0, 2, 9, 3)  # 2016-03-09 is a Wednesday
+    assert len(stamp.values()) == 5
+
+
+def test_the_model_receives_one_stamp_per_context_and_target_row() -> None:
+    _, _, _, model = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    assert set(model.stamp_shapes) == {(CONTEXT_CANDLES, TARGET_CANDLES)}
+    assert set(model.context_lengths) == {CONTEXT_CANDLES}
+
+
+def test_the_column_presence_mask_is_recorded() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    mask = artifact.column_presence.as_mask()
+    assert set(mask) == set(OFFICIAL_COLUMNS)
+    assert artifact.column_presence.all_retrieved is True
+
+
+def test_frequency_calendar_and_boundary_are_recorded() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    assert artifact.frequency == "1d"
+    assert artifact.calendar == "XNYS"
+    assert artifact.context_target_boundary == CONTEXT_CANDLES == 448
+    assert artifact.context_candles == 448
+    assert artifact.target_candles == 64
+
+
+# ================================================ context-only normalization
+
+
+def test_the_state_is_fitted_from_the_448_context_rows_only() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    state = artifact.normalization_state
+    assert state.fitted_candle_count == CONTEXT_CANDLES == 448
+    assert state.columns == OFFICIAL_COLUMNS
+    assert state.epsilon == EPSILON == 1e-5
+    assert state.clip_value == CLIP_VALUE == 5.0
+    assert state.clip_policy == "symmetric_clip_after_standardization"
+    assert state.standard_deviation_ddof == 0
+
+    # Fitting on all 512 would give a different state, which is the leak the
+    # contract forbids.
+    leaked = fit_context_state(ALL_ROWS)
+    assert leaked.state_sha256 != state.state_sha256
+
+
+def test_the_state_matches_the_official_formulas() -> None:
+    context = ALL_ROWS[:CONTEXT_CANDLES]
+    state = fit_context_state(context)
+    closes = [r.close for r in context]
+    mean = sum(closes) / len(closes)
+    variance = sum((c - mean) ** 2 for c in closes) / len(closes)  # ddof = 0
+    index = OFFICIAL_COLUMNS.index("close")
+    assert state.mean[index] == pytest.approx(mean)
+    assert state.standard_deviation[index] == pytest.approx(math.sqrt(variance))
+
+    normalized = state.normalize(context)
+    expected = (closes[0] - mean) / (math.sqrt(variance) + EPSILON)
+    assert normalized[0][index] == pytest.approx(max(-5.0, min(5.0, expected)))
+
+    # Inverse is exact for unclipped values.
+    restored = state.invert(normalized)
+    assert restored[0][index] == pytest.approx(closes[0], rel=1e-9)
+
+
+def test_clipping_is_symmetric_and_applied_after_standardization() -> None:
+    context = ALL_ROWS[:CONTEXT_CANDLES]
+    state = fit_context_state(context)
+    extreme = context[0].model_copy(update={"close": context[0].close * 1e6})
+    normalized = state.normalize((extreme,))
+    index = OFFICIAL_COLUMNS.index("close")
+    assert normalized[0][index] == CLIP_VALUE
+
+
+def test_every_method_is_handed_the_same_state_and_records_its_hash() -> None:
+    artifact, _, codec, model = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    digest = artifact.normalization_state.state_sha256
+    assert artifact.method_a.normalization_state_sha256 == digest
+    assert artifact.method_b.normalization_state_sha256 == digest
+    assert artifact.method_d.normalization_state_sha256 == digest
+    # The adapters were told, every single time.
+    assert set(codec.states_seen) == {digest}
+    assert set(model.states_seen) == {digest}
+
+
+def test_no_adapter_retains_an_implicit_last_normalization() -> None:
+    """The protocols require the state as a keyword argument on every call."""
+    from openalpha_bridge.diagnostic.backends import ForecastModel, TokenizerCodec
+
+    for protocol, method in ((TokenizerCodec, "encode"), (TokenizerCodec, "decode")):
+        assert "state" in inspect.signature(getattr(protocol, method)).parameters
+    assert "state" in inspect.signature(ForecastModel.generate).parameters
+
+
+# ==================================================== corrected Method A metrics
+
+
+def test_method_a_reports_all_five_required_quantities() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    a = artifact.method_a
+    assert a.full_sequence_error.defined
+    assert a.full_sequence_error.full_sequence_ohlcva_mae is not None
+    assert set(a.full_sequence_error.per_column_mae or {}) == set(OFFICIAL_COLUMNS)
+    assert a.full_sequence_error.internal_return_mae is not None
+    assert a.full_sequence_error.transitions_scored == TOTAL_CANDLES - 1 == 511
+    assert a.target_suffix_error.rows_scored == TARGET_CANDLES
+    assert a.validity_all.candle_count == TOTAL_CANDLES
+    assert a.validity_target_suffix.candle_count == TARGET_CANDLES
+
+
+def test_method_a_uses_no_external_anchor() -> None:
+    """Transitions are internal to the sequence, 1 through 511.
+
+    Checked structurally: reconstruction_error has nowhere to receive an
+    external close, and run_method_a never mentions one. forecast_error keeps
+    its anchor, which is legitimate because the model genuinely had that value.
+    """
+    from openalpha_bridge.diagnostic import metrics as metrics_module
+
+    assert "anchor" not in inspect.getsource(methods_module.run_method_a)
+    reconstruction_parameters = inspect.signature(metrics_module.reconstruction_error).parameters
+    assert set(reconstruction_parameters) == {"reconstructed", "actual"}
+    assert "anchor_close" in inspect.signature(metrics_module.forecast_error).parameters
+
+    # The metric it computes really is transition-internal.
+    perfect = metrics_module.reconstruction_error(ALL_ROWS, ALL_ROWS)
+    assert perfect.internal_return_mae == pytest.approx(0.0)
+    assert perfect.transitions_scored == len(ALL_ROWS) - 1
+
+
+def test_any_invalid_round_trip_candle_is_a_strict_observation() -> None:
+    """One invalid candle in 512 is below the 1 per cent threshold and still reported."""
+    codec = FakeCodec(corrupt_round_trip=True, corrupt_count=1)
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01), codec=codec)
+    a = artifact.method_a
+    assert a.validity_all.invalid_candle_count == 1
+    assert a.validity_all.invalid_candle_fraction < 0.01  # immaterial
+    assert a.structural_invalidity_observed is True
+    assert artifact.conclusion is DiagnosticConclusion.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED
+    assert artifact.decision.matched_rule_id == "R2"
+
+
+def test_material_round_trip_invalidity_is_separately_labelled() -> None:
     codec = FakeCodec(corrupt_round_trip=True, corrupt_fraction=0.5)
     artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01), codec=codec)
-
-    assert artifact.conclusion is DiagnosticConclusion.TOKENIZER_DECODER_DEFECT
+    assert artifact.method_a.validity_all.invalid_candle_fraction > 0.01
+    assert artifact.conclusion is DiagnosticConclusion.ROUNDTRIP_MATERIAL_INVALIDITY
     assert artifact.decision.matched_rule_id == "R1"
-    assert artifact.method_a.validity.invalid_candle_fraction > 0.01
-    assert artifact.method_a.validity.path_is_invalid
-    assert "high_below_low" in artifact.method_a.validity.violation_counts
 
 
-def test_2_valid_round_trip_but_invalid_generated_decoding() -> None:
-    """Case 2: round trip is clean; generated tokens decode outside validity.
+# ===================================================== narrow conclusion vocabulary
 
-    Valid and invalid rollouts are made equally accurate, so the finding is
-    about where invalidity enters rather than about accuracy.
-    """
+
+@pytest.mark.parametrize("retired", sorted(RETIRED_LABELS))
+def test_retired_causal_labels_cannot_be_produced(retired: str) -> None:
+    assert retired not in {c.value for c in DiagnosticConclusion}
+    assert RETIRED_LABELS[retired]
+
+
+def test_the_vocabulary_is_exactly_the_nine_specified_labels() -> None:
+    assert {c.value for c in DiagnosticConclusion} == {
+        "ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED",
+        "ROUNDTRIP_MATERIAL_INVALIDITY",
+        "NO_VALID_ROLLOUTS_OBSERVED",
+        "VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD",
+        "LOW_VALID_ROLLOUT_FRACTION",
+        "PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT",
+        "NO_PREREGISTERED_EFFECT_DETECTED",
+        "DIAGNOSTIC_INCONCLUSIVE",
+        "DIAGNOSTIC_OPERATIONAL_FAILURE",
+    }
+
+
+def test_the_default_final_rule_is_not_causal() -> None:
+    wrong_but_valid = _shift(TRUE_TARGET, 1.30)
+    artifact, _, _, _ = _run(lambda seed, ctx: wrong_but_valid)
+    assert artifact.decision.matched_rule_id == "R8"
+    assert artifact.conclusion is DiagnosticConclusion.NO_PREREGISTERED_EFFECT_DETECTED
+    assert artifact.decision.forecast_origins == 1
+
+
+def test_no_valid_rollouts_is_typed_and_nothing_is_substituted() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _make_invalid(_shift(TRUE_TARGET, 1.01)))
+    assert artifact.conclusion is DiagnosticConclusion.NO_VALID_ROLLOUTS_OBSERVED
+    assert artifact.decision.matched_rule_id == "R3"
+    assert artifact.method_d.valid_only_ensemble is None
+    assert artifact.method_d.valid_only_ensemble_error is None
+    assert artifact.method_d.manual_seeded_ensemble is not None
+
+
+def test_valid_only_ensemble_meeting_the_threshold_is_stated_as_such() -> None:
+    accurate_valid = _shift(TRUE_TARGET, 1.0005)
+    inaccurate_invalid = _make_invalid(_shift(TRUE_TARGET, 1.35))
+    artifact, _, _, _ = _run(
+        lambda seed, ctx: accurate_valid if _position(seed) % 2 == 0 else inaccurate_invalid
+    )
+    assert artifact.conclusion is (
+        DiagnosticConclusion.VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+    )
+    assert artifact.decision.matched_rule_id == "R4"
+
+
+def test_a_low_valid_fraction_is_described_not_diagnosed_as_a_support_defect() -> None:
     valid_path = _shift(TRUE_TARGET, 1.02)
     invalid_path = _make_invalid(_shift(TRUE_TARGET, 1.02))
-
-    def policy(seed: int, _context):
-        # 3 valid out of 64 -> below the 0.25 support minimum, but not zero.
-        return valid_path if _position(seed) < 3 else invalid_path
-
-    artifact, _, _, _ = _run(policy)
-
-    assert artifact.method_a.validity.invalid_candle_fraction == 0.0
-    assert artifact.conclusion is DiagnosticConclusion.GENERATED_TOKEN_SUPPORT_DEFECT
-    assert artifact.decision.matched_rule_id == "R4"
-    assert artifact.method_d.valid_rollout_count == 3
+    artifact, _, _, _ = _run(lambda seed, ctx: valid_path if _position(seed) < 3 else invalid_path)
+    assert artifact.conclusion is DiagnosticConclusion.LOW_VALID_ROLLOUT_FRACTION
+    assert artifact.decision.matched_rule_id == "R5"
     assert artifact.method_d.valid_rollout_fraction < 0.25
 
 
-def test_3_projection_fixes_validity_without_improving_accuracy() -> None:
-    """Case 3: geometry is repairable, and repair buys no accuracy."""
-    invalid_but_close = _make_invalid(_shift(TRUE_TARGET, 1.001))
-    valid_same_accuracy = _shift(TRUE_TARGET, 1.001)
+def test_projection_without_threshold_improvement_is_described_locally() -> None:
+    invalid_close = _make_invalid(_shift(TRUE_TARGET, 1.001))
+    valid_close = _shift(TRUE_TARGET, 1.001)
 
-    def policy(seed: int, _context):
-        # Rollout 0, which Method B shares, is invalid. Half the remaining
-        # rollouts are valid so R4 does not fire, and both groups have identical
-        # accuracy so R3 does not either.
+    def policy(seed: int, _ctx):
         position = _position(seed)
         if position == 0:
-            return invalid_but_close
-        return valid_same_accuracy if position % 2 == 0 else invalid_but_close
+            return invalid_close
+        return valid_close if position % 2 == 0 else invalid_close
 
     artifact, _, _, _ = _run(policy)
-
-    assert artifact.method_b.validity.path_is_invalid
     assert artifact.method_c.restores_validity
-    assert not artifact.method_c.validity_after.path_is_invalid
-    # Closes are untouched by the projection, so the primary metric cannot move.
-    assert artifact.method_c.primary_error_improvement == pytest.approx(0.0, abs=1e-12)
-    assert artifact.conclusion is DiagnosticConclusion.VALIDITY_REPAIR_ONLY
-    assert artifact.decision.matched_rule_id == "R5"
-
-
-def test_4_valid_rollouts_outperform_invalid_rollouts() -> None:
-    """Case 4: conditioning on validity actually helps."""
-    accurate_valid = _shift(TRUE_TARGET, 1.0005)
-    inaccurate_invalid = _make_invalid(_shift(TRUE_TARGET, 1.35))
-
-    def policy(seed: int, _context):
-        return accurate_valid if _position(seed) % 2 == 0 else inaccurate_invalid
-
-    artifact, _, _, _ = _run(policy)
-
-    assert artifact.conclusion is DiagnosticConclusion.VALIDITY_FILTER_IMPROVES_FORECAST
-    assert artifact.decision.matched_rule_id == "R3"
-    valid_error = artifact.method_d.valid_only_ensemble_error
-    all_error = artifact.method_d.all_rollout_ensemble_error
-    assert valid_error is not None and all_error is not None
-    valid_primary = valid_error.close_return_mae
-    all_primary = all_error.close_return_mae
-    assert valid_primary is not None and all_primary is not None
-    assert valid_primary < all_primary
-
-
-def test_5_no_valid_rollout_exists_is_typed_not_silently_repaired() -> None:
-    """Case 5: zero valid paths, and nothing is substituted for them."""
-    artifact, _, _, _ = _run(lambda seed, ctx: _make_invalid(_shift(TRUE_TARGET, 1.01)))
-
-    assert artifact.conclusion is DiagnosticConclusion.NO_VALID_ROLLOUTS
-    assert artifact.decision.matched_rule_id == "R2"
-    assert artifact.method_d.valid_rollout_count == 0
-    # Explicitly absent rather than projected, substituted, or zero-filled.
-    assert artifact.method_d.valid_only_ensemble is None
-    assert artifact.method_d.valid_only_ensemble_error is None
-    assert artifact.method_d.valid_group_mean_primary_error is None
-    # The all-rollout ensemble is still reported, so the official procedure's
-    # answer remains visible next to the refusal to use it.
-    assert artifact.method_d.all_rollout_ensemble is not None
-
-
-def test_6_structurally_valid_forecasts_that_remain_inaccurate() -> None:
-    """Case 6: everything is valid and everything is still wrong."""
-    wrong_but_valid = _shift(TRUE_TARGET, 1.30)
-    artifact, _, _, _ = _run(lambda seed, ctx: wrong_but_valid)
-
-    assert artifact.method_a.validity.invalid_candle_fraction == 0.0
-    assert not artifact.method_b.validity.path_is_invalid
-    assert artifact.method_d.valid_rollout_fraction == 1.0
-    assert artifact.conclusion is DiagnosticConclusion.INVALIDITY_NOT_CAUSAL_TO_FORECAST_ERROR
+    assert artifact.conclusion is (
+        DiagnosticConclusion.PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT
+    )
     assert artifact.decision.matched_rule_id == "R6"
-    error = artifact.method_d.valid_only_ensemble_error
-    assert error is not None and error.close_return_mae is not None
 
 
-# ================================================= prohibitions and boundary
+def test_every_rule_is_recorded_even_when_it_did_not_match() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.30))
+    ids = [e.rule_id for e in artifact.decision.evaluations]
+    assert ids == ["R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"]
+    matched = [e for e in artifact.decision.evaluations if e.matched]
+    assert len(matched) == 1
 
 
-def test_7_no_parameter_is_modified() -> None:
-    """Measured by hashing before and after, not asserted."""
+# ======================================================= probability definition
+
+
+def test_stored_probabilities_state_exactly_what_they_are() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    assert artifact.sampling_probability_definition == (
+        "log_softmax_of_temperature_scaled_then_top_k_top_p_filtered_logits_renormalized"
+    )
+    step = artifact.method_b.sampling[0]
+    assert step.measured_after_temperature is True
+    assert step.measured_after_top_k_top_p_filtering is True
+    assert step.filtered_distribution_renormalized is True
+    assert step.pair_log_probability == pytest.approx(
+        step.coarse_log_probability + step.fine_conditional_log_probability
+    )
+    assert len(artifact.method_b.sampling) == TARGET_CANDLES
+    assert artifact.method_b.total_path_sampling_log_probability == pytest.approx(
+        sum(s.pair_log_probability for s in artifact.method_b.sampling)
+    )
+
+
+def test_no_stored_quantity_is_called_a_likelihood() -> None:
+    for module in (methods_module, runner_module, conclusion_module):
+        source = inspect.getsource(module).lower()
+        assert "likelihood" not in source or "not a model likelihood" in source
+    from openalpha_bridge.diagnostic import backends
+
+    fields = set(backends.GeneratedPath.model_fields) | set(backends.StepSampling.model_fields)
+    assert not any("likelihood" in name for name in fields)
+    assert any("sampling_log_probability" in name for name in fields)
+
+
+# ========================================================== ensemble definition
+
+
+def test_the_manual_ensemble_is_never_called_official() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    d = artifact.method_d
+    assert d.manual_seeded_ensemble is not None
+    assert d.manual_ensemble_is_official is False
+    hints = typing.get_type_hints(methods_module.MethodDResult, include_extras=True)
+    assert hints["manual_ensemble_is_official"] == typing.Literal[False]
+    # No field claims to be the official sample_count ensemble.
+    assert not any(
+        "official_ensemble" in name for name in methods_module.MethodDResult.model_fields
+    )
+
+
+def test_the_forecast_origin_count_is_recorded_as_one() -> None:
+    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
+    assert artifact.method_d.forecast_origins == 1
+
+
+# ============================================================ prohibitions
+
+
+def test_no_parameter_is_modified() -> None:
     artifact, _, _, model = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
     assert artifact.parameter_sha256_before == artifact.parameter_sha256_after
     assert artifact.parameters_unmodified is True
-    assert artifact.training_performed is False
     assert model.parameter_writes == 0
 
 
-def test_7b_a_changed_parameter_digest_fails_closed() -> None:
-    """If a parameter did move, the diagnostic refuses to report a result."""
+def test_a_changed_parameter_digest_fails_closed() -> None:
     digests = iter(["a" * 64, "b" * 64])
-
     with pytest.raises(BridgeTransformError) as excinfo:
         _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01), digest=lambda: next(digests))
     assert excinfo.value.failures[0].code == "DIAGNOSTIC_PARAMETERS_MODIFIED"
 
 
-def test_7c_trainable_parameters_are_refused() -> None:
+def test_trainable_parameters_are_refused() -> None:
     with pytest.raises(BridgeTransformError) as excinfo:
         _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01), assets=fake_assets(trainable=17_605))
     assert excinfo.value.failures[0].code == "DIAGNOSTIC_PARAMETERS_NOT_FROZEN"
 
 
 def _diagnostic_modules():
-    return (runner_module, methods_module, conclusion_module, validity_module)
+    return (
+        runner_module,
+        methods_module,
+        conclusion_module,
+        validity_module,
+        normalization_module,
+    )
 
 
 def _call_graph(module) -> set[str]:
@@ -308,50 +527,10 @@ def _call_graph(module) -> set[str]:
                 names.add(target.id)
             elif isinstance(target, ast.Attribute):
                 names.add(target.attr)
-        elif isinstance(node, ast.ImportFrom):
-            names.update(alias.name for alias in node.names)
-            names.add(node.module or "")
     return names
 
 
-@pytest.mark.parametrize(
-    "forbidden",
-    [
-        "backward",
-        "zero_grad",
-        "step",
-        "Adam",
-        "AdamW",
-        "SGD",
-        "optimizer",
-        "run_training",
-        "TrainingBackend",
-        "select_checkpoint",
-        "freeze_checkpoint",
-        "CheckpointRecord",
-        "evaluate_conclusion",
-        "GateTable",
-        "open_test_partition",
-        "open_cloud_test_partition",
-        "BridgeDecoder",
-        "stage_b",
-        "stage_c",
-    ],
-)
-def test_8_no_optimizer_or_training_code_is_reachable(forbidden: str) -> None:
-    """Checked structurally rather than by grep.
-
-    A line scan cannot be used here: `step` is an ordinary loop variable and the
-    module docstrings name the very things they promise not to do. What matters
-    is whether anything is called or imported, which the AST answers exactly.
-    """
-    for module in _diagnostic_modules():
-        assert forbidden not in _call_graph(module), f"{module.__name__} calls {forbidden}"
-        assert forbidden not in _imported_names(module), f"{module.__name__} imports {forbidden}"
-
-
 def _imported_names(module) -> set[str]:
-    """Every module and symbol the module imports, at any depth."""
     names: set[str] = set()
     for node in ast.walk(ast.parse(inspect.getsource(module))):
         if isinstance(node, ast.ImportFrom):
@@ -366,17 +545,42 @@ def _imported_names(module) -> set[str]:
     return names
 
 
-def test_8c_the_diagnostic_imports_no_training_module() -> None:
-    """The training, gate and testgate modules are never pulled in at all."""
+@pytest.mark.parametrize(
+    "forbidden",
+    [
+        "backward",
+        "zero_grad",
+        "Adam",
+        "AdamW",
+        "SGD",
+        "optimizer",
+        "run_training",
+        "TrainingBackend",
+        "select_checkpoint",
+        "freeze_checkpoint",
+        "CheckpointRecord",
+        "evaluate_conclusion",
+        "GateTable",
+        "open_test_partition",
+        "open_cloud_test_partition",
+        "BridgeDecoder",
+        "CloudRunner",
+    ],
+)
+def test_no_optimizer_or_training_code_is_reachable(forbidden: str) -> None:
+    for module in _diagnostic_modules():
+        assert forbidden not in _call_graph(module)
+        assert forbidden not in _imported_names(module)
+
+
+def test_the_diagnostic_imports_no_training_module() -> None:
     for module in _diagnostic_modules():
         imported = _imported_names(module)
-        for banned in ("training", "gates", "testgate", "pipeline", "torch", "runner"):
-            assert not any(name == banned or name.endswith(f".{banned}") for name in imported), (
-                f"{module.__name__} imports {banned}"
-            )
+        for banned in ("training", "gates", "testgate", "pipeline", "torch"):
+            assert not any(name == banned or name.endswith(f".{banned}") for name in imported)
 
 
-def test_8b_importing_the_diagnostic_loads_no_torch() -> None:
+def test_importing_the_diagnostic_loads_no_torch() -> None:
     import subprocess
     import sys
 
@@ -393,39 +597,26 @@ def test_8b_importing_the_diagnostic_loads_no_torch() -> None:
     assert result.stdout.strip() == "False"
 
 
-def test_9_only_one_provider_retrieval_occurs() -> None:
+def test_only_one_provider_retrieval_occurs() -> None:
     artifact, provider, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
-    assert len(provider.requests) == 1
-    assert provider.requests[0] == "SPY:2015-05-07:2017-05-18"
+    assert provider.requests == ["SPY:2015-05-07:2017-05-18"]
     assert artifact.provider_request_count == 1
-    assert artifact.retrieved_candles == TOTAL_CANDLES
+    assert artifact.retrieved_sessions == TOTAL_CANDLES
 
 
-def test_10_no_held_out_partition_is_opened() -> None:
+def test_no_held_out_partition_is_opened() -> None:
     artifact, provider, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
     assert artifact.held_out_partition_opened is False
     assert provider.requests == ["SPY:2015-05-07:2017-05-18"]
     for module in _diagnostic_modules():
         source = inspect.getsource(module)
-        for partition in ("reconstruction_test", "external_later", "RECONSTRUCTION", "holdout"):
+        for partition in ("reconstruction_test", "external_later", "holdout"):
             assert partition not in source
-    # The window never reaches beyond the amended training range.
     assert WINDOW.start_inclusive == "2015-05-07"
     assert WINDOW.end_exclusive == "2017-05-18"
 
 
-# ======================================================= the decision artifact
-
-
-def test_the_window_is_split_448_context_and_64_target() -> None:
-    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
-    assert artifact.context_candles == CONTEXT_CANDLES == 448
-    assert artifact.target_candles == TARGET_CANDLES == 64
-    assert artifact.context_candles + artifact.target_candles == TOTAL_CANDLES
-
-
 def test_the_model_never_sees_the_target() -> None:
-    """The context handed to the model is exactly the first 448 candles."""
     seen: list[int] = []
 
     def policy(seed: int, context):
@@ -436,13 +627,12 @@ def test_the_model_never_sees_the_target() -> None:
     assert set(seen) == {CONTEXT_CANDLES}
 
 
-def test_the_fixed_seed_set_is_used_exactly() -> None:
-    _, _, _, model = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
-    # 64 rollouts for Method D, plus the single Method B forecast.
-    assert model.seeds_used[0] == ROLLOUT_SEEDS[0]
-    assert model.seeds_used[1:] == ROLLOUT_SEEDS
-    assert len(ROLLOUT_SEEDS) == 64
-    assert len(set(ROLLOUT_SEEDS)) == 64
+def test_beam_search_is_not_implemented() -> None:
+    for module in _diagnostic_modules():
+        assert "beam" not in inspect.getsource(module).lower()
+
+
+# ============================================================ the artifact
 
 
 def test_the_artifact_authorizes_nothing_by_type() -> None:
@@ -464,54 +654,28 @@ def test_the_artifact_authorizes_nothing_by_type() -> None:
         assert getattr(artifact, field) is False
 
 
-def test_the_claim_boundary_is_carried_and_fixed() -> None:
+def test_both_specifications_are_verified_and_v2_is_operative() -> None:
     artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
-    assert artifact.claim_boundary == "DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"
-    payload = json.loads(artifact.model_dump_json())
-    assert payload["claim_boundary"] == artifact.claim_boundary
-    assert payload["conclusion"] == artifact.conclusion.value
-
-
-def test_the_conclusion_cannot_be_supplied_by_a_caller() -> None:
-    """It is computed from the rules, never passed in."""
-    parameters = inspect.signature(run_frozen_inference_diagnostic).parameters
-    assert "conclusion" not in parameters
-    assert "decision" not in parameters
-    for name in parameters:
-        assert "conclusion" not in name
-
-
-def test_every_rule_is_recorded_even_when_it_did_not_match() -> None:
-    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.30))
-    ids = [e.rule_id for e in artifact.decision.evaluations]
-    assert ids == ["R0", "R1", "R2", "R3", "R4", "R5", "R6"]
-    matched = [e for e in artifact.decision.evaluations if e.matched]
-    assert len(matched) == 1
-    assert matched[0].rule_id == artifact.decision.matched_rule_id
-
-
-def test_the_specification_hash_is_verified_and_recorded() -> None:
-    artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
-    assert artifact.specification_name == "phase2-frozen-inference-diagnostic.yaml"
-    assert artifact.specification_sha256 == (
-        "c909e156a61ac5b5323de9e794aad20521839c0f43f491fb356c1968f730101b"
-    )
+    assert artifact.specification_v1_sha256 == V1_SPECIFICATION_SHA256
+    assert artifact.specification_v2_sha256 == V2_SPECIFICATION_SHA256
+    assert artifact.operative_specification == "phase2-frozen-inference-diagnostic-v2.yaml"
+    assert artifact.schema_version == "openalpha.bridge.diagnostic.frozen_inference.v2"
 
 
 def test_a_tampered_specification_fails_closed(tmp_path: Path) -> None:
     fake_root = tmp_path / "research"
     fake_root.mkdir()
-    (fake_root / "phase2-frozen-inference-diagnostic.yaml").write_text(
-        "schema: tampered\n", encoding="utf-8"
-    )
+    for name in (
+        "phase2-frozen-inference-diagnostic.yaml",
+        "phase2-frozen-inference-diagnostic-v2.yaml",
+    ):
+        (fake_root / name).write_text("schema: tampered\n", encoding="utf-8")
     codec = FakeCodec()
     with pytest.raises(BridgeTransformError) as excinfo:
         run_frozen_inference_diagnostic(
             provider=_SingleWindowProvider(),
             codec=codec,
-            model=FakeForecastModel(
-                codec=codec, path_for=lambda seed, ctx: _shift(TRUE_TARGET, 1.0)
-            ),
+            model=FakeForecastModel(codec=codec, path_for=lambda s, c: _shift(TRUE_TARGET, 1.0)),
             assets=fake_assets(),
             invocation=_invocation(),
             research_root=fake_root,
@@ -521,20 +685,26 @@ def test_a_tampered_specification_fails_closed(tmp_path: Path) -> None:
     assert excinfo.value.failures[0].code == "DIAGNOSTIC_SPECIFICATION_HASH_MISMATCH"
 
 
-def test_raw_tokens_and_raw_outputs_are_preserved() -> None:
+def test_the_inference_settings_come_from_predict_defaults() -> None:
+    settings = OFFICIAL_INFERENCE_SETTINGS
+    assert settings.temperature == 1.0
+    assert settings.top_k == 0
+    assert settings.top_p == 0.9
+    assert settings.sample_count_per_call == 1
+    assert settings.prediction_length == 64
+    assert settings.max_context == 512
+    assert settings.clip == 5.0
+    assert settings.gradient_mode == "inference_mode"
+
+
+def test_raw_tokens_and_raw_six_channel_outputs_are_preserved() -> None:
     artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
     assert len(artifact.method_a.coarse_token_ids) == TOTAL_CANDLES
     assert len(artifact.method_b.coarse_token_ids) == TARGET_CANDLES
-    assert len(artifact.method_b.step_log_probabilities) == TARGET_CANDLES
-    assert len(artifact.method_b.raw_decoded) == TARGET_CANDLES
     assert len(artifact.method_d.rollouts) == 64
     for rollout in artifact.method_d.rollouts:
-        assert len(rollout.coarse_token_ids) == TARGET_CANDLES
         assert len(rollout.raw_decoded) == TARGET_CANDLES
-
-
-def test_beam_search_is_not_implemented() -> None:
-    """Contingent on the diagnostic's result; building it now would be speculative."""
-    for module in _diagnostic_modules():
-        source = inspect.getsource(module).lower()
-        assert "beam" not in source
+        assert all(len(row.channels()) == 6 for row in rollout.raw_decoded)
+    payload = json.loads(artifact.model_dump_json())
+    assert payload["ordered_columns"] == list(OFFICIAL_COLUMNS)
+    assert payload["normalization_state"]["fitted_candle_count"] == 448

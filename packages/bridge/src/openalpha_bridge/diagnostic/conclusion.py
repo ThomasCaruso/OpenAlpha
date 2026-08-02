@@ -1,9 +1,12 @@
-"""The preregistered decision rules.
+"""The preregistered decision rules, v2.
 
-The conclusion is computed. It is not chosen after the numbers are known, and
-there is no code path that lets a caller supply one. The rules are evaluated in
-the order the specification fixes and the first match wins; every rule records
-whether it matched, so the artifact shows why the others did not.
+Every label states what was observed on this window. None asserts a cause, a
+property of the model's token support, or a general property of repair. One
+forecast origin and 64 stochastic rollouts cannot establish any of those, so
+the vocabulary does not contain words that would claim them.
+
+The conclusion is computed. There is no parameter anywhere that lets a caller
+supply one, and the default final rule is descriptive rather than causal.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from .methods import MethodAResult, MethodBResult, MethodCResult, MethodDResult
 from .spec import THRESHOLDS, DiagnosticThresholds
 
 __all__ = [
+    "RETIRED_LABELS",
     "ConclusionOutcome",
     "DiagnosticConclusion",
     "RuleEvaluation",
@@ -25,15 +29,40 @@ __all__ = [
 
 
 class DiagnosticConclusion(StrEnum):
-    """The complete vocabulary. Nothing outside this set can be produced."""
+    """The complete vocabulary. Descriptive and local, never causal."""
 
-    TOKENIZER_DECODER_DEFECT = "TOKENIZER_DECODER_DEFECT"
-    GENERATED_TOKEN_SUPPORT_DEFECT = "GENERATED_TOKEN_SUPPORT_DEFECT"
-    VALIDITY_FILTER_IMPROVES_FORECAST = "VALIDITY_FILTER_IMPROVES_FORECAST"
-    VALIDITY_REPAIR_ONLY = "VALIDITY_REPAIR_ONLY"
-    NO_VALID_ROLLOUTS = "NO_VALID_ROLLOUTS"
-    INVALIDITY_NOT_CAUSAL_TO_FORECAST_ERROR = "INVALIDITY_NOT_CAUSAL_TO_FORECAST_ERROR"
+    ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED = "ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED"
+    ROUNDTRIP_MATERIAL_INVALIDITY = "ROUNDTRIP_MATERIAL_INVALIDITY"
+    NO_VALID_ROLLOUTS_OBSERVED = "NO_VALID_ROLLOUTS_OBSERVED"
+    VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD = (
+        "VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD"
+    )
+    LOW_VALID_ROLLOUT_FRACTION = "LOW_VALID_ROLLOUT_FRACTION"
+    PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT = (
+        "PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT"
+    )
+    NO_PREREGISTERED_EFFECT_DETECTED = "NO_PREREGISTERED_EFFECT_DETECTED"
+    DIAGNOSTIC_INCONCLUSIVE = "DIAGNOSTIC_INCONCLUSIVE"
     DIAGNOSTIC_OPERATIONAL_FAILURE = "DIAGNOSTIC_OPERATIONAL_FAILURE"
+
+
+#: Labels this diagnostic may never emit, and why. Kept in code so a future
+#: edit that reintroduces one has to delete the reason first.
+RETIRED_LABELS: dict[str, str] = {
+    "INVALIDITY_NOT_CAUSAL_TO_FORECAST_ERROR": (
+        "a causal claim; one origin and 64 stochastic rollouts cannot identify a cause"
+    ),
+    "GENERATED_TOKEN_SUPPORT_DEFECT": (
+        "a claim about the generative distribution's support, measured from one sample"
+    ),
+    "TOKENIZER_DECODER_DEFECT": (
+        "asserts a defect; the observation available is that a round trip was invalid"
+    ),
+    "VALIDITY_FILTER_IMPROVES_FORECAST": (
+        "generalises beyond one window; the replacement states a threshold was met"
+    ),
+    "VALIDITY_REPAIR_ONLY": ("reads as a general finding about repair rather than one observation"),
+}
 
 
 class RuleEvaluation(BaseModel):
@@ -57,7 +86,7 @@ class ConclusionOutcome(BaseModel):
     matched_rule_id: str
     thresholds: DiagnosticThresholds
     evaluations: tuple[RuleEvaluation, ...]
-    #: Fixed by type. No outcome of any rule authorizes anything.
+    forecast_origins: Literal[1] = 1
     authorizes_training: Literal[False] = False
     authorizes_stage_b: Literal[False] = False
     authorizes_stage_c: Literal[False] = False
@@ -102,12 +131,21 @@ def decide(
         )
         return matched
 
-    # R0 - any method failed operationally, or a method is missing because
-    # execution stopped before it ran. Nothing below can be interpreted.
+    def finish(rule_id: str, conclusion: DiagnosticConclusion) -> ConclusionOutcome:
+        return ConclusionOutcome(
+            conclusion=conclusion,
+            matched_rule_id=rule_id,
+            thresholds=thresholds,
+            evaluations=tuple(evaluations),
+        )
+
     missing = [
         name
         for name, value in (
-            ("A", method_a), ("B", method_b), ("C", method_c), ("D", method_d)
+            ("A", method_a),
+            ("B", method_b),
+            ("C", method_c),
+            ("D", method_d),
         )
         if value is None
     ]
@@ -124,105 +162,91 @@ def decide(
         ),
         {"missing_methods": float(len(missing))},
     ):
-        return ConclusionOutcome(
-            conclusion=DiagnosticConclusion.DIAGNOSTIC_OPERATIONAL_FAILURE,
-            matched_rule_id="R0",
-            thresholds=thresholds,
-            evaluations=tuple(evaluations),
-        )
+        return finish("R0", DiagnosticConclusion.DIAGNOSTIC_OPERATIONAL_FAILURE)
 
     assert method_a is not None and method_b is not None
     assert method_c is not None and method_d is not None
 
-    # R1 - the decoder mangles in-distribution tokens. Upstream of generation,
-    # so it confounds every statement below it.
-    roundtrip = method_a.validity.invalid_candle_fraction
+    # R1 and R2 - the round trip. Materiality first, then the strict
+    # observation, so a nonzero-but-immaterial round trip is still reported as
+    # structurally invalid rather than described as clean.
+    fraction = method_a.validity_all.invalid_candle_fraction
+    invalid_count = method_a.validity_all.invalid_candle_count
     if record(
         "R1",
-        DiagnosticConclusion.TOKENIZER_DECODER_DEFECT,
-        roundtrip > thresholds.roundtrip_invalid_fraction_maximum,
-        "round-trip invalid candle fraction against its maximum",
+        DiagnosticConclusion.ROUNDTRIP_MATERIAL_INVALIDITY,
+        fraction > thresholds.roundtrip_material_invalid_fraction,
+        "round-trip invalid candle fraction against the materiality threshold",
         {
-            "method_a_invalid_candle_fraction": roundtrip,
-            "maximum": thresholds.roundtrip_invalid_fraction_maximum,
+            "invalid_candle_fraction": fraction,
+            "materiality_threshold": thresholds.roundtrip_material_invalid_fraction,
+            "invalid_candle_count": float(invalid_count),
         },
     ):
-        return ConclusionOutcome(
-            conclusion=DiagnosticConclusion.TOKENIZER_DECODER_DEFECT,
-            matched_rule_id="R1",
-            thresholds=thresholds,
-            evaluations=tuple(evaluations),
-        )
+        return finish("R1", DiagnosticConclusion.ROUNDTRIP_MATERIAL_INVALIDITY)
 
-    # R2 - rejection sampling has nothing to select from.
     if record(
         "R2",
-        DiagnosticConclusion.NO_VALID_ROLLOUTS,
+        DiagnosticConclusion.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED,
+        invalid_count > 0,
+        "any invalid round-trip candle at all, regardless of materiality",
+        {
+            "invalid_candle_count": float(invalid_count),
+            "invalid_candle_fraction": fraction,
+        },
+    ):
+        return finish("R2", DiagnosticConclusion.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED)
+
+    if record(
+        "R3",
+        DiagnosticConclusion.NO_VALID_ROLLOUTS_OBSERVED,
         method_d.valid_rollout_count == 0,
-        "valid rollout count",
+        "valid rollout count among the seeded rollouts at this origin",
         {
             "valid_rollout_count": float(method_d.valid_rollout_count),
             "rollout_count": float(method_d.rollout_count),
         },
     ):
-        return ConclusionOutcome(
-            conclusion=DiagnosticConclusion.NO_VALID_ROLLOUTS,
-            matched_rule_id="R2",
-            thresholds=thresholds,
-            evaluations=tuple(evaluations),
-        )
+        return finish("R3", DiagnosticConclusion.NO_VALID_ROLLOUTS_OBSERVED)
 
-    # R3 - conditioning on validity beats the official all-rollout ensemble by
-    # the preregistered margin.
+    # R4 - the valid-only ensemble against the manual seeded ensemble. Those
+    # two differ only in which paths are included, which is the comparison the
+    # threshold was written for.
     valid_only = _primary(method_d.valid_only_ensemble_error)
-    all_rollout = _primary(method_d.all_rollout_ensemble_error)
-    improves = (
+    manual = _primary(method_d.manual_seeded_ensemble_error)
+    meets = (
         valid_only is not None
-        and all_rollout is not None
-        and valid_only <= all_rollout * (1.0 - thresholds.minimum_relative_improvement)
+        and manual is not None
+        and valid_only <= manual * (1.0 - thresholds.minimum_relative_improvement)
     )
     if record(
-        "R3",
-        DiagnosticConclusion.VALIDITY_FILTER_IMPROVES_FORECAST,
-        improves,
-        "valid-only ensemble error against the all-rollout ensemble error",
+        "R4",
+        DiagnosticConclusion.VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD,
+        meets,
+        "valid-only ensemble error against the manual seeded ensemble error",
         {
             "valid_only_primary_error": valid_only,
-            "all_rollout_primary_error": all_rollout,
+            "manual_seeded_ensemble_primary_error": manual,
             "minimum_relative_improvement": thresholds.minimum_relative_improvement,
         },
     ):
-        return ConclusionOutcome(
-            conclusion=DiagnosticConclusion.VALIDITY_FILTER_IMPROVES_FORECAST,
-            matched_rule_id="R3",
-            thresholds=thresholds,
-            evaluations=tuple(evaluations),
-        )
+        return finish("R4", DiagnosticConclusion.VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD)
 
-    # R4 - the round trip is clean but most generated token combinations decode
-    # outside the valid region, so invalidity enters through generation.
-    fraction = method_d.valid_rollout_fraction
     if record(
-        "R4",
-        DiagnosticConclusion.GENERATED_TOKEN_SUPPORT_DEFECT,
-        fraction < thresholds.valid_rollout_support_fraction_minimum,
-        "valid rollout fraction against the support minimum",
+        "R5",
+        DiagnosticConclusion.LOW_VALID_ROLLOUT_FRACTION,
+        method_d.valid_rollout_fraction < thresholds.valid_rollout_support_fraction_minimum,
+        "valid rollout fraction against the support minimum, at this origin",
         {
-            "valid_rollout_fraction": fraction,
+            "valid_rollout_fraction": method_d.valid_rollout_fraction,
             "minimum": thresholds.valid_rollout_support_fraction_minimum,
         },
     ):
-        return ConclusionOutcome(
-            conclusion=DiagnosticConclusion.GENERATED_TOKEN_SUPPORT_DEFECT,
-            matched_rule_id="R4",
-            thresholds=thresholds,
-            evaluations=tuple(evaluations),
-        )
+        return finish("R5", DiagnosticConclusion.LOW_VALID_ROLLOUT_FRACTION)
 
-    # R5 - projection does restore validity, and buys no accuracy for it.
     before = _primary(method_c.forecast_error_before)
     after = _primary(method_c.forecast_error_after)
-    repair_only = (
+    repair_without_improvement = (
         method_b.validity.path_is_invalid
         and method_c.restores_validity
         and before is not None
@@ -230,10 +254,10 @@ def decide(
         and after > before * (1.0 - thresholds.minimum_relative_improvement)
     )
     if record(
-        "R5",
-        DiagnosticConclusion.VALIDITY_REPAIR_ONLY,
-        repair_only,
-        "projection restored validity without improving the primary error",
+        "R6",
+        DiagnosticConclusion.PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT,
+        repair_without_improvement,
+        "projection restored validity without meeting the improvement threshold",
         {
             "method_b_path_is_invalid": float(method_b.validity.path_is_invalid),
             "restores_validity": float(method_c.restores_validity),
@@ -241,37 +265,37 @@ def decide(
             "primary_error_after": after,
         },
     ):
-        return ConclusionOutcome(
-            conclusion=DiagnosticConclusion.VALIDITY_REPAIR_ONLY,
-            matched_rule_id="R5",
-            thresholds=thresholds,
-            evaluations=tuple(evaluations),
+        return finish(
+            "R6",
+            DiagnosticConclusion.PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT,
         )
 
-    # R6 - forecasts are structurally acceptable, or their validity is unrelated
-    # to their error. Either way invalidity is not what drives forecast quality.
-    valid_mean = method_d.valid_group_mean_primary_error
-    invalid_mean = method_d.invalid_group_mean_primary_error
-    separation = (
-        abs(valid_mean - invalid_mean)
-        if valid_mean is not None and invalid_mean is not None
-        else None
-    )
-    record(
-        "R6",
-        DiagnosticConclusion.INVALIDITY_NOT_CAUSAL_TO_FORECAST_ERROR,
-        True,
-        "no earlier rule matched",
+    # R7 - the comparison R4 needs could not be evaluated, so no statement
+    # about it is available either way.
+    if record(
+        "R7",
+        DiagnosticConclusion.DIAGNOSTIC_INCONCLUSIVE,
+        valid_only is None or manual is None,
+        "the primary error required by R4 is undefined for at least one ensemble",
         {
-            "valid_group_mean_primary_error": valid_mean,
-            "invalid_group_mean_primary_error": invalid_mean,
-            "group_separation": separation,
-            "accuracy_equivalence_margin": thresholds.accuracy_equivalence_margin,
+            "valid_only_primary_error": valid_only,
+            "manual_seeded_ensemble_primary_error": manual,
+        },
+    ):
+        return finish("R7", DiagnosticConclusion.DIAGNOSTIC_INCONCLUSIVE)
+
+    # R8 - descriptive default. Not a causal claim, and not a claim that no
+    # effect exists: only that none of the preregistered effects was detected
+    # on this window.
+    record(
+        "R8",
+        DiagnosticConclusion.NO_PREREGISTERED_EFFECT_DETECTED,
+        True,
+        "no earlier rule matched on this window",
+        {
+            "valid_rollout_fraction": method_d.valid_rollout_fraction,
+            "valid_group_mean_primary_error": method_d.valid_group_mean_primary_error,
+            "invalid_group_mean_primary_error": method_d.invalid_group_mean_primary_error,
         },
     )
-    return ConclusionOutcome(
-        conclusion=DiagnosticConclusion.INVALIDITY_NOT_CAUSAL_TO_FORECAST_ERROR,
-        matched_rule_id="R6",
-        thresholds=thresholds,
-        evaluations=tuple(evaluations),
-    )
+    return finish("R8", DiagnosticConclusion.NO_PREREGISTERED_EFFECT_DETECTED)

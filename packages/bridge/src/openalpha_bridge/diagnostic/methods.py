@@ -1,33 +1,31 @@
-"""Methods A, B, C and D.
+"""Methods A, B, C and D over the official six-channel contract.
 
-Each returns a typed result and records what the specification says it records.
-None of them corrects, retries, substitutes or drops anything: an invalid path
-stays invalid in the record, because the point of the diagnostic is to find out
-how often that happens and where it comes from.
+Every method is handed the one context-fitted normalization state and records
+its hash, so a state refitted somewhere along the way is detectable rather than
+assumed absent. None of them corrects, retries, substitutes or drops anything.
 """
 
 from __future__ import annotations
 
 import math
 import time
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .backends import ForecastModel, GeneratedPath, TokenizerCodec, TokenPair
-from .metrics import ForecastError, forecast_error, mean_of
-from .spec import (
-    OFFICIAL_INFERENCE_SETTINGS,
-    ROLLOUT_SEEDS,
-    InferenceSettings,
+from .backends import ForecastModel, GeneratedPath, StepSampling, TokenizerCodec, TokenPair
+from .metrics import (
+    ForecastError,
+    ReconstructionError,
+    forecast_error,
+    mean_of,
+    reconstruction_error,
 )
-from .validity import (
-    DecodedCandle,
-    PathValidity,
-    ProjectionOutcome,
-    path_validity,
-    project_path,
-)
+from .normalization import NormalizationState
+from .official_input import OfficialRow, OfficialSeries, TimeStamp
+from .spec import OFFICIAL_INFERENCE_SETTINGS, ROLLOUT_SEEDS, InferenceSettings
+from .validity import PathValidity, ProjectionOutcome, path_validity, project_path
 
 __all__ = [
     "MethodAResult",
@@ -42,49 +40,57 @@ __all__ = [
 ]
 
 
-def _tokens_as_pairs(tokens: tuple[TokenPair, ...]) -> dict[str, tuple[int, ...]]:
-    return {
-        "coarse": tuple(t.coarse for t in tokens),
-        "fine": tuple(t.fine for t in tokens),
-    }
+def _streams(tokens: tuple[TokenPair, ...]) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    return tuple(t.coarse for t in tokens), tuple(t.fine for t in tokens)
 
 
 class MethodAResult(BaseModel):
-    """Tokenizer round trip on the known real sequence. No generation."""
+    """Tokenizer round trip on all 512 known candles. No generation."""
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
     method: Literal["A_TOKENIZER_ROUND_TRIP"] = "A_TOKENIZER_ROUND_TRIP"
+    normalization_state_sha256: str
     coarse_token_ids: tuple[int, ...]
     fine_token_ids: tuple[int, ...]
-    reconstruction: tuple[DecodedCandle, ...]
-    validity: PathValidity
-    #: Reconstruction error over the whole encoded sequence.
-    reconstruction_error: ForecastError
+    reconstruction: tuple[OfficialRow, ...]
+
+    #: Over all 512 rows and all six channels, with returns taken from
+    #: transitions 1..511 internal to the sequence.
+    full_sequence_error: ReconstructionError
+    #: Over the final 64 rows only, so it is comparable with the forecast
+    #: methods without pretending it is a forecast.
+    target_suffix_error: ReconstructionError
+
+    validity_all: PathValidity
+    validity_target_suffix: PathValidity
+    #: Any invalid round-trip candle at all. Independent of materiality.
+    structural_invalidity_observed: bool
     seconds: float
 
 
 def run_method_a(
-    *, codec: TokenizerCodec, candles: tuple[DecodedCandle, ...], anchor_close: float
+    *, codec: TokenizerCodec, series: OfficialSeries, state: NormalizationState
 ) -> MethodAResult:
-    """Encode the real sequence and decode it straight back.
-
-    Determines whether the tokenizer decoder itself creates invalid candles from
-    in-distribution encoder tokens. If it does, everything downstream is
-    confounded and no statement about generation can be made.
-    """
+    """Encode and decode all 512 known candles under the context-only state."""
     started = time.perf_counter()
-    tokens = codec.encode(candles)
-    reconstruction = codec.decode(tokens)
-    streams = _tokens_as_pairs(tokens)
+    rows = series.rows
+    tokens = codec.encode(rows, state=state)
+    reconstruction = codec.decode(tokens, state=state, sessions=series.sessions)
+    coarse, fine = _streams(tokens)
+
+    suffix = len(series.target)
+    validity_all = path_validity(reconstruction)
     return MethodAResult(
-        coarse_token_ids=streams["coarse"],
-        fine_token_ids=streams["fine"],
+        normalization_state_sha256=state.state_sha256,
+        coarse_token_ids=coarse,
+        fine_token_ids=fine,
         reconstruction=reconstruction,
-        validity=path_validity(reconstruction),
-        reconstruction_error=forecast_error(
-            reconstruction, candles, anchor_close=anchor_close
-        ),
+        full_sequence_error=reconstruction_error(reconstruction, rows),
+        target_suffix_error=reconstruction_error(reconstruction[-suffix:], rows[-suffix:]),
+        validity_all=validity_all,
+        validity_target_suffix=path_validity(reconstruction[-suffix:]),
+        structural_invalidity_observed=validity_all.invalid_candle_count > 0,
         seconds=round(time.perf_counter() - started, 6),
     )
 
@@ -95,54 +101,69 @@ class MethodBResult(BaseModel):
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
     method: Literal["B_OFFICIAL_FROZEN_FORECAST"] = "B_OFFICIAL_FROZEN_FORECAST"
+    normalization_state_sha256: str
     seed: int
     coarse_token_ids: tuple[int, ...]
     fine_token_ids: tuple[int, ...]
-    step_log_probabilities: tuple[float, ...]
-    total_log_probability: float
+    sampling: tuple[StepSampling, ...]
+    total_path_sampling_log_probability: float
     settings: InferenceSettings
-    raw_decoded: tuple[DecodedCandle, ...]
+    raw_decoded: tuple[OfficialRow, ...]
     validity: PathValidity
     forecast_error: ForecastError
     seconds: float
 
 
-def run_method_b(
-    *,
+def _generate(
     model: ForecastModel,
-    codec: TokenizerCodec,
-    context: tuple[DecodedCandle, ...],
-    target: tuple[DecodedCandle, ...],
-    anchor_close: float,
-    settings: InferenceSettings = OFFICIAL_INFERENCE_SETTINGS,
-    seed: int = ROLLOUT_SEEDS[0],
-) -> MethodBResult:
-    """Generate future tokens from the context and decode them raw.
-
-    Determines whether invalidity enters primarily through generated
-    future-token combinations rather than through the decoder.
-    """
-    started = time.perf_counter()
-    generated = model.generate(
-        context,
+    series: OfficialSeries,
+    state: NormalizationState,
+    settings: InferenceSettings,
+    seed: int,
+) -> GeneratedPath:
+    return model.generate(
+        series.context,
+        context_stamps=series.context_stamps(),
+        target_stamps=series.target_stamps(),
+        state=state,
         steps=settings.prediction_length,
         seed=seed,
         temperature=settings.temperature,
         top_k=settings.top_k,
         top_p=settings.top_p,
     )
-    decoded = codec.decode(generated.tokens)
-    streams = _tokens_as_pairs(generated.tokens)
+
+
+def _target_sessions(series: OfficialSeries) -> tuple[date, ...]:
+    return tuple(row.session for row in series.target)
+
+
+def run_method_b(
+    *,
+    model: ForecastModel,
+    codec: TokenizerCodec,
+    series: OfficialSeries,
+    state: NormalizationState,
+    settings: InferenceSettings = OFFICIAL_INFERENCE_SETTINGS,
+    seed: int = ROLLOUT_SEEDS[0],
+) -> MethodBResult:
+    """Generate future tokens from the 448 context candles and decode raw."""
+    started = time.perf_counter()
+    generated = _generate(model, series, state, settings, seed)
+    decoded = codec.decode(generated.tokens, state=state, sessions=_target_sessions(series))
+    coarse, fine = _streams(generated.tokens)
+    anchor = series.context[-1].close
     return MethodBResult(
+        normalization_state_sha256=state.state_sha256,
         seed=seed,
-        coarse_token_ids=streams["coarse"],
-        fine_token_ids=streams["fine"],
-        step_log_probabilities=generated.step_log_probabilities,
-        total_log_probability=generated.total_log_probability,
+        coarse_token_ids=coarse,
+        fine_token_ids=fine,
+        sampling=generated.sampling,
+        total_path_sampling_log_probability=generated.total_path_sampling_log_probability,
         settings=settings,
         raw_decoded=decoded,
         validity=path_validity(decoded),
-        forecast_error=forecast_error(decoded, target, anchor_close=anchor_close),
+        forecast_error=forecast_error(decoded, series.target, anchor_close=anchor),
         seconds=round(time.perf_counter() - started, 6),
     )
 
@@ -152,30 +173,24 @@ class MethodCResult(BaseModel):
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
-    method: Literal["C_DETERMINISTIC_TERMINAL_PROJECTION"] = (
-        "C_DETERMINISTIC_TERMINAL_PROJECTION"
-    )
+    method: Literal["C_DETERMINISTIC_TERMINAL_PROJECTION"] = "C_DETERMINISTIC_TERMINAL_PROJECTION"
     projection: ProjectionOutcome
     validity_before: PathValidity
     validity_after: PathValidity
-    #: True when projection turned an invalid path into a valid one. False when
-    #: the path was already valid, or when projection did not repair it.
     restores_validity: bool
     forecast_error_before: ForecastError
     forecast_error_after: ForecastError
-    #: Positive means projection reduced the primary error.
     primary_error_improvement: float | None
     seconds: float
 
 
-def run_method_c(
-    *, forecast: MethodBResult, target: tuple[DecodedCandle, ...], anchor_close: float
-) -> MethodCResult:
+def run_method_c(*, forecast: MethodBResult, series: OfficialSeries) -> MethodCResult:
     """Repair geometry only, and see whether prediction quality moves."""
     started = time.perf_counter()
+    anchor = series.context[-1].close
     outcome = project_path(forecast.raw_decoded)
     after = path_validity(outcome.projected)
-    error_after = forecast_error(outcome.projected, target, anchor_close=anchor_close)
+    error_after = forecast_error(outcome.projected, series.target, anchor_close=anchor)
 
     before_primary = forecast.forecast_error.close_return_mae
     after_primary = error_after.close_return_mae
@@ -205,39 +220,41 @@ class RolloutRecord(BaseModel):
     seed: int
     coarse_token_ids: tuple[int, ...]
     fine_token_ids: tuple[int, ...]
-    total_log_probability: float
-    raw_decoded: tuple[DecodedCandle, ...]
+    total_path_sampling_log_probability: float
+    raw_decoded: tuple[OfficialRow, ...]
     valid: bool
     invalid_candle_count: int
     forecast_error: ForecastError
 
 
 class MethodDResult(BaseModel):
-    """Valid-rollout filtering across the fixed seed set."""
+    """Valid-rollout filtering across the fixed seed set, at one origin."""
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
     method: Literal["D_VALID_ROLLOUT_FILTERING"] = "D_VALID_ROLLOUT_FILTERING"
+    normalization_state_sha256: str
     settings: InferenceSettings
     seeds: tuple[int, ...]
     rollouts: tuple[RolloutRecord, ...]
+    #: One forecast origin. Recorded so no reader mistakes this for a study.
+    forecast_origins: Literal[1] = 1
 
     rollout_count: int = Field(ge=0)
     valid_rollout_count: int = Field(ge=0)
     valid_rollout_fraction: float
 
-    #: Mean primary error within each group. None when a group is empty, which
-    #: is a statement about the group rather than a zero.
     valid_group_mean_primary_error: float | None
     invalid_group_mean_primary_error: float | None
 
-    #: Averaged over valid paths only. None when there are none, and in that
-    #: case nothing is substituted for it.
-    valid_only_ensemble: tuple[DecodedCandle, ...] | None
+    valid_only_ensemble: tuple[OfficialRow, ...] | None
     valid_only_ensemble_error: ForecastError | None
-    #: What the official procedure would report, averaging every rollout.
-    all_rollout_ensemble: tuple[DecodedCandle, ...] | None
-    all_rollout_ensemble_error: ForecastError | None
+    #: Arithmetic mean over all 64 separately seeded rollouts. This is NOT the
+    #: official sample_count=64 ensemble: that repeats the context along the
+    #: batch dimension and draws from one RNG stream. No parity is claimed.
+    manual_seeded_ensemble: tuple[OfficialRow, ...] | None
+    manual_seeded_ensemble_error: ForecastError | None
+    manual_ensemble_is_official: Literal[False] = False
 
     distinct_token_paths: int = Field(ge=0)
     repeated_path_count: int = Field(ge=0)
@@ -248,24 +265,28 @@ class MethodDResult(BaseModel):
     mean_seconds_per_rollout: float
 
 
-def _ensemble(paths: list[tuple[DecodedCandle, ...]]) -> tuple[DecodedCandle, ...] | None:
-    """Elementwise mean across paths. None when there is nothing to average."""
+def _ensemble(
+    paths: list[tuple[OfficialRow, ...]], sessions: tuple[date, ...]
+) -> tuple[OfficialRow, ...] | None:
+    """Elementwise mean across paths, in the inverse-normalized domain."""
     if not paths:
         return None
     steps = len(paths[0])
-    if any(len(path) != steps for path in paths):
+    if any(len(path) != steps for path in paths) or steps != len(sessions):
         return None
-    averaged: list[DecodedCandle] = []
+    averaged: list[OfficialRow] = []
     for step in range(steps):
         rows = [path[step] for path in paths]
         count = len(rows)
         averaged.append(
-            DecodedCandle(
+            OfficialRow(
+                session=sessions[step],
                 open=sum(r.open for r in rows) / count,
                 high=sum(r.high for r in rows) / count,
                 low=sum(r.low for r in rows) / count,
                 close=sum(r.close for r in rows) / count,
                 volume=sum(r.volume for r in rows) / count,
+                amount=sum(r.amount for r in rows) / count,
             )
         )
     return tuple(averaged)
@@ -275,50 +296,42 @@ def run_method_d(
     *,
     model: ForecastModel,
     codec: TokenizerCodec,
-    context: tuple[DecodedCandle, ...],
-    target: tuple[DecodedCandle, ...],
-    anchor_close: float,
+    series: OfficialSeries,
+    state: NormalizationState,
     settings: InferenceSettings = OFFICIAL_INFERENCE_SETTINGS,
     seeds: tuple[int, ...] = ROLLOUT_SEEDS,
 ) -> MethodDResult:
     """Generate the fixed seed set and compare valid-only against all-rollout.
 
-    When at least one valid path exists the valid-only ensemble averages those
-    paths and only those. When none exists, the ensemble is None and the caller
-    emits a typed NO_VALID_ROLLOUTS result: nothing is projected in, and no path
-    is substituted.
+    When no valid path exists the valid-only ensemble is None and the caller
+    emits NO_VALID_ROLLOUTS_OBSERVED. Nothing is projected in and no path is
+    substituted.
     """
     started = time.perf_counter()
+    sessions = _target_sessions(series)
+    anchor = series.context[-1].close
     records: list[RolloutRecord] = []
 
     for index, seed in enumerate(seeds):
-        generated: GeneratedPath = model.generate(
-            context,
-            steps=settings.prediction_length,
-            seed=seed,
-            temperature=settings.temperature,
-            top_k=settings.top_k,
-            top_p=settings.top_p,
-        )
-        decoded = codec.decode(generated.tokens)
+        generated = _generate(model, series, state, settings, seed)
+        decoded = codec.decode(generated.tokens, state=state, sessions=sessions)
         validity = path_validity(decoded)
-        streams = _tokens_as_pairs(generated.tokens)
+        coarse, fine = _streams(generated.tokens)
         records.append(
             RolloutRecord(
                 index=index,
                 seed=seed,
-                coarse_token_ids=streams["coarse"],
-                fine_token_ids=streams["fine"],
-                total_log_probability=generated.total_log_probability,
+                coarse_token_ids=coarse,
+                fine_token_ids=fine,
+                total_path_sampling_log_probability=(generated.total_path_sampling_log_probability),
                 raw_decoded=decoded,
                 valid=not validity.path_is_invalid,
                 invalid_candle_count=validity.invalid_candle_count,
-                forecast_error=forecast_error(decoded, target, anchor_close=anchor_close),
+                forecast_error=forecast_error(decoded, series.target, anchor_close=anchor),
             )
         )
 
     total_seconds = time.perf_counter() - started
-
     valid = [r for r in records if r.valid]
     invalid = [r for r in records if not r.valid]
 
@@ -329,13 +342,9 @@ def run_method_d(
             if r.forecast_error.defined and r.forecast_error.close_return_mae is not None
         ]
 
-    valid_paths = [r.raw_decoded for r in valid]
-    all_paths = [r.raw_decoded for r in records]
+    valid_ensemble = _ensemble([r.raw_decoded for r in valid], sessions)
+    manual_ensemble = _ensemble([r.raw_decoded for r in records], sessions)
 
-    valid_ensemble = _ensemble(valid_paths)
-    all_ensemble = _ensemble(all_paths)
-
-    # Diversity: identical token sequences mean the sampler is collapsing.
     signatures = [(r.coarse_token_ids, r.fine_token_ids) for r in records]
     counts: dict[tuple, int] = {}
     for signature in signatures:
@@ -343,20 +352,18 @@ def run_method_d(
     repeated = sum(count for count in counts.values() if count > 1)
 
     dispersion: float | None = None
+    all_paths = [r.raw_decoded for r in records]
     if len(all_paths) > 1 and all(len(p) == len(all_paths[0]) for p in all_paths):
-        steps = len(all_paths[0])
-        if steps:
-            per_step: list[float] = []
-            for step in range(steps):
-                closes = [p[step].close for p in all_paths]
-                if all(math.isfinite(c) for c in closes):
-                    mean_close = sum(closes) / len(closes)
-                    per_step.append(
-                        sum(abs(c - mean_close) for c in closes) / len(closes)
-                    )
-            dispersion = mean_of(per_step)
+        per_step: list[float] = []
+        for step in range(len(all_paths[0])):
+            closes = [p[step].close for p in all_paths]
+            if all(math.isfinite(c) for c in closes):
+                mean_close = sum(closes) / len(closes)
+                per_step.append(sum(abs(c - mean_close) for c in closes) / len(closes))
+        dispersion = mean_of(per_step)
 
     return MethodDResult(
+        normalization_state_sha256=state.state_sha256,
         settings=settings,
         seeds=tuple(seeds),
         rollouts=tuple(records),
@@ -367,14 +374,14 @@ def run_method_d(
         invalid_group_mean_primary_error=mean_of(primaries(invalid)),
         valid_only_ensemble=valid_ensemble,
         valid_only_ensemble_error=(
-            forecast_error(valid_ensemble, target, anchor_close=anchor_close)
+            forecast_error(valid_ensemble, series.target, anchor_close=anchor)
             if valid_ensemble is not None
             else None
         ),
-        all_rollout_ensemble=all_ensemble,
-        all_rollout_ensemble_error=(
-            forecast_error(all_ensemble, target, anchor_close=anchor_close)
-            if all_ensemble is not None
+        manual_seeded_ensemble=manual_ensemble,
+        manual_seeded_ensemble_error=(
+            forecast_error(manual_ensemble, series.target, anchor_close=anchor)
+            if manual_ensemble is not None
             else None
         ),
         distinct_token_paths=len(counts),
@@ -384,3 +391,6 @@ def run_method_d(
         total_seconds=round(total_seconds, 6),
         mean_seconds_per_rollout=round(total_seconds / len(records), 6) if records else 0.0,
     )
+
+
+__all__ += ["TimeStamp"]

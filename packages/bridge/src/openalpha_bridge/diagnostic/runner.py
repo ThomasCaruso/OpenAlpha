@@ -2,8 +2,8 @@
 
 There is no code path from here into training, an optimizer, a gradient, the
 Bridge head, Stage B, Stage C, checkpointing, gate evaluation, or opening any
-held-out partition. Exactly one provider retrieval is issued and it is measured,
-not asserted.
+held-out partition. Exactly one provider retrieval is issued and it is
+measured, not asserted.
 """
 
 from __future__ import annotations
@@ -19,7 +19,12 @@ from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from ..phase2.invocation import WorkerInvocation
 from ..phase2.measurement import GpuMeasurement, gpu_snapshot, reset_gpu_statistics
 from ..phase2.provider import Phase2Provider, RetrievalRequest, validate_series
-from .backends import ForecastModel, ResolvedDiagnosticAssets, TokenizerCodec
+from .backends import (
+    SAMPLING_PROBABILITY_DEFINITION,
+    ForecastModel,
+    ResolvedDiagnosticAssets,
+    TokenizerCodec,
+)
 from .conclusion import ConclusionOutcome, DiagnosticConclusion, decide
 from .methods import (
     MethodAResult,
@@ -31,30 +36,32 @@ from .methods import (
     run_method_c,
     run_method_d,
 )
+from .normalization import NormalizationState, fit_context_state
+from .official_input import OFFICIAL_COLUMNS, ColumnPresence, OfficialRow, OfficialSeries
 from .spec import (
     CONTEXT_CANDLES,
-    DIAGNOSTIC_SPECIFICATION_NAME,
     KRONOS_MINI_SPEC,
     OFFICIAL_INFERENCE_SETTINGS,
     PRIMARY_METRIC,
     ROLLOUT_SEEDS,
-    TARGET_CANDLES,
     TOTAL_CANDLES,
+    V1_SPECIFICATION_NAME,
+    V2_SPECIFICATION_NAME,
     WINDOW,
     ForecastModelSpec,
     InferenceSettings,
-    verify_diagnostic_specification,
+    verify_diagnostic_specifications,
 )
-from .validity import DecodedCandle
 
 __all__ = [
     "DIAGNOSTIC_SCHEMA_VERSION",
     "DiagnosticArtifact",
+    "build_official_series",
     "run_frozen_inference_diagnostic",
 ]
 
-DIAGNOSTIC_SCHEMA_VERSION: Literal["openalpha.bridge.diagnostic.frozen_inference.v1"] = (
-    "openalpha.bridge.diagnostic.frozen_inference.v1"
+DIAGNOSTIC_SCHEMA_VERSION: Literal["openalpha.bridge.diagnostic.frozen_inference.v2"] = (
+    "openalpha.bridge.diagnostic.frozen_inference.v2"
 )
 
 
@@ -73,7 +80,7 @@ class DiagnosticArtifact(BaseModel):
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
-    schema_version: Literal["openalpha.bridge.diagnostic.frozen_inference.v1"] = (
+    schema_version: Literal["openalpha.bridge.diagnostic.frozen_inference.v2"] = (
         DIAGNOSTIC_SCHEMA_VERSION
     )
     claim_boundary: Literal["DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"] = (
@@ -85,33 +92,41 @@ class DiagnosticArtifact(BaseModel):
     run_id: str
     source_commit: str
     deployed_commit: str
-    specification_name: str
-    specification_sha256: str
+    specification_v1_name: str
+    specification_v1_sha256: str
+    specification_v2_name: str
+    specification_v2_sha256: str
+    operative_specification: str
 
     symbol: str
-    interval: str
+    frequency: str
+    calendar: str
     retrieval_start_inclusive: str
     retrieval_end_exclusive: str
-    retrieved_candles: int
+    retrieved_sessions: int
+    ordered_columns: tuple[str, ...]
+    column_presence: ColumnPresence
     context_candles: int
     target_candles: int
+    context_target_boundary: int
+    first_session: str
+    last_session: str
     candle_data_sha256: str
-    #: Measured at the diagnostic-to-provider boundary, not asserted.
     provider_request_count: int = Field(ge=0)
 
+    normalization_state: NormalizationState
     assets: ResolvedDiagnosticAssets
     forecast_model: ForecastModelSpec
     inference_settings: InferenceSettings
     rollout_seeds: tuple[int, ...]
     primary_metric: str
+    sampling_probability_definition: str
 
     method_a: MethodAResult
     method_b: MethodBResult
     method_c: MethodCResult
     method_d: MethodDResult
 
-    #: Hashed before and after every method. Equality is the evidence that no
-    #: parameter was modified; nothing here asserts it without measuring.
     parameter_sha256_before: str
     parameter_sha256_after: str
     parameters_unmodified: bool
@@ -120,7 +135,6 @@ class DiagnosticArtifact(BaseModel):
     total_seconds: float
     completed_at: datetime
 
-    # Fixed by type. No conclusion can flip any of these.
     training_performed: Literal[False] = False
     optimizer_constructed: Literal[False] = False
     authorizes_training: Literal[False] = False
@@ -143,6 +157,38 @@ class _CountingProvider:
     def fetch(self, request: RetrievalRequest):
         self.requests.append(request)
         return self._inner.fetch(request)
+
+
+def build_official_series(series: Any) -> OfficialSeries:
+    """Carry the retrieved series into the official six-channel identity.
+
+    The provider supplies amount, so nothing is synthesised here. If it ever
+    stopped doing so, the presence mask would say so rather than the official
+    fallback quietly manufacturing a column that then reads as retrieved.
+    """
+    rows = tuple(
+        OfficialRow(
+            session=candle.session,
+            open=candle.open,
+            high=candle.high,
+            low=candle.low,
+            close=candle.close,
+            volume=candle.volume,
+            amount=candle.amount,
+        )
+        for candle in series.candles
+    )
+    official = OfficialSeries(
+        symbol=series.symbol,
+        frequency=WINDOW.frequency,
+        calendar=WINDOW.calendar,
+        columns=OFFICIAL_COLUMNS,
+        column_presence=ColumnPresence(volume=True, amount=True),
+        rows=rows,
+        context_target_boundary=CONTEXT_CANDLES,
+    )
+    official.assert_contract(expected_rows=TOTAL_CANDLES, expected_boundary=CONTEXT_CANDLES)
+    return official
 
 
 def run_frozen_inference_diagnostic(
@@ -169,12 +215,9 @@ def run_frozen_inference_diagnostic(
     stamped = now or datetime.now(UTC)
     reset_gpu_statistics()
 
-    # The specification's bytes, verified before anything is executed against it.
-    specification_sha256 = verify_diagnostic_specification(research_root)
-
+    specifications = verify_diagnostic_specifications(research_root)
     parameter_before = str(parameter_digest())
 
-    # Exactly one retrieval, of exactly the amended window.
     observing = _CountingProvider(provider)
     series = observing.fetch(
         RetrievalRequest(
@@ -192,49 +235,57 @@ def run_frozen_inference_diagnostic(
         )
     if len(series.candles) != TOTAL_CANDLES:
         raise _fail(
-            "DIAGNOSTIC_UNEXPECTED_CANDLE_COUNT",
-            f"expected {TOTAL_CANDLES} candles, retrieved {len(series.candles)}",
+            "DIAGNOSTIC_UNEXPECTED_SESSION_COUNT",
+            f"expected {TOTAL_CANDLES} sessions, retrieved {len(series.candles)}",
         )
 
-    full = tuple(
-        DecodedCandle(
-            open=c.open, high=c.high, low=c.low, close=c.close, volume=c.volume
-        )
-        for c in series.candles
-    )
-    context = full[:CONTEXT_CANDLES]
-    target = full[CONTEXT_CANDLES:]
-    if len(context) != CONTEXT_CANDLES or len(target) != TARGET_CANDLES:
+    official = build_official_series(series)
+
+    # Fitted exactly once, from the 448 context rows only. Every method is
+    # handed this object; none may fit its own.
+    state = fit_context_state(official.context)
+    if state.fitted_candle_count != CONTEXT_CANDLES:
         raise _fail(
-            "DIAGNOSTIC_WINDOW_SPLIT_MISMATCH",
-            f"split produced {len(context)} context and {len(target)} target candles",
+            "NORMALIZATION_FITTED_ON_WRONG_ROWS",
+            (
+                f"the normalization state was fitted from {state.fitted_candle_count} "
+                f"candles, expected exactly {CONTEXT_CANDLES} context candles"
+            ),
         )
-    anchor_close = context[-1].close
 
-    # A: does the decoder itself produce invalid candles from real tokens?
-    method_a = run_method_a(codec=codec, candles=full, anchor_close=full[0].close)
-    # B: does invalidity enter through generated future tokens?
+    method_a = run_method_a(codec=codec, series=official, state=state)
     method_b = run_method_b(
         model=model,
         codec=codec,
-        context=context,
-        target=target,
-        anchor_close=anchor_close,
+        series=official,
+        state=state,
         settings=settings,
         seed=seeds[0],
     )
-    # C: does repairing geometry alone help prediction quality?
-    method_c = run_method_c(forecast=method_b, target=target, anchor_close=anchor_close)
-    # D: does conditioning on validity improve forecasting without training?
+    method_c = run_method_c(forecast=method_b, series=official)
     method_d = run_method_d(
         model=model,
         codec=codec,
-        context=context,
-        target=target,
-        anchor_close=anchor_close,
+        series=official,
+        state=state,
         settings=settings,
         seeds=seeds,
     )
+
+    # Every method must have used the one fitted state.
+    for name, observed in (
+        ("A", method_a.normalization_state_sha256),
+        ("B", method_b.normalization_state_sha256),
+        ("D", method_d.normalization_state_sha256),
+    ):
+        if observed != state.state_sha256:
+            raise _fail(
+                "NORMALIZATION_STATE_MISMATCH",
+                (
+                    f"method {name} used normalization state {observed}, expected "
+                    f"{state.state_sha256}"
+                ),
+            )
 
     parameter_after = str(parameter_digest())
     if parameter_after != parameter_before:
@@ -254,9 +305,7 @@ def run_frozen_inference_diagnostic(
             ),
         )
 
-    decision = decide(
-        method_a=method_a, method_b=method_b, method_c=method_c, method_d=method_d
-    )
+    decision = decide(method_a=method_a, method_b=method_b, method_c=method_c, method_d=method_d)
 
     return DiagnosticArtifact(
         conclusion=decision.conclusion,
@@ -264,22 +313,33 @@ def run_frozen_inference_diagnostic(
         run_id=invocation.run_id,
         source_commit=invocation.source_commit,
         deployed_commit=invocation.deployed_commit,
-        specification_name=DIAGNOSTIC_SPECIFICATION_NAME,
-        specification_sha256=specification_sha256,
-        symbol=WINDOW.symbol,
-        interval=WINDOW.interval,
+        specification_v1_name=V1_SPECIFICATION_NAME,
+        specification_v1_sha256=specifications[V1_SPECIFICATION_NAME],
+        specification_v2_name=V2_SPECIFICATION_NAME,
+        specification_v2_sha256=specifications[V2_SPECIFICATION_NAME],
+        operative_specification=V2_SPECIFICATION_NAME,
+        symbol=official.symbol,
+        frequency=official.frequency,
+        calendar=official.calendar,
         retrieval_start_inclusive=WINDOW.start_inclusive,
         retrieval_end_exclusive=WINDOW.end_exclusive,
-        retrieved_candles=len(series.candles),
-        context_candles=len(context),
-        target_candles=len(target),
+        retrieved_sessions=len(official.rows),
+        ordered_columns=official.columns,
+        column_presence=official.column_presence,
+        context_candles=len(official.context),
+        target_candles=len(official.target),
+        context_target_boundary=official.context_target_boundary,
+        first_session=official.sessions[0].isoformat(),
+        last_session=official.sessions[-1].isoformat(),
         candle_data_sha256=series.normalized_sha256,
         provider_request_count=len(observing.requests),
+        normalization_state=state,
         assets=assets,
         forecast_model=KRONOS_MINI_SPEC,
         inference_settings=settings,
         rollout_seeds=tuple(seeds),
         primary_metric=PRIMARY_METRIC,
+        sampling_probability_definition=SAMPLING_PROBABILITY_DEFINITION,
         method_a=method_a,
         method_b=method_b,
         method_c=method_c,

@@ -1,0 +1,527 @@
+schema: openalpha.research.phase2.frozen_inference_diagnostic.v2
+title: Frozen inference diagnostic for constrained Kronos decoding, revision 2
+status: development_only_diagnostic_specification
+claim_boundary: DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE
+
+supersedes:
+  document: phase2-frozen-inference-diagnostic.yaml
+  sha256: c909e156a61ac5b5323de9e794aad20521839c0f43f491fb356c1968f730101b
+  status_of_superseded_document: >
+    Preserved byte-identical and left in the repository. It is superseded
+    before execution, never edited and never deleted. v1 was never executed, so
+    nothing was concluded under it.
+  reason: >
+    v1 was conceptually right and operationally unfaithful. Its abstract
+    interface reduced the official six-channel input to five channels, dropped
+    timestamps that the official path requires, left normalization implicit,
+    anchored the Method A return metric on an external close, and used
+    conclusion labels asserting causal and support-level claims that a single
+    forecast origin with 64 stochastic rollouts cannot establish.
+
+relationship_to_sealed_specifications: >
+  Separately hashed. Amends nothing. experiment.yaml and amendments 1, 2 and 3
+  keep their exact bytes and digests.
+
+prohibitions:
+  training: prohibited
+  fine_tuning: prohibited
+  parameter_update_of_any_kind: prohibited
+  optimizer_construction: prohibited
+  gradient_computation: prohibited
+  checkpoint_creation: prohibited
+  checkpoint_selection: prohibited
+  bridge_head_execution: prohibited
+  stage_b: prohibited
+  stage_c: prohibited
+  gate_evaluation: prohibited
+  test_partition_opening: prohibited
+  validation_partition_access: prohibited
+  reconstruction_test_partition_access: prohibited
+  external_partition_access: prohibited
+  sentinel_holdout_access: prohibited
+  constraint_aware_beam_search: deferred_to_a_contingent_later_experiment
+  trading_or_production_inference_claims: prohibited
+
+data:
+  provider_retrievals_permitted: 1
+  symbol: SPY
+  frequency: 1d
+  calendar: XNYS
+  partition: train
+  retrieval_start_inclusive: '2015-05-07'
+  retrieval_end_exclusive: '2017-05-18'
+  required_complete_sessions: 512
+  observed_context_candles: 448
+  known_development_target_candles: 64
+  context_target_boundary_index: 448
+  target_use: >
+    The final 64 candles are the known development target. They are scored
+    against, never shown to the model, and never used to select or tune
+    anything. They are training-partition candles, not holdout.
+
+official_input_identity:
+  ordered_columns: [open, high, low, close, volume, amount]
+  channel_count: 6
+  reduction_to_five_channels: prohibited
+  authority: >
+    KronosPredictor.price_cols + [vol_col, amt_vol] in the pinned source is
+    ['open','high','low','close'] + ['volume'] + ['amount'], and that exact
+    order is what predict() passes to the tokenizer.
+  per_row_required_fields:
+    - session_timestamp
+    - open
+    - high
+    - low
+    - close
+    - volume
+    - amount
+  column_presence_mask_required: true
+  column_presence_mask_meaning: >
+    Which of the six columns were present in the retrieved source rather than
+    materialised by the official fallback. Recorded so a synthesised amount is
+    never mistaken for a retrieved one.
+  official_missing_column_behaviour:
+    volume_absent: >
+      predict() sets volume to 0.0 and also sets amount to 0.0.
+    amount_absent_but_volume_present: >
+      predict() sets amount = volume * mean(open, high, low, close) per row.
+    nan_in_any_of_the_six_columns: >
+      predict() raises ValueError. The diagnostic must reach that condition
+      never, and must fail closed rather than repair it.
+  timestamps:
+    preserved_for: [every_context_candle, every_target_candle]
+    official_derived_features: [minute, hour, weekday, day, month]
+    derivation: calc_time_stamps in the pinned source, in that exact order
+    x_stamp_rows: 448
+    y_stamp_rows: 64
+    note: >
+      Daily sessions make minute and hour constant at zero. They are still
+      passed, because the official path expects five stamp columns and the
+      diagnostic must not present a different tensor shape than the model was
+      trained against.
+
+normalization:
+  fitted_from: the_448_context_candles_only
+  fitted_once: true
+  mutable_implicit_last_normalization_state: prohibited
+  authority: >
+    predict() computes x_mean = mean(x, axis=0) and x_std = std(x, axis=0) over
+    the supplied context frame, then (x - x_mean) / (x_std + 1e-5), then clips
+    symmetrically. numpy std is population std, ddof = 0.
+  state_fields:
+    - ordered_columns
+    - mean_per_column
+    - standard_deviation_per_column
+    - epsilon
+    - clip_policy
+    - fitted_candle_count
+    - state_sha256
+  epsilon: 1.0e-5
+  epsilon_applied_to: standard_deviation_denominator_and_inverse_multiplier
+  standard_deviation_ddof: 0
+  clip_policy: symmetric_clip_after_standardization
+  clip_value: 5.0
+  forward_formula: clip((x - mean) / (std + epsilon), -clip, +clip)
+  inverse_formula: x * (std + epsilon) + mean
+  inverse_is_affine: true
+  usage:
+    method_a: >
+      Encode and decode all 512 known candles using the context-only state. The
+      state is never refitted on the 512, because a state fitted on the target
+      would leak the target into the reconstruction.
+    method_b_and_d: >
+      Encode the 448 context candles with that same state and inverse-decode
+      generated tokens with that same state.
+  state_sha256_definition: >
+    sha256 over canonical JSON of ordered_columns, mean, standard_deviation,
+    epsilon, clip_policy and fitted_candle_count. Recorded in every method
+    result so a mismatch between methods is detectable rather than assumed
+    absent.
+
+pinned_assets:
+  tokenizer:
+    repository: NeoQuasar/Kronos-Tokenizer-2k
+    revision: 26966d0035065a0cae0ebad7af8ece35bc1fb51c
+    config_sha256: 0b30a443affb03e05a876a083857de9164f899feb7b4d261da02c485c9a3e3b6
+    weights_sha256: b97ec46b3b72160509e289183eaf7bdf5f0dac5bb9b49522f6d46638a99a8717
+  forecasting_model:
+    name: Kronos-mini
+    repository: NeoQuasar/Kronos-mini
+    revision: f4e68697d9d5aed55cef5c96aabc3376bcad9f81
+    config_sha256: 70daca2cb11e3a979dd6b8ac12ee08e2aace877acf28f5b8dfb4fe5609736201
+    weights_file: model.safetensors
+    weights_sha256: a7d5f37e2e9fbd9891f7d7d4f72574512dd1f704fee14223e0a8cd0fbf54197c
+    weights_size_bytes: 16440776
+  official_source:
+    repository: https://github.com/shiyu-coder/Kronos
+    revision: 67b630e67f6a18c9e9be918d9b4337c960db1e9a
+    line_ending_finding: >
+      The digests sealed in experiment.yaml are over CRLF-normalized content.
+      model/module.py is committed upstream with CRLF, so its as-committed
+      digest already equals the sealed one. model/kronos.py is committed with
+      LF, so its as-committed digest differs and the sealed digest equals the
+      digest of its CRLF-normalized form. One rule explains both sealed values.
+      The sealed bytes are not changed; verification normalizes before hashing
+      and additionally records the as-committed digest, so both are checkable.
+    files:
+      model/kronos.py:
+        sealed_sha256_crlf_normalized: 638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a
+        as_committed_sha256: 0a5f90282e2039c2de0771473419715c845def154896dbd0f5747837e6241032
+        as_committed_line_ending: LF
+        as_committed_bytes: 30133
+      model/module.py:
+        sealed_sha256_crlf_normalized: a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f
+        as_committed_sha256: a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f
+        as_committed_line_ending: CRLF
+        as_committed_bytes: 23426
+  asset_resolution_requirement: >
+    Source digests, config digests and weight digests are all verified before
+    any weight is loaded and before any token is generated. A mismatch is a
+    typed failure, never a warning.
+
+inference_settings:
+  authority: >
+    KronosPredictor.predict defaults in the pinned source. Note that
+    auto_regressive_inference declares different defaults (top_p 0.99,
+    sample_count 5); predict() is the entry point and its defaults govern.
+  temperature_T: 1.0
+  top_k: 0
+  top_p: 0.9
+  sample_count_per_call: 1
+  prediction_length: 64
+  max_context: 512
+  clip: 5.0
+  context_length_used: 448
+  verbose: false
+  parameters_frozen: true
+  gradient_mode: inference_mode
+  context_truncation_behaviour: >
+    auto_regressive_inference keeps a rolling buffer of max_context tokens and
+    truncates to the most recent max_context. With 448 context candles and 64
+    predicted steps the running length reaches 511 at the final step, which is
+    below max_context 512, so no truncation and no buffer roll occurs in this
+    configuration. The diagnostic asserts that rather than assuming it.
+  final_decode_window: >
+    The official path decodes the last max_context tokens of the concatenated
+    context and generated sequence, which here is all 512, then slices the last
+    pred_len rows. The decode therefore includes context tokens, and the
+    diagnostic records the decoded context rows as well as the predicted ones.
+
+sampling_and_probability_definition:
+  two_stage_structure: >
+    Per step, s1 (coarse) is sampled from decode_s1 logits, then s2 (fine) is
+    sampled from decode_s2 logits which are conditioned on the already sampled
+    s1. Fine is therefore conditional on coarse by construction.
+  order_of_operations_in_sample_from_logits:
+    - divide_logits_by_temperature
+    - apply_top_k_or_top_p_filtering
+    - softmax
+    - multinomial_sample
+  top_k_and_top_p_are_mutually_exclusive: >
+    top_k_top_p_filtering returns immediately after the top-k branch, so top_p
+    is applied only when top_k == 0. With the pinned settings top_k is 0, so
+    the top_p nucleus branch is the one that executes.
+  stored_probabilities:
+    coarse_selected_token_log_probability:
+      definition: >
+        Natural log of the probability assigned to the sampled s1 token by the
+        softmax over the temperature-scaled, top-p filtered s1 logits.
+      measured_after_temperature: true
+      measured_after_top_k_top_p_filtering: true
+      filtered_distribution_renormalized: true
+      renormalization_mechanism: >
+        softmax over the filtered logit vector, in which removed entries are
+        -inf and therefore receive probability zero. The remaining entries sum
+        to one.
+    fine_selected_token_conditional_log_probability:
+      definition: >
+        Natural log of the probability assigned to the sampled s2 token by the
+        softmax over the temperature-scaled, top-p filtered s2 logits, which
+        are themselves conditioned on the sampled s1 token of the same step.
+      measured_after_temperature: true
+      measured_after_top_k_top_p_filtering: true
+      filtered_distribution_renormalized: true
+    pair_log_probability:
+      definition: coarse_selected_token_log_probability + fine_selected_token_conditional_log_probability
+    total_path_log_probability:
+      definition: sum of pair_log_probability over all 64 generated steps
+  what_these_quantities_are_not:
+    - >
+      They are not the model's likelihood of the path. The filtered and
+      renormalized distribution is not the model's distribution; mass removed
+      by nucleus filtering is redistributed over the kept set.
+    - >
+      They are not comparable across different temperature, top_k or top_p
+      settings, because the normalizing set changes.
+  labelling_rule: >
+    These fields are named sampling_log_probability, never likelihood. An
+    unavailable or undefined quantity is recorded as null with a stated reason
+    and is never relabelled as something it is not.
+
+ensembles:
+  manual_seeded_ensemble:
+    definition: >
+      Arithmetic mean over 64 separately seeded calls, each with
+      sample_count = 1, averaged in the inverse-normalized six-channel domain.
+    is_official: false
+  official_sample_count_ensemble:
+    definition: >
+      A single official call with sample_count = 64, which repeats the context
+      along the batch dimension, draws all paths from one RNG stream, averages
+      in the tokenizer-decoded normalized domain and then inverse-normalizes.
+    executed_by_this_diagnostic: false
+    parity_claim_permitted_only_if: byte_level_parity_demonstrated
+    note: >
+      Inverse normalization is affine, so averaging before and after it agrees
+      arithmetically. That does not make the two ensembles the same procedure:
+      one RNG stream over a repeated batch is not 64 independently seeded runs,
+      so no parity is claimed and the manual ensemble is never called official.
+  valid_only_ensemble:
+    definition: >
+      Arithmetic mean over only those manual seeded rollouts whose decoded path
+      is structurally valid, in the same domain as the manual ensemble.
+  comparison_rule: >
+    The valid-only ensemble is compared against the manual seeded ensemble,
+    because those two differ only in which paths are included. It is never
+    compared against a quantity this diagnostic did not compute.
+
+methods:
+  method_a_tokenizer_round_trip:
+    question: >
+      Does the tokenizer decoder reproduce in-distribution encoder tokens
+      without introducing structurally invalid candles?
+    procedure: >
+      Normalize all 512 known candles with the context-only state, encode with
+      the official tokenizer, decode with the official tokenizer, inverse
+      normalize.
+    records:
+      - coarse_token_ids_512
+      - fine_token_ids_512
+      - reconstruction_six_channel_512
+      - full_sequence_ohlcva_reconstruction_error
+      - return_reconstruction_error_over_transitions_1_to_511
+      - target_suffix_reconstruction_error_over_final_64
+      - structural_validity_over_all_512
+      - structural_validity_over_final_64
+      - normalization_state_sha256
+      - tokenizer_identity_and_hashes
+    external_anchor_prohibited: >
+      The return metric is computed from transitions internal to the sequence,
+      comparing reconstructed close(t)/close(t-1) against actual
+      close(t)/close(t-1) for t in 1..511. v1 anchored the first transition on
+      an actual close, which measured a quantity that mixed reconstruction
+      error with an externally supplied truth.
+  method_b_official_frozen_forecast:
+    question: >
+      What does one official frozen forecast produce, and is it structurally
+      valid?
+    procedure: >
+      Encode the 448 normalized context candles, generate 64 steps under the
+      pinned settings, decode without correction, inverse normalize with the
+      same context-only state.
+    records:
+      - coarse_token_ids_64
+      - fine_token_ids_64
+      - per_step_coarse_sampling_log_probability
+      - per_step_fine_conditional_sampling_log_probability
+      - per_step_pair_log_probability
+      - total_path_log_probability
+      - inference_settings
+      - seed
+      - raw_decoded_six_channel_64
+      - decoded_context_rows
+      - structural_validity
+      - forecast_errors_against_known_target
+      - normalization_state_sha256
+      - provenance_hashes
+  method_c_deterministic_terminal_projection:
+    question: >
+      Does repairing geometry alone change prediction quality?
+    procedure: >
+      Apply only the terminal projection baseline to the raw Method B output.
+      Tokens are not modified and nothing is regenerated.
+    projection_rules:
+      - preserve_open
+      - preserve_close
+      - high_equals_max_of_raw_high_open_close
+      - low_equals_min_of_raw_low_open_close
+      - volume_clamped_to_nonnegative
+      - amount_clamped_to_nonnegative
+    records:
+      - projected_six_channel_output
+      - intervention_magnitude
+      - structural_validity_after_projection
+      - forecast_metrics
+      - difference_from_raw_official_output
+  method_d_valid_rollout_filtering:
+    question: >
+      Among these 64 seeded rollouts at this single forecast origin, does
+      restricting the arithmetic ensemble to structurally valid paths meet the
+      preregistered improvement threshold?
+    rollouts: 64
+    forecast_origins: 1
+    seed_rule: seed(i) = 20150507 + i for i in 0..63
+    base_seed: 20150507
+    seeding_note: >
+      The pinned source neither seeds nor exposes a seed. torch.multinomial
+      draws from the global RNG, so determinism is imposed by the caller
+      seeding immediately before each rollout. This is a caller-side control,
+      recorded as such, and is one reason no parity with official
+      sample_count = 64 is claimed.
+    per_rollout_preserved:
+      - generated_token_sequence
+      - total_path_log_probability
+      - raw_decoded_six_channel_output
+      - validity_status
+      - forecast_metrics
+    aggregation:
+      when_at_least_one_valid_path_exists:
+        average_only_valid_paths: required
+        averaging_invalid_paths_into_the_final_result: prohibited
+      when_no_valid_path_exists:
+        emit_typed_result: NO_VALID_ROLLOUTS_OBSERVED
+        silent_projection_or_substitution: prohibited
+    records:
+      - valid_rollout_count
+      - valid_rollout_fraction
+      - accuracy_of_valid_group
+      - accuracy_of_invalid_group
+      - valid_only_ensemble_output
+      - manual_seeded_ensemble_output
+      - diversity_metrics
+      - repeated_path_metrics
+      - compute_and_latency_measurements
+
+structural_validity_definition:
+  candle_is_valid_when_all_hold:
+    - every_price_is_finite
+    - every_price_is_strictly_positive
+    - high_greater_than_or_equal_to_open
+    - high_greater_than_or_equal_to_close
+    - high_greater_than_or_equal_to_low
+    - low_less_than_or_equal_to_open
+    - low_less_than_or_equal_to_close
+    - volume_is_finite_and_nonnegative
+    - amount_is_finite_and_nonnegative
+  path_is_valid_when: every_candle_in_the_path_is_valid
+  severity_rule: >
+    Any invalid round-trip candle is a strict structural failure observation
+    and is reported as such. The 1 per cent threshold marks material severity
+    only. It never licenses describing a round trip with nonzero invalidity as
+    clean.
+
+forecast_metrics:
+  primary_metric: close_return_mae
+  primary_metric_definition: >
+    Mean absolute error of one-step log close-to-close returns over the scored
+    steps. For forecast comparisons the first scored transition uses the final
+    observed context close, which is a genuinely observed quantity available to
+    the model. For Method A reconstruction the transitions are internal to the
+    reconstructed sequence and no external anchor is used.
+  secondary_metrics:
+    - close_mae
+    - full_ohlcva_mae
+  lower_is_better: true
+
+conclusion_vocabulary:
+  - ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED
+  - ROUNDTRIP_MATERIAL_INVALIDITY
+  - NO_VALID_ROLLOUTS_OBSERVED
+  - VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+  - LOW_VALID_ROLLOUT_FRACTION
+  - PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT
+  - NO_PREREGISTERED_EFFECT_DETECTED
+  - DIAGNOSTIC_INCONCLUSIVE
+  - DIAGNOSTIC_OPERATIONAL_FAILURE
+
+retired_conclusion_labels:
+  INVALIDITY_NOT_CAUSAL_TO_FORECAST_ERROR:
+    reason: >
+      A causal claim. One forecast origin and 64 stochastic rollouts cannot
+      identify a causal effect of structural invalidity on forecast error.
+  GENERATED_TOKEN_SUPPORT_DEFECT:
+    reason: >
+      A claim about the model's token support. Observing a low valid fraction
+      at one origin measures this sample, not the support of the generative
+      distribution.
+  TOKENIZER_DECODER_DEFECT:
+    reason: >
+      Asserts a defect. The observation available is that a round trip
+      produced invalid candles, which is what the replacement labels state.
+  VALIDITY_FILTER_IMPROVES_FORECAST:
+    reason: >
+      Generalises beyond the measurement. The replacement label states that the
+      valid-only ensemble met a preregistered threshold on this window.
+  VALIDITY_REPAIR_ONLY:
+    reason: >
+      Reads as a general finding about repair. The replacement states what was
+      observed: projection restored validity without meeting the threshold.
+
+conclusion_rules:
+  binding: >
+    Evaluated in order; the first match is the conclusion. Never selected by
+    inspection after the numbers are known. Every threshold is fixed here.
+  thresholds:
+    roundtrip_material_invalid_fraction: 0.01
+    minimum_relative_improvement: 0.05
+    valid_rollout_support_fraction_minimum: 0.25
+  ordered_rules:
+    - id: R0
+      condition: any_method_raised_an_operational_failure_or_did_not_complete
+      conclusion: DIAGNOSTIC_OPERATIONAL_FAILURE
+    - id: R1
+      condition: method_a_invalid_candle_fraction > roundtrip_material_invalid_fraction
+      conclusion: ROUNDTRIP_MATERIAL_INVALIDITY
+    - id: R2
+      condition: method_a_invalid_candle_count > 0
+      conclusion: ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED
+    - id: R3
+      condition: method_d_valid_rollout_count == 0
+      conclusion: NO_VALID_ROLLOUTS_OBSERVED
+    - id: R4
+      condition: >
+        method_d_valid_only_primary_error <= method_d_manual_ensemble_primary_error *
+        (1 - minimum_relative_improvement)
+      conclusion: VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+    - id: R5
+      condition: method_d_valid_rollout_fraction < valid_rollout_support_fraction_minimum
+      conclusion: LOW_VALID_ROLLOUT_FRACTION
+    - id: R6
+      condition: >
+        method_b_path_is_invalid and method_c_projection_restores_validity and
+        method_c_primary_error > method_b_primary_error *
+        (1 - minimum_relative_improvement)
+      conclusion: PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT
+    - id: R7
+      condition: any_primary_error_required_by_R4_is_undefined
+      conclusion: DIAGNOSTIC_INCONCLUSIVE
+    - id: R8
+      condition: otherwise
+      conclusion: NO_PREREGISTERED_EFFECT_DETECTED
+  default_rule_is_not_causal: >
+    R8 states that no preregistered effect was detected on this window. It does
+    not state that no effect exists, and it makes no causal claim.
+
+artifact:
+  count: 1
+  immutable: true
+  evidence_class: development_compatibility_canary
+  storage_root: diagnostic_only
+  authorizes_training: false
+  authorizes_stage_b: false
+  authorizes_stage_c: false
+  authorizes_test_opening: false
+  authorizes_production_inference: false
+  authorizes_trading_claims: false
+  scientific_result_available: false
+
+contingent_next_experiment:
+  name: constraint_aware_coarse_fine_token_beam_search
+  status: not_implemented_and_not_authorized
+  implement_only_if_either:
+    - VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+    - NO_VALID_ROLLOUTS_OBSERVED
+
+stop_condition: >
+  Execution stops after the diagnostic artifact is written. No stage advances,
+  no partition is opened, and no outcome authorizes further computation.
