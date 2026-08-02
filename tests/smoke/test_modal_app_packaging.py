@@ -247,8 +247,25 @@ def test_image_pins_and_verifies_the_official_kronos_source() -> None:
     assert "KRONOS_SOURCE_REVISION_MISMATCH" in source
     assert "KRONOS_WORKTREE_DIRTY" in source
     assert "KRONOS_SOURCE_HASH_MISMATCH" in source
-    assert "sha256sum -c" in source
     assert "OPENALPHA_KRONOS_SOURCE_PATH" in source
+
+
+def test_the_image_normalizes_line_endings_before_hashing_the_source() -> None:
+    """The sealed digests are over CRLF-normalized content.
+
+    `sha256sum -c` on the checked-out bytes was wrong and would have failed
+    every image build: model/kronos.py is committed upstream with LF, and the
+    digest experiment.yaml seals is the digest of its CRLF form. Normalizing to
+    LF first keeps model/module.py correct, which is committed with CRLF and
+    must not be doubled.
+    """
+    source = _source()
+    assert "sha256sum -c" not in source
+    # Anchored without backslashes: the shell snippet is escaped twice over
+    # (Python source, then f-string), which makes a literal match unreadable.
+    assert "sed -e " in source
+    assert source.count("sed -e ") == 1
+    assert "sha256sum | cut -d' ' -f1" in source
 
 
 def test_image_pins_official_runtime_dependencies_explicitly() -> None:

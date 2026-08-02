@@ -19,6 +19,7 @@ from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from ..phase2.invocation import WorkerInvocation
 from ..phase2.measurement import GpuMeasurement, gpu_snapshot, reset_gpu_statistics
 from ..phase2.provider import Phase2Provider, RetrievalRequest, validate_series
+from ..phase2.states import EvidenceClass
 from .backends import (
     SAMPLING_PROBABILITY_DEFINITION,
     ForecastModel,
@@ -85,6 +86,11 @@ class DiagnosticArtifact(BaseModel):
     )
     claim_boundary: Literal["DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"] = (
         "DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"
+    )
+    #: Development evidence, in its own class. Fixed by type so no caller can
+    #: reclassify a diagnostic result as anything else.
+    evidence_class: Literal[EvidenceClass.DEVELOPMENT_COMPATIBILITY_CANARY] = (
+        EvidenceClass.DEVELOPMENT_COMPATIBILITY_CANARY
     )
     conclusion: DiagnosticConclusion
     decision: ConclusionOutcome

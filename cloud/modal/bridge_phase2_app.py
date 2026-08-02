@@ -80,6 +80,12 @@ def _pin(name: str) -> str:
 KRONOS_SOURCE_REPOSITORY = "https://github.com/shiyu-coder/Kronos"
 KRONOS_SOURCE_REVISION = "67b630e67f6a18c9e9be918d9b4337c960db1e9a"
 KRONOS_SOURCE_ROOT = "/opt/kronos"
+# The pinned Kronos-mini forecasting model, for the frozen inference
+# diagnostic. openalpha_bridge.diagnostic.spec.KRONOS_MINI_SPEC is the
+# authority; a packaging test asserts these agree.
+KRONOS_MINI_REPOSITORY = "NeoQuasar/Kronos-mini"
+KRONOS_MINI_REVISION = "f4e68697d9d5aed55cef5c96aabc3376bcad9f81"
+
 KRONOS_SOURCE_FILES: dict[str, str] = {
     "model/kronos.py": "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a",
     "model/module.py": "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f",
@@ -178,9 +184,19 @@ def _build_image() -> Any:
                 f"cd {KRONOS_SOURCE_ROOT} && git status --porcelain | tee /tmp/kronos_dirty && "
                 f'test ! -s /tmp/kronos_dirty || (echo "KRONOS_WORKTREE_DIRTY" && exit 1)'
             ),
+            # The sealed digests are over CRLF-normalized content, so the file
+            # is normalized before hashing. Hashing the checked-out bytes
+            # directly fails for model/kronos.py, which is committed with LF:
+            # the sealed value is the digest of its CRLF form. Normalizing to
+            # LF first keeps this correct for model/module.py, which is
+            # committed with CRLF and must not be doubled.
             *(
-                f'cd {KRONOS_SOURCE_ROOT} && echo "{digest}  {relative}" | sha256sum -c - '
-                f'|| (echo "KRONOS_SOURCE_HASH_MISMATCH {relative}" && exit 1)'
+                f"cd {KRONOS_SOURCE_ROOT} && "
+                f"sed -e 's/\\r$//' -e 's/$/\\r/' {relative} | sha256sum | cut -d' ' -f1 "
+                f"> /tmp/observed && "
+                f'test "$(cat /tmp/observed)" = "{digest}" '
+                f'|| (echo "KRONOS_SOURCE_HASH_MISMATCH {relative}" && '
+                f'echo "observed $(cat /tmp/observed) expected {digest}" && exit 1)'
                 for relative, digest in KRONOS_SOURCE_FILES.items()
             ),
         )
@@ -586,6 +602,88 @@ def stage_a_official_canary(source_commit: str, run_id: str) -> dict[str, Any]:
         source_commit=source_commit,
         # The image says what code it was built from. Not negotiable, not
         # defaulted, and never supplied by the caller.
+        deployed_commit=_require_deployed_commit(),
+        run_id=run_id,
+    )
+    cache_volume.commit()
+    return result.model_dump(mode="json")
+
+
+# ------------------------------- frozen inference diagnostic (GPU, isolated)
+
+
+@app.function(
+    image=image,
+    gpu=GPU_CONFIG,
+    volumes={CACHE_ROOT: cache_volume},
+    secrets=secrets,
+    timeout=60 * 60,
+    retries=0,
+)
+def frozen_inference_diagnostic(source_commit: str, run_id: str) -> dict[str, Any]:
+    """The frozen inference diagnostic, and nothing else.
+
+    Its own function rather than a branch inside the canary worker, so the two
+    cannot share a code path, an artifact key, or a failure mode. There is no
+    import of and no call into CloudRunner, training, an optimizer, checkpoint
+    code, Stage B, Stage C, test opening, or held-out evaluation. Execution
+    stops after the artifact is written.
+
+    This is a shell. Everything it does lives in
+    openalpha_bridge.diagnostic.worker, which tests exercise with doubles.
+    """
+    from pathlib import Path
+
+    from openalpha_bridge.diagnostic.official_backend import (
+        OfficialForecastModel,
+        OfficialTokenizerCodec,
+        isolated_official_source,
+        load_official_components,
+        parameter_digest,
+    )
+    from openalpha_bridge.diagnostic.worker import run_diagnostic_worker
+    from openalpha_bridge.phase2.kronos import TOKENIZER_SPEC
+    from openalpha_bridge.phase2.provider import YahooDailyProvider
+
+    _register_secrets()
+    cache_root = Path(CACHE_ROOT)
+    os.environ.setdefault("HF_HOME", str(cache_root / "huggingface"))
+    source_root = Path(os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH", KRONOS_SOURCE_ROOT))
+
+    def resolve():
+        """Verify, load and freeze. Called only when there is work to do."""
+        from huggingface_hub import snapshot_download
+
+        tokenizer_dir = snapshot_download(
+            repo_id=TOKENIZER_SPEC.repository,
+            revision=TOKENIZER_SPEC.revision,
+            cache_dir=str(cache_root / "huggingface"),
+        )
+        model_dir = snapshot_download(
+            repo_id=KRONOS_MINI_REPOSITORY,
+            revision=KRONOS_MINI_REVISION,
+            cache_dir=str(cache_root / "huggingface"),
+        )
+        tokenizer, model, assets = load_official_components(
+            source_root=source_root,
+            tokenizer_directory=tokenizer_dir,
+            model_directory=model_dir,
+            tokenizer_spec=TOKENIZER_SPEC,
+            device="cuda",
+        )
+        with isolated_official_source(source_root) as official:
+            codec = OfficialTokenizerCodec(tokenizer=tokenizer, official=official, device="cuda")
+            forecaster = OfficialForecastModel(
+                model=model, tokenizer=tokenizer, official=official, device="cuda"
+            )
+            return codec, forecaster, assets, lambda: parameter_digest(tokenizer, model)
+
+    result = run_diagnostic_worker(
+        store=_build_store(),
+        resolve=resolve,
+        provider_factory=lambda: YahooDailyProvider(stage="frozen-inference-diagnostic"),
+        research_root=Path("/root/research/bridge-v0"),
+        source_commit=source_commit,
         deployed_commit=_require_deployed_commit(),
         run_id=run_id,
     )
