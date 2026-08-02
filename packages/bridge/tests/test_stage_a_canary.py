@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -127,12 +128,13 @@ class _CountingProvider(DeterministicFakeProvider):
 
 def _run(tmp_path: Path, **kwargs):
     provider = kwargs.pop("provider", None) or _CountingProvider()
+    kwargs.setdefault("source_commit", "a" * 40)
+    kwargs.setdefault("deployed_commit", kwargs["source_commit"])
     return provider, run_stage_a_canary(
         provider=provider,
         backend=kwargs.pop("backend", None) or _PseudoOfficialBackend(),
         cache=FeatureCache(tmp_path / "cache"),
         research_root=RESEARCH,
-        source_commit="a" * 40,
         run_id="canary_0badc0de",
         now=datetime(2026, 8, 2, tzinfo=UTC),
         **kwargs,
@@ -449,6 +451,7 @@ def test_run_id_must_match_the_strict_canary_format(tmp_path: Path, run_id: str,
             cache=FeatureCache(tmp_path / "cache"),
             research_root=RESEARCH,
             source_commit="a" * 40,
+            deployed_commit="a" * 40,
             run_id=run_id,
         )
     assert excinfo.value.failures[0].code == code
@@ -465,9 +468,27 @@ def test_source_commit_must_be_forty_lowercase_hex(tmp_path: Path, commit: str) 
             cache=FeatureCache(tmp_path / "cache"),
             research_root=RESEARCH,
             source_commit=commit,
+            deployed_commit=commit,
             run_id="canary_0badc0de",
         )
     assert excinfo.value.failures[0].code == "CANARY_INVALID_SOURCE_COMMIT"
+
+
+@pytest.mark.parametrize(
+    "commit", ["", "short", "A" * 40, "g" * 40, "a" * 39, "a" * 41], ids=lambda c: c[:6] or "empty"
+)
+def test_deployed_commit_must_be_forty_lowercase_hex(tmp_path: Path, commit: str) -> None:
+    with pytest.raises(BridgeTransformError) as excinfo:
+        run_stage_a_canary(
+            provider=_CountingProvider(),
+            backend=_PseudoOfficialBackend(),
+            cache=FeatureCache(tmp_path / "cache"),
+            research_root=RESEARCH,
+            source_commit="a" * 40,
+            deployed_commit=commit,
+            run_id="canary_0badc0de",
+        )
+    assert excinfo.value.failures[0].code == "CANARY_INVALID_DEPLOYED_COMMIT"
 
 
 def test_source_commit_must_match_the_deployed_image(tmp_path: Path) -> None:
@@ -483,6 +504,21 @@ def test_source_commit_must_match_the_deployed_image(tmp_path: Path) -> None:
             deployed_commit="b" * 40,
         )
     assert excinfo.value.failures[0].code == "CANARY_SOURCE_COMMIT_MISMATCH"
+
+
+def test_the_deployed_commit_binding_cannot_be_omitted() -> None:
+    """It was optional, so a caller could skip the mismatch check entirely."""
+    parameters = inspect.signature(run_stage_a_canary).parameters
+    binding = parameters["deployed_commit"]
+    assert binding.default is inspect.Parameter.empty
+    assert binding.kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_the_report_records_the_commit_it_ran_on(tmp_path: Path) -> None:
+    _, report = _run(tmp_path)
+    assert report.deployed_commit == "a" * 40
+    assert report.deployed_commit == report.source_commit
+    assert json.loads(report.model_dump_json())["deployed_commit"] == "a" * 40
 
 
 # ------------------------------------------------------- causality (item 5)

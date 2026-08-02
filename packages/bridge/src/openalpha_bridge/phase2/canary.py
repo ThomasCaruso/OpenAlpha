@@ -168,6 +168,9 @@ class CanaryFailure(BaseModel):
 
     run_id: str
     source_commit: str
+    #: Present on failures too. A negative result that cannot name the code it
+    #: came from is not preservable evidence either.
+    deployed_commit: str
     experiment_sha256: str
     amendment_sha256: tuple[str, ...]
     failure_stage: str
@@ -190,6 +193,10 @@ class CanaryReport(BaseModel):
     authorizes_real_run: Literal[False] = False
 
     source_commit: str
+    #: The commit baked into the image at deploy time. Equal to source_commit by
+    #: construction, and recorded separately so the report states what it ran on
+    #: rather than only what it was asked to run on.
+    deployed_commit: str
     experiment_sha256: str
     amendment_sha256: tuple[str, ...]
     score_mask_sha256: str
@@ -252,19 +259,30 @@ _RUN_ID_PATTERN = re.compile(r"^canary_[0-9a-f]{8,32}$")
 _COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
-def _validate_invocation(run_id: str, source_commit: str, deployed_commit: str | None) -> None:
-    """Reject anything that could become a path or a mismatched deployment."""
+def _validate_invocation(run_id: str, source_commit: str, deployed_commit: str) -> None:
+    """Reject anything that could become a path or a mismatched deployment.
+
+    ``deployed_commit`` is mandatory. It was optional, which meant a caller
+    could omit it and have the mismatch check quietly skipped; evidence that
+    cannot name the code that produced it is not evidence.
+    """
     if not _COMMIT_PATTERN.fullmatch(source_commit):
         raise _fail(
             "CANARY_INVALID_SOURCE_COMMIT",
             "source_commit must be exactly 40 lowercase hexadecimal characters",
         )
-    if deployed_commit is not None and source_commit != deployed_commit:
+    if not _COMMIT_PATTERN.fullmatch(deployed_commit):
+        raise _fail(
+            "CANARY_INVALID_DEPLOYED_COMMIT",
+            "deployed_commit must be exactly 40 lowercase hexadecimal characters",
+        )
+    if source_commit != deployed_commit:
         raise _fail(
             "CANARY_SOURCE_COMMIT_MISMATCH",
             (
-                "source_commit does not match the commit baked into the deployed "
-                "image; the canary must run the code that was deployed"
+                f"source_commit {source_commit} does not match the commit baked into "
+                f"the deployed image {deployed_commit}; the canary must run the code "
+                "that was deployed"
             ),
         )
     if not _RUN_ID_PATTERN.fullmatch(run_id):
@@ -281,9 +299,9 @@ def run_stage_a_canary(
     cache: FeatureCache,
     research_root: Any,
     source_commit: str,
+    deployed_commit: str,
     run_id: str,
     asset_cache_root: Any | None = None,
-    deployed_commit: str | None = None,
     now: datetime | None = None,
 ) -> CanaryReport:
     """Execute the canary end to end, or fail closed and preserve the negative."""
@@ -489,6 +507,7 @@ def run_stage_a_canary(
     return CanaryReport(
         outcome=CANARY_SUCCESS_CODE,
         source_commit=source_commit,
+        deployed_commit=deployed_commit,
         experiment_sha256=EXPERIMENT_SHA256,
         amendment_sha256=AMENDMENTS,
         score_mask_sha256=score_mask_sha256(),

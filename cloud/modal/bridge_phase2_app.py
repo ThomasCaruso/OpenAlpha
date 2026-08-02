@@ -105,6 +105,24 @@ LOCAL_PACKAGES: tuple[tuple[str, str], ...] = (
 _IGNORE = ["__pycache__", "**/__pycache__", "*.pyc", "*.pyo"]
 
 
+def _load_sibling(name: str) -> Any:
+    """Import a module sitting next to this file, by path.
+
+    Only ever called on the deploying workstation, where this file lives in
+    cloud/modal/. In the container the module is flattened to /root and has no
+    siblings, but nothing there needs one.
+    """
+    import importlib.util
+
+    path = Path(__file__).resolve().parent / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"openalpha_modal_{name}", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load deployment helper: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _build_image() -> Any:
     built = (
         modal.Image.debian_slim(python_version=PYTHON_VERSION)
@@ -159,7 +177,18 @@ def _build_image() -> Any:
     if root is None:
         # Container: the image is already built and no repository is present, so
         # there is nothing to add. Returning the base keeps module import safe.
+        # OPENALPHA_DEPLOYED_COMMIT was baked in at deploy time and is already
+        # in the environment; it is never recomputed here.
         return built
+
+    # Bind the deploying repository state into the image. Raises, and so fails
+    # the deployment, when HEAD cannot be resolved or the worktree is dirty.
+    # Loaded by path rather than by name: `modal deploy` does not guarantee this
+    # file's directory is on sys.path.
+    binding = _load_sibling("deployed_commit")
+    built = built.env(
+        {binding.COMMIT_ENVIRONMENT_VARIABLE: binding.bind_for_image(root, environment=os.environ)}
+    )
 
     # Source is added last so edits do not invalidate the dependency layers.
     for local_path, remote_path in LOCAL_PACKAGES:
@@ -450,8 +479,42 @@ def verify_deployment() -> dict[str, Any]:
         "torch": TORCH_VERSION,
         "score_mask_sha256": score_mask_sha256(),
         "locked_hashes": observed,
+        # Raises here if the binding is missing or malformed, so a broken
+        # deployment is caught by the check rather than by the canary.
+        "deployed_commit": _require_deployed_commit(),
         "verified_at": _now().isoformat(),
     }
+
+
+# -------------------------------------------------- deployed commit binding
+
+#: Duplicated from cloud/modal/deployed_commit.py, which the container does not
+#: have. A test asserts the two agree.
+DEPLOYED_COMMIT_VARIABLE = "OPENALPHA_DEPLOYED_COMMIT"
+
+
+def _require_deployed_commit() -> str:
+    """The commit baked into this image, or refuse to run.
+
+    There is no default, no empty-string fallback, and no caller-supplied
+    override. Every one of those would let a worker produce evidence it cannot
+    attribute to specific code.
+    """
+    import re
+
+    value = os.environ.get(DEPLOYED_COMMIT_VARIABLE, "")
+    if not value:
+        raise RuntimeError(
+            f"DEPLOYED_COMMIT_MISSING: {DEPLOYED_COMMIT_VARIABLE} is not set in this "
+            "image. Redeploy from a clean worktree so the commit is bound at build "
+            "time; it must never be supplied at call time."
+        )
+    if not re.fullmatch(r"[0-9a-f]{40}", value):
+        raise RuntimeError(
+            f"DEPLOYED_COMMIT_MALFORMED: {DEPLOYED_COMMIT_VARIABLE} must be exactly "
+            f"forty lowercase hex characters, got {value!r}"
+        )
+    return value
 
 
 # ------------------------------------------- Stage A official canary (GPU)
@@ -494,6 +557,11 @@ def stage_a_official_canary(source_commit: str, run_id: str) -> dict[str, Any]:
     cache_root = Path(CACHE_ROOT)
     os.environ.setdefault("HF_HOME", str(cache_root / "huggingface"))
 
+    # The image says what code it was built from. That is not negotiable and it
+    # is not defaulted: a worker that cannot identify its own code cannot
+    # attribute its result to anything.
+    deployed_commit = _require_deployed_commit()
+
     report = run_stage_a_canary(
         provider=YahooDailyProvider(stage="stage-a-canary"),
         backend=OfficialKronosBackend(
@@ -505,6 +573,7 @@ def stage_a_official_canary(source_commit: str, run_id: str) -> dict[str, Any]:
         cache=FeatureCache(cache_root / "canary" / run_id),
         research_root=Path("/root/research/bridge-v0"),
         source_commit=source_commit,
+        deployed_commit=deployed_commit,
         run_id=run_id,
         # Measured from this directory before and after asset resolution, so the
         # reported download size is filesystem truth rather than an estimate.

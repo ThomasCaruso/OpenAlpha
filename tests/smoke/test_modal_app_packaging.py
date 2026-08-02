@@ -13,6 +13,7 @@ provider.
 from __future__ import annotations
 
 import ast
+import os
 import re
 import shutil
 import subprocess
@@ -164,6 +165,10 @@ def test_app_imports_where_the_workspace_is_not_installed() -> None:
         cwd=ROOT,
         timeout=600,
         check=False,
+        # Importing to inspect, not to deploy. A developer worktree is dirty
+        # almost always, and the deploy-time binding refuses a dirty tree. Under
+        # this flag the image is built with an inert sentinel instead.
+        env={**os.environ, "OPENALPHA_MODAL_INSPECTION": "1"},
     )
     assert result.returncode == 0, (
         "the Modal app could not be imported without the workspace installed:\n"
@@ -207,6 +212,7 @@ def test_app_imports_when_flattened_like_the_container(tmp_path: Path) -> None:
         cwd=tmp_path,
         timeout=600,
         check=False,
+        env={**os.environ, "OPENALPHA_MODAL_INSPECTION": "1"},
     )
     assert result.returncode == 0, (
         "the Modal app crashes when imported from a flattened container path, "
