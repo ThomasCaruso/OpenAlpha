@@ -13,7 +13,6 @@ creation or selection, metric or gate evaluation, or test-partition opening.
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -21,17 +20,15 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 from ..cloud.objectstore import ObjectStore
-from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from .cache import FeatureCache
 from .canary import run_stage_a_canary
 from .canary_artifact import TerminalArtifact, publish_terminal_artifact
+from .invocation import WorkerInvocation
 from .kronos import KronosBackend
 from .provider import Phase2Provider
 from .states import EvidenceClass
 
 __all__ = ["CanaryWorkerResult", "run_canary_worker"]
-
-_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
 class CanaryWorkerResult(BaseModel):
@@ -70,38 +67,44 @@ def run_canary_worker(
     run_id: str,
     now: datetime | None = None,
 ) -> CanaryWorkerResult:
-    """Execute the canary once and store exactly one terminal artifact."""
-    if not _COMMIT_PATTERN.fullmatch(deployed_commit):
-        raise BridgeTransformError(
-            BridgeFailure(
-                category=FailureCategory.INVALID_CONFIGURATION,
-                code="CANARY_WORKER_INVALID_DEPLOYED_COMMIT",
-                message=(
-                    "deployed_commit must be exactly forty lowercase hex characters; "
-                    "the worker must know what code it is running"
-                ),
-            )
-        )
+    """Execute the canary once and store exactly one terminal artifact.
+
+    Order matters and is enforced by structure rather than by convention:
+
+    1. Every identifier is validated. Nothing below this line runs on an
+       unchecked string.
+    2. An existing terminal artifact is retrieved and verified. If one exists
+       the work is not repeated, so no provider request is issued, no asset is
+       resolved, and no cache directory is created.
+    3. Only then is anything constructed from the identifiers.
+    """
+    # 1. Validated before a path, a cache, an object key, a provider call or an
+    #    asset resolution can be derived from any of these strings.
+    invocation = WorkerInvocation.validate_all(
+        run_id=run_id, source_commit=source_commit, deployed_commit=deployed_commit
+    )
 
     def execute():
+        # Constructed inside the callable so that a duplicate invocation, which
+        # never calls it, creates no cache directory and touches no provider.
         return run_stage_a_canary(
             provider=provider,
             backend=backend,
-            cache=FeatureCache(Path(feature_cache_root) / run_id),
+            cache=FeatureCache(Path(feature_cache_root) / invocation.run_id),
             research_root=Path(research_root),
-            source_commit=source_commit,
-            deployed_commit=deployed_commit,
-            run_id=run_id,
+            source_commit=invocation.source_commit,
+            deployed_commit=invocation.deployed_commit,
+            run_id=invocation.run_id,
             # Measured from the filesystem before and after asset resolution.
             asset_cache_root=Path(asset_cache_root),
             now=now,
         )
 
+    # 2. Checks for an existing artifact first and returns it verified; only
+    #    calls execute when this run id has no terminal result yet.
     artifact: TerminalArtifact = publish_terminal_artifact(
         store,
-        run_id=run_id,
-        source_commit=source_commit,
-        deployed_commit=deployed_commit,
+        invocation=invocation,
         execute=execute,
         now=now,
     )
@@ -110,6 +113,6 @@ def run_canary_worker(
         content_sha256=artifact.content_sha256,
         outcome=artifact.outcome,
         already_existed=artifact.already_existed,
-        deployed_commit=deployed_commit,
+        deployed_commit=invocation.deployed_commit,
         report=artifact.payload,
     )

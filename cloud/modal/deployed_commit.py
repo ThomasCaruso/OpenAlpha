@@ -74,12 +74,50 @@ def _git(root: Path, *arguments: str) -> str:
     return completed.stdout.strip()
 
 
+#: Directories copied into the image by add_local_dir. An untracked file under
+#: any of these is shipped and executed while the image claims to be HEAD, so
+#: it is as fatal as an uncommitted edit. Must stay in step with
+#: bridge_phase2_app.LOCAL_PACKAGES and the research directory it adds; a test
+#: asserts they agree.
+IMAGE_SOURCE_ROOTS: tuple[str, ...] = (
+    "packages/bridge/src/openalpha_bridge",
+    "packages/sentinel/src/openalpha_sentinel",
+    "packages/research-core/src/openalpha_research",
+    "research/bridge-v0",
+)
+
+#: Ignored by add_local_dir, so an untracked file matching these never reaches
+#: the image and must not block a deployment. Mirrors bridge_phase2_app._IGNORE.
+IMAGE_IGNORED_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo")
+IMAGE_IGNORED_DIRECTORY = "__pycache__"
+
+
+def _is_shipped(relative_path: str) -> bool:
+    """Whether add_local_dir would copy this path into the image."""
+    normalised = relative_path.replace("\\", "/").strip('"')
+    if not any(
+        normalised == root or normalised.startswith(root + "/") for root in IMAGE_SOURCE_ROOTS
+    ):
+        return False
+    if normalised.endswith(IMAGE_IGNORED_SUFFIXES):
+        return False
+    return IMAGE_IGNORED_DIRECTORY not in normalised.split("/")
+
+
 def resolve_deploying_commit(root: Path) -> str:
     """The exact HEAD of a clean worktree, or refuse to deploy.
 
     A dirty worktree is fatal. Deploying uncommitted work would produce evidence
     attributed to a commit whose content differs from what executed, and that is
     worse than not deploying at all.
+
+    Untracked files count. ``--untracked-files=no`` was used here, which was
+    wrong: add_local_dir copies directories, not git indexes, so an untracked
+    .py file under a shipped package is built into the image and imported at
+    runtime while the image still claims to be HEAD. That is precisely the
+    attribution failure this function exists to prevent. Untracked files
+    outside the shipped roots, and those add_local_dir ignores, do not block a
+    deployment because they cannot reach the image.
     """
     if not (root / ".git").exists():
         raise DeploymentBindingError(f"DEPLOYED_COMMIT_UNRESOLVABLE: {root} is not a git worktree")
@@ -91,13 +129,38 @@ def resolve_deploying_commit(root: Path) -> str:
             "exactly forty lowercase hex characters"
         )
 
-    dirty = _git(root, "status", "--porcelain", "--untracked-files=no")
-    if dirty:
-        changed = "\n".join(f"    {line}" for line in dirty.splitlines()[:20])
+    # --untracked-files=all so that every file inside an untracked directory is
+    # listed individually; the default collapses them to the directory name,
+    # which would hide what is actually being shipped.
+    status = _git(root, "status", "--porcelain", "--untracked-files=all")
+
+    tracked_changes: list[str] = []
+    untracked_shipped: list[str] = []
+    for line in status.splitlines():
+        if not line.strip():
+            continue
+        code, _, path = line.partition(" ")[0], None, line[3:]
+        if code == "??":
+            if _is_shipped(path):
+                untracked_shipped.append(path)
+        else:
+            tracked_changes.append(line)
+
+    if tracked_changes:
+        listed = "\n".join(f"    {line}" for line in tracked_changes[:20])
         raise DeploymentBindingError(
             "DEPLOYED_COMMIT_WORKTREE_DIRTY: refusing to deploy uncommitted work, "
             f"because the image would be attributed to {head} while running "
-            f"something else. Tracked changes:\n{changed}"
+            f"something else. Tracked changes:\n{listed}"
+        )
+
+    if untracked_shipped:
+        listed = "\n".join(f"    {path}" for path in sorted(untracked_shipped)[:20])
+        raise DeploymentBindingError(
+            "DEPLOYED_COMMIT_UNTRACKED_IN_IMAGE: refusing to deploy, because "
+            "add_local_dir copies directories rather than the git index, so these "
+            f"untracked files would be built into an image attributed to {head} "
+            f"without being part of it:\n{listed}"
         )
     return head
 

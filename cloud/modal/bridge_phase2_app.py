@@ -49,7 +49,25 @@ CANARY_RUNTIME_PINS: dict[str, str] = {
     "pydantic": "2.13.4",
 }
 TORCH_VERSION = CANARY_RUNTIME_PINS["torch"]
-CUDA_INDEX = "https://download.pytorch.org/whl/cu124"
+
+# Torch is installed as an exact artifact, not as a requirement resolved
+# against an index. `torch==2.13.0` with extra_index_url=cu124 was wrong: the
+# cu124 index stops at 2.6.0, so the requirement fell through to the default
+# index and installed a different build of 2.13.0 than the one named. A direct
+# URL cannot be satisfied by any other artifact, and pip verifies the
+# `#sha256=` fragment before installing, so both the fallback and the
+# unverified-download problems disappear together.
+#
+# cp313 = CPython 3.13. manylinux_2_28_x86_64 = Linux x86_64, glibc >= 2.28;
+# Debian bookworm ships 2.36. cu126 bundles the CUDA 12.6 runtime, which runs
+# under minor version compatibility on any CUDA 12.x driver.
+# Resolved from https://download.pytorch.org/whl/cu126/torch/
+TORCH_WHEEL_URL = (
+    "https://download.pytorch.org/whl/cu126/"
+    "torch-2.13.0%2Bcu126-cp313-cp313-manylinux_2_28_x86_64.whl"
+)
+TORCH_WHEEL_SHA256 = "4198c8d7478ab47ad2569309387d88b21fb553a1cf8ab06260fbd5a6ab9b9712"
+TORCH_WHEEL_SPECIFIER = f"{TORCH_WHEEL_URL}#sha256={TORCH_WHEEL_SHA256}"
 
 
 def _pin(name: str) -> str:
@@ -127,10 +145,9 @@ def _build_image() -> Any:
     built = (
         modal.Image.debian_slim(python_version=PYTHON_VERSION)
         .apt_install("git")
-        .pip_install(
-            f"torch=={TORCH_VERSION}",
-            extra_index_url=CUDA_INDEX,
-        )
+        # Exact artifact, hash-verified by pip. No index resolution, so no
+        # fallback to a different build is possible.
+        .pip_install(TORCH_WHEEL_SPECIFIER)
         .pip_install(
             # Every canary-relevant package is pinned exactly, from uv.lock.
             _pin("numpy"),

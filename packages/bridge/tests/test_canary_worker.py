@@ -96,7 +96,38 @@ def test_the_result_authorizes_nothing(tmp_path: Path) -> None:
 def test_the_worker_refuses_a_malformed_deployed_commit(tmp_path: Path, commit: str) -> None:
     with pytest.raises(BridgeTransformError) as excinfo:
         _run(tmp_path, deployed_commit=commit)
-    assert excinfo.value.failures[0].code == "CANARY_WORKER_INVALID_DEPLOYED_COMMIT"
+    assert excinfo.value.failures[0].code == "INVALID_DEPLOYED_COMMIT"
+
+
+@pytest.mark.parametrize(
+    "run_id",
+    ["", "canary_../escape", "canary_/abs", "canary_with space", "not_a_canary", "canary_XYZ"],
+)
+def test_the_worker_refuses_a_malformed_run_id(tmp_path: Path, run_id: str) -> None:
+    with pytest.raises(BridgeTransformError) as excinfo:
+        _run(tmp_path, run_id=run_id)
+    assert excinfo.value.failures[0].code == "INVALID_RUN_ID"
+
+
+@pytest.mark.parametrize("commit", ["", "HEAD", "a" * 39, "A" * 40])
+def test_the_worker_refuses_a_malformed_source_commit(tmp_path: Path, commit: str) -> None:
+    with pytest.raises(BridgeTransformError) as excinfo:
+        _run(tmp_path, source_commit=commit, deployed_commit=COMMIT)
+    assert excinfo.value.failures[0].code == "INVALID_SOURCE_COMMIT"
+
+
+def test_nothing_is_constructed_before_the_identifiers_are_checked(tmp_path: Path) -> None:
+    """A bad run id must not name a directory, a key, or a provider request."""
+    store = InMemoryObjectStore()
+    provider = _CountingProvider()
+    bad = "canary_../../escape"
+
+    with pytest.raises(BridgeTransformError):
+        _run(tmp_path, store=store, provider=provider, run_id=bad)
+
+    assert provider.requests == [], "the provider was called on an unchecked run id"
+    assert store.list_keys("") == (), "an object key was built from an unchecked run id"
+    assert not (tmp_path / "cache").exists(), "a cache directory was created before validation"
 
 
 def test_the_deployed_commit_cannot_be_omitted() -> None:
@@ -105,11 +136,23 @@ def test_the_deployed_commit_cannot_be_omitted() -> None:
     assert binding.kind is inspect.Parameter.KEYWORD_ONLY
 
 
-def test_a_commit_that_does_not_match_the_image_fails_and_is_preserved(tmp_path: Path) -> None:
-    store, _, result = _run(tmp_path, source_commit="b" * 40, deployed_commit=COMMIT)
-    assert result.outcome == CANARY_FAILURE_CODE
-    assert result.report["failure_code"] == "CANARY_SOURCE_COMMIT_MISMATCH"
-    assert store.exists(result.artifact_key)
+def test_a_commit_that_does_not_match_the_image_is_refused_at_the_boundary(
+    tmp_path: Path,
+) -> None:
+    """Refused before anything is named, so nothing is stored.
+
+    This used to be recorded as a typed failure artifact. It is now a boundary
+    rejection, because validating before an object key is constructed and
+    storing an artifact under that key are mutually exclusive. A mismatched
+    invocation is a caller error, not evidence about the official path.
+    """
+    store = InMemoryObjectStore()
+    provider = _CountingProvider()
+    with pytest.raises(BridgeTransformError) as excinfo:
+        _run(tmp_path, store=store, provider=provider, source_commit="b" * 40)
+    assert excinfo.value.failures[0].code == "SOURCE_COMMIT_MISMATCH"
+    assert store.list_keys("") == ()
+    assert provider.requests == []
 
 
 # ------------------------------------------------------------ failure paths
@@ -147,7 +190,16 @@ def test_a_second_invocation_verifies_and_does_not_overwrite(tmp_path: Path) -> 
     store, _, first = _run(tmp_path)
     original = store.get(first.artifact_key).body
 
-    _, _, second = _run(tmp_path, store=store, backend=DeterministicFakeKronosBackend())
+    second_provider = _CountingProvider()
+    _, _, second = _run(
+        tmp_path,
+        store=store,
+        provider=second_provider,
+        backend=DeterministicFakeKronosBackend(),
+    )
+
+    # Retrieved and verified before executing: no retrieval, no asset work.
+    assert second_provider.requests == []
 
     assert second.already_existed is True
     assert second.artifact_key == first.artifact_key

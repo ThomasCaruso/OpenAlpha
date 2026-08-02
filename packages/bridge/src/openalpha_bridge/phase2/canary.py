@@ -175,6 +175,10 @@ class CanaryFailure(BaseModel):
     amendment_sha256: tuple[str, ...]
     failure_stage: str
     failure_code: str
+    #: The exception type, which is what an operator acts on. Deliberately the
+    #: only thing carried over from an operational exception: its text, frames,
+    #: filenames and line numbers are not recorded.
+    exception_class: str | None = None
     message: str
     completed_at: datetime
 
@@ -192,6 +196,9 @@ class CanaryReport(BaseModel):
     authorizes_stage_b: Literal[False] = False
     authorizes_real_run: Literal[False] = False
 
+    #: The invocation this report belongs to. A terminal artifact that cannot
+    #: name its own run cannot be verified as this run's result.
+    run_id: str
     source_commit: str
     #: The commit baked into the image at deploy time. Equal to source_commit by
     #: construction, and recorded separately so the report states what it ran on
@@ -506,6 +513,7 @@ def run_stage_a_canary(
 
     return CanaryReport(
         outcome=CANARY_SUCCESS_CODE,
+        run_id=run_id,
         source_commit=source_commit,
         deployed_commit=deployed_commit,
         experiment_sha256=EXPERIMENT_SHA256,

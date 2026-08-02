@@ -222,3 +222,110 @@ def _extract_validator() -> dict[str, Any]:
     namespace: dict[str, Any] = {"os": os}
     exec(compile(ast.Module(body=wanted, type_ignores=[]), str(APP), "exec"), namespace)  # noqa: S102
     return namespace
+
+
+# --------------------------------- untracked files that would enter the image
+
+
+def _shipped_file(repository: Path, relative: str) -> Path:
+    path = repository / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def test_an_untracked_file_under_a_shipped_package_blocks_deployment(
+    repository: Path,
+) -> None:
+    """add_local_dir copies directories, not the git index.
+
+    An untracked .py file under a shipped package is built into the image and
+    imported at runtime, while the image still claims to be HEAD.
+    """
+    _shipped_file(repository, "packages/bridge/src/openalpha_bridge/sneaky.py").write_text(
+        "SHIPPED = True\n", encoding="utf-8"
+    )
+    with pytest.raises(binding.DeploymentBindingError) as excinfo:
+        binding.resolve_deploying_commit(repository)
+    message = str(excinfo.value)
+    assert "DEPLOYED_COMMIT_UNTRACKED_IN_IMAGE" in message
+    assert "sneaky.py" in message
+
+
+def test_an_untracked_file_under_the_research_directory_blocks_deployment(
+    repository: Path,
+) -> None:
+    _shipped_file(repository, "research/bridge-v0/extra.yaml").write_text(
+        "unexpected: true\n", encoding="utf-8"
+    )
+    with pytest.raises(binding.DeploymentBindingError) as excinfo:
+        binding.resolve_deploying_commit(repository)
+    assert "DEPLOYED_COMMIT_UNTRACKED_IN_IMAGE" in str(excinfo.value)
+
+
+def test_an_untracked_file_in_a_nested_untracked_directory_is_still_seen(
+    repository: Path,
+) -> None:
+    """--untracked-files=all, so a new directory is not collapsed to one entry."""
+    _shipped_file(repository, "packages/sentinel/src/openalpha_sentinel/newpkg/mod.py").write_text(
+        "x = 1\n", encoding="utf-8"
+    )
+    with pytest.raises(binding.DeploymentBindingError) as excinfo:
+        binding.resolve_deploying_commit(repository)
+    assert "newpkg/mod.py" in str(excinfo.value).replace("\\", "/")
+
+
+def test_untracked_bytecode_does_not_block_deployment(repository: Path) -> None:
+    """add_local_dir ignores these, so they cannot reach the image."""
+    _shipped_file(
+        repository, "packages/bridge/src/openalpha_bridge/__pycache__/mod.cpython-313.pyc"
+    ).write_bytes(b"\x00")
+    _shipped_file(repository, "packages/bridge/src/openalpha_bridge/stale.pyc").write_bytes(b"\x00")
+    assert binding.COMMIT_PATTERN.fullmatch(binding.resolve_deploying_commit(repository))
+
+
+def test_untracked_files_outside_the_shipped_roots_do_not_block(repository: Path) -> None:
+    """Scratch files, notes and local tooling are not copied into the image."""
+    for relative in ("scratch.log", "docs/notes.md", "tests/local_probe.py", "cloud/tmp.txt"):
+        _shipped_file(repository, relative).write_text("noise\n", encoding="utf-8")
+    assert binding.COMMIT_PATTERN.fullmatch(binding.resolve_deploying_commit(repository))
+
+
+def test_the_binding_never_suppresses_untracked_files() -> None:
+    # Comments dropped: the docstring names the old flag to explain why it was
+    # wrong, which is worth keeping. Only the executed call is policed.
+    lines = (MODAL_DIR / "deployed_commit.py").read_text(encoding="utf-8").splitlines()
+    executable = "\n".join(
+        line for line in lines if not line.lstrip().startswith(("#", '"""', "``"))
+    )
+    assert '"--untracked-files=no"' not in executable
+    assert '"--untracked-files=all"' in executable
+
+
+def test_the_shipped_roots_match_what_the_image_actually_copies() -> None:
+    """IMAGE_SOURCE_ROOTS is duplicated from the app; it must not drift."""
+    tree = ast.parse(_app_source())
+    packages = next(
+        ast.literal_eval(node.value)
+        for node in tree.body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "LOCAL_PACKAGES"
+        and node.value is not None
+    )
+    copied = {local for local, _ in packages}
+    copied.add("research/bridge-v0")
+    assert set(binding.IMAGE_SOURCE_ROOTS) == copied
+
+
+def test_the_ignore_list_matches_the_image() -> None:
+    source = _app_source()
+    ignore = next(
+        ast.literal_eval(node.value)
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "_IGNORE"
+    )
+    assert binding.IMAGE_IGNORED_DIRECTORY == "__pycache__"
+    for suffix in binding.IMAGE_IGNORED_SUFFIXES:
+        assert f"*{suffix}" in ignore

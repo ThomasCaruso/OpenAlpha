@@ -16,10 +16,12 @@ from openalpha_bridge.phase2.canary import CANARY_SUCCESS_CODE, run_stage_a_cana
 from openalpha_bridge.phase2.canary_artifact import (
     CANARY_FAILURE_CODE,
     CANARY_OPERATIONAL_FAILURE_CODE,
+    OPERATIONAL_FAILURE_MESSAGE,
     TerminalArtifact,
     publish_terminal_artifact,
     terminal_artifact_key,
 )
+from openalpha_bridge.phase2.invocation import WorkerInvocation
 from openalpha_bridge.phase2.states import EvidenceClass
 from pydantic import ValidationError
 from test_stage_a_canary import (  # the bridge test directory is on sys.path
@@ -37,12 +39,16 @@ def _store() -> InMemoryObjectStore:
     return InMemoryObjectStore()
 
 
+def _invocation(run_id: str = RUN_ID) -> WorkerInvocation:
+    return WorkerInvocation.validate_all(
+        run_id=run_id, source_commit=COMMIT, deployed_commit=COMMIT
+    )
+
+
 def _publish(store: InMemoryObjectStore, execute: Any, **kwargs: Any) -> TerminalArtifact:
     return publish_terminal_artifact(
         store,
-        run_id=kwargs.pop("run_id", RUN_ID),
-        source_commit=COMMIT,
-        deployed_commit=COMMIT,
+        invocation=_invocation(kwargs.pop("run_id", RUN_ID)),
         execute=execute,
         now=NOW,
         **kwargs,
@@ -110,7 +116,7 @@ def test_an_operational_failure_is_distinguishable_from_a_result() -> None:
     assert artifact.outcome == CANARY_OPERATIONAL_FAILURE_CODE
     assert artifact.outcome != CANARY_FAILURE_CODE
     assert artifact.payload["failure_code"] == "CANARY_OPERATIONAL_FAILURE"
-    assert "ConnectionResetError" in artifact.payload["message"]
+    assert artifact.payload["exception_class"] == "ConnectionResetError"
 
 
 def test_nothing_escapes_without_an_artifact() -> None:
@@ -130,16 +136,37 @@ def test_nothing_escapes_without_an_artifact() -> None:
         assert artifact.outcome == CANARY_OPERATIONAL_FAILURE_CODE
 
 
-def test_a_failure_message_is_scrubbed_before_storage() -> None:
+def test_an_operational_message_carries_no_exception_text_at_all() -> None:
+    """Redaction is a backstop, not the mechanism. The text never gets in."""
     store = _store()
     register_secret("hunter2-secret-token")
 
     def execute():
-        raise RuntimeError("auth failed for token hunter2-secret-token")
+        raise RuntimeError(
+            "auth failed for token hunter2-secret-token at "
+            "https://provider.invalid/v1/bars?apikey=hunter2-secret-token"
+        )
 
     artifact = _publish(store, execute)
-    assert "hunter2-secret-token" not in artifact.payload["message"]
-    assert "hunter2-secret-token" not in store.get(artifact.key).body.decode("utf-8")
+    body = store.get(artifact.key).body.decode("utf-8")
+    assert artifact.payload["message"] == OPERATIONAL_FAILURE_MESSAGE
+    assert artifact.payload["exception_class"] == "RuntimeError"
+    for leaked in ("hunter2-secret-token", "provider.invalid", "apikey", "auth failed"):
+        assert leaked not in body
+
+
+def test_an_operational_failure_records_no_traceback_or_location() -> None:
+    store = _store()
+
+    def execute():
+        raise ZeroDivisionError("division by zero")
+
+    artifact = _publish(store, execute)
+    body = store.get(artifact.key).body.decode("utf-8")
+    assert artifact.payload["exception_class"] == "ZeroDivisionError"
+    # No filename, no line number, no traceback, no local path.
+    for leaked in ("Traceback", ".py", "line ", "canary_artifact", "C:", "/home/", "division"):
+        assert leaked not in body
 
 
 # ------------------------------------------------------- immutability
@@ -150,10 +177,16 @@ def test_a_duplicate_invocation_verifies_and_never_overwrites(tmp_path: Path) ->
     first = _publish(store, _successful(tmp_path))
     original = store.get(first.key).body
 
+    executed: list[str] = []
+
     def execute():
+        executed.append("ran")
         raise RuntimeError("a second invocation that would have written a different outcome")
 
     second = _publish(store, execute)
+
+    # The point of checking first: the second invocation does no work at all.
+    assert executed == []
 
     assert second.already_existed is True
     assert second.key == first.key
@@ -193,7 +226,12 @@ def test_an_existing_object_of_another_evidence_class_is_refused() -> None:
     put_json(
         store,
         key,
-        {"outcome": "SOMETHING_ELSE", "evidence_class": EvidenceClass.REAL_PHASE2.value},
+        {
+            "schema_version": "openalpha.bridge.phase2.stage_a_canary.v1",
+            "outcome": CANARY_SUCCESS_CODE,
+            "run_id": RUN_ID,
+            "evidence_class": EvidenceClass.REAL_PHASE2.value,
+        },
         schema_version="openalpha.bridge.phase2.stage_a_canary.v1",
         run_id=RUN_ID,
         experiment_hash="0" * 64,
