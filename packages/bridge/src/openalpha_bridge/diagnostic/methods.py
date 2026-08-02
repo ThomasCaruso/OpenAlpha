@@ -3,6 +3,14 @@
 Every method is handed the one context-fitted normalization state and records
 its hash, so a state refitted somewhere along the way is detectable rather than
 assumed absent. None of them corrects, retries, substitutes or drops anything.
+
+Methods B and D take their forecast rows from ``GeneratedPath.raw_decoded_suffix``,
+which the backend produced by decoding the concatenated context and generated
+token window the way the pinned source does. They never call ``codec.decode``
+on the generated tokens alone: that would restart the tokenizer decoder at
+position zero without the preceding context and is a different computation.
+Method A still uses the codec, because its round trip genuinely is a decode of
+one complete 512-token window.
 """
 
 from __future__ import annotations
@@ -14,6 +22,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from .backends import ForecastModel, GeneratedPath, StepSampling, TokenizerCodec, TokenPair
 from .metrics import (
     ForecastError,
@@ -38,6 +47,16 @@ __all__ = [
     "run_method_c",
     "run_method_d",
 ]
+
+
+def _fail(code: str, message: str) -> BridgeTransformError:
+    return BridgeTransformError(
+        BridgeFailure(
+            category=FailureCategory.INVALID_CONFIGURATION,
+            code=code,
+            message=message,
+        )
+    )
 
 
 def _streams(tokens: tuple[TokenPair, ...]) -> tuple[tuple[int, ...], tuple[int, ...]]:
@@ -125,6 +144,7 @@ def _generate(
         series.context,
         context_stamps=series.context_stamps(),
         target_stamps=series.target_stamps(),
+        target_sessions=_target_sessions(series),
         state=state,
         steps=settings.prediction_length,
         seed=seed,
@@ -150,7 +170,17 @@ def run_method_b(
     """Generate future tokens from the 448 context candles and decode raw."""
     started = time.perf_counter()
     generated = _generate(model, series, state, settings, seed)
-    decoded = codec.decode(generated.tokens, state=state, sessions=_target_sessions(series))
+    # The official decode, performed by the backend over the concatenated
+    # context and generated tokens. Re-decoding generated.tokens here would
+    # restart the tokenizer decoder at position zero with no preceding
+    # context, which is a different computation.
+    decoded = generated.raw_decoded_suffix
+    if len(decoded) != settings.prediction_length:
+        raise _fail(
+            "DIAGNOSTIC_DECODED_SUFFIX_LENGTH_MISMATCH",
+            f"the backend returned {len(decoded)} decoded rows, expected "
+            f"{settings.prediction_length}",
+        )
     coarse, fine = _streams(generated.tokens)
     anchor = series.context[-1].close
     return MethodBResult(
@@ -314,7 +344,14 @@ def run_method_d(
 
     for index, seed in enumerate(seeds):
         generated = _generate(model, series, state, settings, seed)
-        decoded = codec.decode(generated.tokens, state=state, sessions=sessions)
+        # The official decode, from the backend. Never a generated-only decode.
+        decoded = generated.raw_decoded_suffix
+        if len(decoded) != settings.prediction_length:
+            raise _fail(
+                "DIAGNOSTIC_DECODED_SUFFIX_LENGTH_MISMATCH",
+                f"rollout {index} returned {len(decoded)} decoded rows, expected "
+                f"{settings.prediction_length}",
+            )
         validity = path_validity(decoded)
         coarse, fine = _streams(generated.tokens)
         records.append(

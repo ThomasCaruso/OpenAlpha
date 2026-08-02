@@ -21,6 +21,7 @@ import importlib.util
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -385,6 +386,7 @@ class OfficialForecastModel:
         *,
         context_stamps: tuple[TimeStamp, ...],
         target_stamps: tuple[TimeStamp, ...],
+        target_sessions: tuple[date, ...],
         state: NormalizationState,
         steps: int,
         seed: int,
@@ -404,6 +406,11 @@ class OfficialForecastModel:
             raise _fail(
                 "OFFICIAL_STAMP_SHAPE_MISMATCH",
                 f"{len(target_stamps)} target stamps for {steps} steps",
+            )
+        if len(target_sessions) != steps:
+            raise _fail(
+                "OFFICIAL_STAMP_SHAPE_MISMATCH",
+                f"{len(target_sessions)} target sessions for {steps} steps",
             )
         if len(context) + steps > self._max_context:
             raise _fail(
@@ -430,7 +437,17 @@ class OfficialForecastModel:
 
         with torch.inference_mode():
             encoded = self._tokenizer.encode(x, half=True)
-            coarse_ids, fine_ids = encoded[0], encoded[1]
+            context_coarse, context_fine = encoded[0], encoded[1]
+            if tuple(context_coarse.shape) != (1, len(context)):
+                raise _fail(
+                    "OFFICIAL_ENCODE_SHAPE_MISMATCH",
+                    f"context coarse ids are {tuple(context_coarse.shape)}, expected "
+                    f"(1, {len(context)})",
+                )
+            # The running buffers start as the context tokens and grow. The
+            # originals are kept unmodified for the final concatenation.
+            coarse_ids = context_coarse.clone()
+            fine_ids = context_fine.clone()
             initial = x.size(1)
 
             def draw(logits: Any) -> tuple[int, float]:
@@ -484,11 +501,115 @@ class OfficialForecastModel:
                 "OFFICIAL_TOKEN_LENGTH_MISMATCH",
                 f"generated {len(tokens)} steps, expected {steps}",
             )
+
+        raw_suffix = self._decode_official_window(
+            context_coarse=context_coarse,
+            context_fine=context_fine,
+            tokens=tokens,
+            steps=steps,
+            state=state,
+            target_sessions=target_sessions,
+        )
         return GeneratedPath(
             seed=seed,
             tokens=tuple(tokens),
             sampling=tuple(sampling),
             total_path_sampling_log_probability=sum(s.pair_log_probability for s in sampling),
+            raw_decoded_suffix=raw_suffix,
+        )
+
+    def _decode_official_window(
+        self,
+        *,
+        context_coarse: Any,
+        context_fine: Any,
+        tokens: list[TokenPair],
+        steps: int,
+        state: NormalizationState,
+        target_sessions: tuple[date, ...],
+    ) -> tuple[OfficialRow, ...]:
+        """Decode the way auto_regressive_inference does, in that order.
+
+        1. concatenate the context tokens with the generated ones
+        2. select the final max_context window
+        3. decode that complete window
+        4. slice the last ``steps`` rows
+        5. inverse normalize with the supplied state
+
+        Decoding the generated suffix on its own would restart the decoder at
+        position zero with no preceding tokens. The decoder is causal, so its
+        output at a position depends on everything before it; the suffix alone
+        is a different computation and can decode to different candles.
+        """
+        import torch
+
+        with torch.inference_mode():
+            generated_coarse = torch.tensor(
+                [[t.coarse for t in tokens]], dtype=torch.long, device=self._device
+            )
+            generated_fine = torch.tensor(
+                [[t.fine for t in tokens]], dtype=torch.long, device=self._device
+            )
+
+            # 1. concatenate
+            full_coarse = torch.cat([context_coarse, generated_coarse], dim=1)
+            full_fine = torch.cat([context_fine, generated_fine], dim=1)
+
+            total = int(full_coarse.size(1))
+            expected_total = int(context_coarse.size(1)) + steps
+            if total != expected_total:
+                raise _fail(
+                    "OFFICIAL_TOKEN_LENGTH_MISMATCH",
+                    f"concatenated window is {total} tokens, expected {expected_total}",
+                )
+
+            # 2. select the final max_context window
+            window_start = max(0, total - self._max_context)
+            window_coarse = full_coarse[:, window_start:total].contiguous()
+            window_fine = full_fine[:, window_start:total].contiguous()
+            window_length = int(window_coarse.size(1))
+
+            # 3. decode the complete window
+            decoded = self._tokenizer.decode([window_coarse, window_fine], half=True)
+            if tuple(decoded.shape) != (1, window_length, 6):
+                raise _fail(
+                    "OFFICIAL_DECODE_SHAPE_MISMATCH",
+                    f"decode produced {tuple(decoded.shape)}, expected (1, {window_length}, 6)",
+                )
+            # In this diagnostic's configuration no truncation occurs, so the
+            # decoded window is the whole context plus the generated steps.
+            if window_length != expected_total:
+                raise _fail(
+                    "OFFICIAL_CONTEXT_WOULD_TRUNCATE",
+                    (
+                        f"the decoded window is {window_length} tokens rather than "
+                        f"{expected_total}; the diagnostic is specified for a window "
+                        "that never truncates"
+                    ),
+                )
+
+            # 4. slice the final steps rows
+            suffix = decoded[0, -steps:, :]
+            if tuple(suffix.shape) != (steps, 6):
+                raise _fail(
+                    "OFFICIAL_DECODE_SHAPE_MISMATCH",
+                    f"the sliced suffix is {tuple(suffix.shape)}, expected ({steps}, 6)",
+                )
+            normalized = tuple(tuple(float(v) for v in row) for row in suffix.tolist())
+
+        # 5. inverse normalize with the supplied context-only state
+        restored = state.invert(normalized)
+        return tuple(
+            OfficialRow(
+                session=session,
+                open=values[0],
+                high=values[1],
+                low=values[2],
+                close=values[3],
+                volume=values[4],
+                amount=values[5],
+            )
+            for session, values in zip(target_sessions, restored, strict=True)
         )
 
 

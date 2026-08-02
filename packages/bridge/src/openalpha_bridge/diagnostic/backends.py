@@ -11,6 +11,7 @@ can audit.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -90,6 +91,20 @@ class GeneratedPath(BaseModel):
     #: log probability, not a model likelihood of the path.
     total_path_sampling_log_probability: float
 
+    #: The forecast rows, decoded the way the official path decodes them.
+    #:
+    #: The official path never decodes the generated suffix on its own. It
+    #: concatenates the context tokens with the generated ones, selects the
+    #: final max_context window, decodes that whole window, and only then
+    #: slices the last pred_len rows. Decoding the 64-token suffix alone would
+    #: restart the decoder at position zero with no preceding tokens, which is
+    #: a different computation and can produce different candles.
+    #:
+    #: The backend therefore returns these rows, already inverse-normalized
+    #: with the supplied state and carrying their target sessions. Methods B
+    #: and D consume them and must not re-decode ``tokens``.
+    raw_decoded_suffix: tuple[OfficialRow, ...]
+
 
 class ResolvedDiagnosticAssets(BaseModel):
     """Observed identity of the assets and source that were actually loaded."""
@@ -147,6 +162,7 @@ class ForecastModel(Protocol):
         *,
         context_stamps: tuple[TimeStamp, ...],
         target_stamps: tuple[TimeStamp, ...],
+        target_sessions: tuple[date, ...],
         state: NormalizationState,
         steps: int,
         seed: int,
@@ -154,7 +170,12 @@ class ForecastModel(Protocol):
         top_k: int,
         top_p: float,
     ) -> GeneratedPath:
-        """Produce ``steps`` future token pairs from ``context``.
+        """Produce ``steps`` future token pairs, and decode them officially.
+
+        The returned ``raw_decoded_suffix`` is the official decode: context
+        tokens concatenated with generated ones, final max_context window
+        selected, whole window decoded, last ``steps`` rows sliced, inverse
+        normalized with ``state``, and stamped with ``target_sessions``.
 
         Implementations must not mutate any parameter. The diagnostic hashes
         the parameters before and after and fails if they differ.

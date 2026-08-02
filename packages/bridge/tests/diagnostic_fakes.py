@@ -186,6 +186,7 @@ class FakeForecastModel:
         *,
         context_stamps: tuple[TimeStamp, ...],
         target_stamps: tuple[TimeStamp, ...],
+        target_sessions: tuple,
         state: NormalizationState,
         steps: int,
         seed: int,
@@ -203,6 +204,8 @@ class FakeForecastModel:
             raise AssertionError("one stamp per context row is required")
         if len(target_stamps) != steps:
             raise AssertionError("one stamp per predicted step is required")
+        if len(target_sessions) != steps:
+            raise AssertionError("one session per predicted step is required")
 
         path = self._path_for(seed, context)
         if len(path) != steps:
@@ -225,9 +228,20 @@ class FakeForecastModel:
                 )
             )
 
+        # Decode the official way: context tokens concatenated with the
+        # generated ones, whole window decoded, last `steps` rows sliced. The
+        # real backend does exactly this; doing it here too means the tests
+        # exercise the contract rather than a simplification of it.
+        context_tokens = self._codec.encode(context, state=state)
+        window = (*context_tokens, *tokens)
+        window_sessions = (*(row.session for row in context), *target_sessions)
+        decoded_window = self._codec.decode(tuple(window), state=state, sessions=window_sessions)
+        raw_suffix = decoded_window[-steps:]
+
         return GeneratedPath(
             seed=seed,
             tokens=tuple(tokens),
             sampling=tuple(sampling),
             total_path_sampling_log_probability=math.fsum(s.pair_log_probability for s in sampling),
+            raw_decoded_suffix=raw_suffix,
         )
