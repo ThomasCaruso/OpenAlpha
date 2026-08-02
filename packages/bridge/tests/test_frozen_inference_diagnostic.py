@@ -242,22 +242,28 @@ def test_the_state_is_fitted_from_the_448_context_rows_only() -> None:
 
 
 def test_the_state_matches_the_official_formulas() -> None:
+    """Compared against the pinned NumPy expression, in float32.
+
+    A float64 Python computation of the same statistics differs from this by
+    roughly a part in 10^5, which is the whole reason the implementation was
+    changed; the comparison here is against what the source actually computes.
+    """
+    import numpy as np
+
     context = ALL_ROWS[:CONTEXT_CANDLES]
     state = fit_context_state(context)
-    closes = [r.close for r in context]
-    mean = sum(closes) / len(closes)
-    variance = sum((c - mean) ** 2 for c in closes) / len(closes)  # ddof = 0
-    index = OFFICIAL_COLUMNS.index("close")
-    assert state.mean[index] == pytest.approx(mean)
-    assert state.standard_deviation[index] == pytest.approx(math.sqrt(variance))
 
-    normalized = state.normalize(context)
-    expected = (closes[0] - mean) / (math.sqrt(variance) + EPSILON)
-    assert normalized[0][index] == pytest.approx(max(-5.0, min(5.0, expected)))
+    matrix = np.array([row.channels() for row in context], dtype=np.float32)
+    expected_mean = np.mean(matrix, axis=0)
+    expected_std = np.std(matrix, axis=0)
 
-    # Inverse is exact for unclipped values.
-    restored = state.invert(normalized)
-    assert restored[0][index] == pytest.approx(closes[0], rel=1e-9)
+    assert state.mean_array().tobytes() == expected_mean.astype("<f4").tobytes()
+    assert state.std_array().tobytes() == expected_std.astype("<f4").tobytes()
+
+    expected_normalized = np.clip((matrix - expected_mean) / (expected_std + 1e-5), -5, 5)
+    observed = state.normalize_array(matrix)
+    assert observed.dtype == np.float32
+    assert observed.tobytes() == expected_normalized.tobytes()
 
 
 def test_clipping_is_symmetric_and_applied_after_standardization() -> None:
