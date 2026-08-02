@@ -12,6 +12,7 @@ evidence, not a reconstruction result, and it authorizes nothing.
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -47,18 +48,21 @@ from .kronos import (
     KronosMode,
 )
 from .provider import Candle, MarketSeries, Phase2Provider, RetrievalRequest, validate_series
+from .states import EvidenceClass
 
 __all__ = [
     "CANARY_EVIDENCE_CLASS",
     "CANARY_SUCCESS_CODE",
     "CANARY_WINDOW",
+    "CanaryFailure",
     "CanaryReport",
     "CanaryWindow",
     "run_stage_a_canary",
 ]
 
-#: Amendment 3 stage_a_official_canary. Deliberately distinct from real_phase2.
-CANARY_EVIDENCE_CLASS = "development_compatibility_canary"
+#: Amendment 3 stage_a_official_canary. Its own class with its own storage
+#: root: never real_phase2 and never synthetic_pipeline_validation.
+CANARY_EVIDENCE_CLASS = EvidenceClass.DEVELOPMENT_COMPATIBILITY_CANARY
 CANARY_SUCCESS_CODE = "STAGE_A_OFFICIAL_CANARY_PASSED"
 
 AMENDMENTS: tuple[str, ...] = (AMENDMENT_1_SHA256, AMENDMENT_2_SHA256, AMENDMENT_3_SHA256)
@@ -127,6 +131,36 @@ class CanaryWindow(BaseModel):
 CANARY_WINDOW = CanaryWindow()
 
 
+
+class CanaryFailure(BaseModel):
+    """Immutable terminal record of a canary that did not pass.
+
+    A failure is preserved, never retried and never converted into success.
+    """
+
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
+
+    schema_version: Literal["openalpha.bridge.phase2.stage_a_canary_failure.v1"] = (
+        "openalpha.bridge.phase2.stage_a_canary_failure.v1"
+    )
+    outcome: Literal[
+        "STAGE_A_OFFICIAL_CANARY_FAILED", "STAGE_A_OFFICIAL_CANARY_OPERATIONAL_FAILURE"
+    ]
+    evidence_class: EvidenceClass = CANARY_EVIDENCE_CLASS
+    authorizes_stage_b: Literal[False] = False
+    authorizes_real_run: Literal[False] = False
+    scientific_result_available: Literal[False] = False
+
+    run_id: str
+    source_commit: str
+    experiment_sha256: str
+    amendment_sha256: tuple[str, ...]
+    failure_stage: str
+    failure_code: str
+    message: str
+    completed_at: datetime
+
+
 class CanaryReport(BaseModel):
     """Immutable compatibility evidence. Metadata and hashes only."""
 
@@ -136,7 +170,7 @@ class CanaryReport(BaseModel):
         "openalpha.bridge.phase2.stage_a_canary.v1"
     )
     outcome: str
-    evidence_class: Literal["development_compatibility_canary"] = CANARY_EVIDENCE_CLASS
+    evidence_class: EvidenceClass = CANARY_EVIDENCE_CLASS
     authorizes_stage_b: Literal[False] = False
     authorizes_real_run: Literal[False] = False
 
@@ -201,6 +235,32 @@ def _peak_gpu_memory() -> int | None:
     return int(torch.cuda.max_memory_allocated())
 
 
+_RUN_ID_PATTERN = re.compile(r"^canary_[0-9a-f]{8,32}$")
+_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _validate_invocation(run_id: str, source_commit: str, deployed_commit: str | None) -> None:
+    """Reject anything that could become a path or a mismatched deployment."""
+    if not _COMMIT_PATTERN.fullmatch(source_commit):
+        raise _fail(
+            "CANARY_INVALID_SOURCE_COMMIT",
+            "source_commit must be exactly 40 lowercase hexadecimal characters",
+        )
+    if deployed_commit is not None and source_commit != deployed_commit:
+        raise _fail(
+            "CANARY_SOURCE_COMMIT_MISMATCH",
+            (
+                "source_commit does not match the commit baked into the deployed "
+                "image; the canary must run the code that was deployed"
+            ),
+        )
+    if not _RUN_ID_PATTERN.fullmatch(run_id):
+        raise _fail(
+            "CANARY_INVALID_RUN_ID",
+            "run_id must match canary_<8-32 hex>; slashes, traversal, and whitespace are refused",
+        )
+
+
 def run_stage_a_canary(
     *,
     provider: Phase2Provider,
@@ -210,9 +270,11 @@ def run_stage_a_canary(
     source_commit: str,
     run_id: str,
     downloaded_asset_bytes: int | None = None,
+    deployed_commit: str | None = None,
     now: datetime | None = None,
 ) -> CanaryReport:
     """Execute the canary end to end, or fail closed and preserve the negative."""
+    _validate_invocation(run_id, source_commit, deployed_commit)
     started = time.perf_counter()
 
     # 1. locks and amendments
@@ -266,28 +328,56 @@ def run_stage_a_canary(
             "repeated extraction did not reproduce byte-identical features",
         )
 
-    # 6. causality over the scored suffix, on the official backend
+    # 6. causality at the FIRST scored position, on the official backend.
+    #    Perturbing only the final candle would prove almost nothing: causal
+    #    attention already makes position 511 the sole position it could reach.
     perturbed = list(candles)
-    last = perturbed[-1]
-    perturbed[-1] = Candle(
-        session=last.session,
-        open=last.open * 1.03,
-        high=last.high * 1.05,
-        low=last.low * 0.97,
-        close=last.close * 1.04,
-        volume=last.volume * 1.5,
-        amount=last.amount * 1.5,
+    pivot = CONTEXT_PREFIX_LENGTH
+    original = perturbed[pivot]
+    perturbed[pivot] = Candle(
+        session=original.session,
+        open=original.open * 1.03,
+        high=original.high * 1.05,
+        low=original.low * 0.97,
+        close=original.close * 1.04,
+        volume=original.volume * 1.5,
+        amount=original.amount * 1.5,
     )
     disturbed = extractor.extract(
         spec=spec, candles=tuple(perturbed), source_data_sha256=source_sha
     )
+
+    # The perturbation must actually reach the official representation, or the
+    # causality assertion below would hold vacuously.
+    effective = (
+        not np.array_equal(extracted.coarse_ids[pivot:], disturbed.coarse_ids[pivot:])
+        or not np.array_equal(extracted.fine_ids[pivot:], disturbed.fine_ids[pivot:])
+        or not np.array_equal(
+            extracted.bipolar_latent[pivot:], disturbed.bipolar_latent[pivot:]
+        )
+        or not np.array_equal(
+            extracted.frozen_hidden[pivot:], disturbed.frozen_hidden[pivot:]
+        )
+    )
+    if not effective:
+        raise _fail(
+            "CANARY_CAUSALITY_PERTURBATION_INEFFECTIVE",
+            (
+                "perturbing the first scored candle changed no official token, latent, "
+                "or hidden value, so causality was not actually exercised"
+            ),
+        )
+
     causality_holds = bool(
-        np.array_equal(extracted.frozen_hidden[:-1], disturbed.frozen_hidden[:-1])
+        np.array_equal(extracted.frozen_hidden[:pivot], disturbed.frozen_hidden[:pivot])
     )
     if not causality_holds:
         raise _fail(
             "CANARY_CAUSALITY_VIOLATED",
-            "perturbing the final scored candle changed an earlier timestep",
+            (
+                f"perturbing scored position {pivot} changed the frozen hidden state "
+                "at an earlier position"
+            ),
         )
 
     # 7. identity-bound cache write, then a verified read

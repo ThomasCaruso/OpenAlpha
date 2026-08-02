@@ -72,7 +72,7 @@ def _run(tmp_path: Path, **kwargs):
         cache=FeatureCache(tmp_path / "cache"),
         research_root=RESEARCH,
         source_commit="a" * 40,
-        run_id="canary_test",
+        run_id="canary_0badc0de",
         now=datetime(2026, 8, 2, tzinfo=UTC),
         **kwargs,
     )
@@ -186,3 +186,112 @@ def test_canary_denies_authorization_explicitly() -> None:
     fields = CanaryReport.model_fields
     assert "authorizes_stage_b" in fields
     assert "authorizes_real_run" in fields
+
+
+# ------------------------------------------------ invocation identity (item 8)
+
+
+@pytest.mark.parametrize(
+    ("run_id", "code"),
+    [
+        ("canary_../escape", "CANARY_INVALID_RUN_ID"),
+        ("canary_with space", "CANARY_INVALID_RUN_ID"),
+        ("canary_/abs/path", "CANARY_INVALID_RUN_ID"),
+        ("not_a_canary_id", "CANARY_INVALID_RUN_ID"),
+        ("canary_XYZ", "CANARY_INVALID_RUN_ID"),
+    ],
+)
+def test_run_id_must_match_the_strict_canary_format(
+    tmp_path: Path, run_id: str, code: str
+) -> None:
+    with pytest.raises(BridgeTransformError) as excinfo:
+        run_stage_a_canary(
+            provider=_CountingProvider(),
+            backend=_PseudoOfficialBackend(),
+            cache=FeatureCache(tmp_path / "cache"),
+            research_root=RESEARCH,
+            source_commit="a" * 40,
+            run_id=run_id,
+        )
+    assert excinfo.value.failures[0].code == code
+
+
+@pytest.mark.parametrize(
+    "commit", ["short", "A" * 40, "g" * 40, "a" * 39, "a" * 41], ids=lambda c: c[:6]
+)
+def test_source_commit_must_be_forty_lowercase_hex(tmp_path: Path, commit: str) -> None:
+    with pytest.raises(BridgeTransformError) as excinfo:
+        run_stage_a_canary(
+            provider=_CountingProvider(),
+            backend=_PseudoOfficialBackend(),
+            cache=FeatureCache(tmp_path / "cache"),
+            research_root=RESEARCH,
+            source_commit=commit,
+            run_id="canary_0badc0de",
+        )
+    assert excinfo.value.failures[0].code == "CANARY_INVALID_SOURCE_COMMIT"
+
+
+def test_source_commit_must_match_the_deployed_image(tmp_path: Path) -> None:
+    """The canary must run the code that was actually deployed."""
+    with pytest.raises(BridgeTransformError) as excinfo:
+        run_stage_a_canary(
+            provider=_CountingProvider(),
+            backend=_PseudoOfficialBackend(),
+            cache=FeatureCache(tmp_path / "cache"),
+            research_root=RESEARCH,
+            source_commit="a" * 40,
+            run_id="canary_0badc0de",
+            deployed_commit="b" * 40,
+        )
+    assert excinfo.value.failures[0].code == "CANARY_SOURCE_COMMIT_MISMATCH"
+
+
+# ------------------------------------------------------- causality (item 5)
+
+
+def test_causality_is_checked_at_the_first_scored_position() -> None:
+    """Perturbing only the final candle would be nearly vacuous."""
+    source = (
+        ROOT / "packages" / "bridge" / "src" / "openalpha_bridge" / "phase2" / "canary.py"
+    ).read_text(encoding="utf-8")
+    assert "pivot = CONTEXT_PREFIX_LENGTH" in source
+    assert "frozen_hidden[:pivot]" in source
+    assert "CANARY_CAUSALITY_PERTURBATION_INEFFECTIVE" in source
+
+
+def test_an_ineffective_perturbation_is_reported_not_claimed(tmp_path: Path) -> None:
+    """A backend that ignores values must not yield a passing causality claim."""
+
+    class _ValueBlindBackend(_PseudoOfficialBackend):
+        def encode_tokens(self, features):
+            import numpy as _np
+
+            length = features.shape[0]
+            return (
+                _np.zeros(length, dtype=_np.int64),
+                _np.zeros(length, dtype=_np.int64),
+            )
+
+    with pytest.raises(BridgeTransformError) as excinfo:
+        _run(tmp_path, backend=_ValueBlindBackend())
+    assert excinfo.value.failures[0].code == "CANARY_CAUSALITY_PERTURBATION_INEFFECTIVE"
+
+
+def test_the_fake_backend_is_content_sensitive_and_causal() -> None:
+    """Otherwise every causality test in the suite would pass vacuously."""
+    import numpy as _np
+    from openalpha_bridge.phase2.kronos import DeterministicFakeKronosBackend as _B
+
+    backend = _B()
+    base = _np.zeros((32, 6), dtype=_np.float32)
+    changed = base.copy()
+    changed[10, 0] = 1.0
+
+    c0, f0 = backend.encode_tokens(base)
+    c1, _ = backend.encode_tokens(changed)
+    assert _np.array_equal(c0[:10], c1[:10]), "earlier rows must not move"
+    assert not _np.array_equal(c0[10:], c1[10:]), "later rows must move"
+    # Deterministic for identical input.
+    assert _np.array_equal(c0, backend.encode_tokens(base)[0])
+    assert _np.array_equal(f0, backend.encode_tokens(base)[1])

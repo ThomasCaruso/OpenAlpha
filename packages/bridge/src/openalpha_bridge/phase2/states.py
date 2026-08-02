@@ -55,6 +55,7 @@ class EvidenceClass(StrEnum):
 
     REAL_PHASE2 = "real_phase2"
     SYNTHETIC_PIPELINE_VALIDATION = "synthetic_pipeline_validation"
+    DEVELOPMENT_COMPATIBILITY_CANARY = "development_compatibility_canary"
 
 
 #: The single linear success path. Every state may also fail or block.

@@ -25,6 +25,7 @@ from ..phase2.states import EvidenceClass
 
 __all__ = [
     "ARTIFACT_PREFIX",
+    "EVIDENCE_ROOTS",
     "InMemoryObjectStore",
     "ObjectMetadata",
     "ObjectStore",
@@ -35,6 +36,16 @@ __all__ = [
 
 ARTIFACT_PREFIX = "openalpha/bridge-phase2"
 _SYNTHETIC_PREFIX = "openalpha-synthetic/bridge-phase2"
+_COMPATIBILITY_PREFIX = "openalpha-compatibility/bridge-phase2"
+
+#: Explicitly mapped, pairwise disjoint storage roots. There is deliberately no
+#: else-branch: an unmapped evidence class must fail rather than silently land
+#: in the synthetic root.
+EVIDENCE_ROOTS: dict[EvidenceClass, str] = {
+    EvidenceClass.REAL_PHASE2: ARTIFACT_PREFIX,
+    EvidenceClass.SYNTHETIC_PIPELINE_VALIDATION: _SYNTHETIC_PREFIX,
+    EvidenceClass.DEVELOPMENT_COMPATIBILITY_CANARY: _COMPATIBILITY_PREFIX,
+}
 
 
 def _fail(code: str, message: str, *, field: str | None = None) -> BridgeTransformError:
@@ -49,11 +60,13 @@ def _fail(code: str, message: str, *, field: str | None = None) -> BridgeTransfo
 
 
 def _base_prefix(evidence_class: EvidenceClass) -> str:
-    return (
-        ARTIFACT_PREFIX
-        if evidence_class is EvidenceClass.REAL_PHASE2
-        else _SYNTHETIC_PREFIX
-    )
+    root = EVIDENCE_ROOTS.get(evidence_class)
+    if root is None:
+        raise _fail(
+            "UNMAPPED_EVIDENCE_CLASS",
+            f"{evidence_class.value} has no explicitly mapped storage root",
+        )
+    return root
 
 
 def run_prefix(run_id: str, evidence_class: EvidenceClass) -> str:

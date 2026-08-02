@@ -540,10 +540,23 @@ class DeterministicFakeKronosBackend:
     def encode_tokens(
         self, features: NDArray[np.float32]
     ) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
+        """Content-sensitive, causal, and deterministic.
+
+        Row t is a pure function of rows 0..t, so it mirrors the official causal
+        encoder: a change at position p moves rows p onward and leaves earlier
+        rows byte-identical. Deriving tokens from the sequence length alone
+        would make any causality test pass vacuously.
+        """
         length = features.shape[0]
-        rng = self._generator("tokens", length)
-        coarse = rng.integers(0, COARSE_VOCABULARY_SIZE, size=length, dtype=np.int64)
-        fine = rng.integers(0, FINE_VOCABULARY_SIZE, size=length, dtype=np.int64)
+        contiguous = np.ascontiguousarray(features, dtype=np.float32)
+        coarse = np.empty(length, dtype=np.int64)
+        fine = np.empty(length, dtype=np.int64)
+        running = hashlib.sha256(f"{self._seed}|tokens".encode())
+        for index in range(length):
+            running.update(contiguous[index].tobytes())
+            digest = running.digest()
+            coarse[index] = int.from_bytes(digest[:8], "big") % COARSE_VOCABULARY_SIZE
+            fine[index] = int.from_bytes(digest[8:16], "big") % FINE_VOCABULARY_SIZE
         assert_token_ranges(coarse, fine)
         return coarse, fine
 

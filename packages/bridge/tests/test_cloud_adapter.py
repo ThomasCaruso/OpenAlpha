@@ -972,3 +972,38 @@ def test_resource_guards_enforce_the_locked_budgets() -> None:
     with pytest.raises(BridgeTransformError) as excinfo:
         guards.assert_provider_requests(10_000)
     assert excinfo.value.failures[0].code == "PROVIDER_REQUEST_BUDGET_EXCEEDED"
+
+
+# ------------------------------- evidence-class storage roots (item 3)
+
+
+def test_the_three_evidence_roots_are_pairwise_disjoint() -> None:
+    from openalpha_bridge.cloud.objectstore import EVIDENCE_ROOTS
+
+    assert set(EVIDENCE_ROOTS) == set(EvidenceClass)
+    roots = list(EVIDENCE_ROOTS.values())
+    assert len(set(roots)) == len(roots)
+    for index, first in enumerate(roots):
+        for second in roots[index + 1 :]:
+            assert not first.startswith(second)
+            assert not second.startswith(first)
+
+
+def test_the_canary_root_is_neither_real_nor_synthetic() -> None:
+    from openalpha_bridge.cloud.objectstore import run_prefix
+
+    canary = run_prefix("canary_0badc0de", EvidenceClass.DEVELOPMENT_COMPATIBILITY_CANARY)
+    real = run_prefix("canary_0badc0de", EvidenceClass.REAL_PHASE2)
+    synthetic = run_prefix(
+        "canary_0badc0de", EvidenceClass.SYNTHETIC_PIPELINE_VALIDATION
+    )
+    assert canary != real and canary != synthetic
+    assert canary.startswith("openalpha-compatibility/")
+
+
+def test_every_evidence_class_has_an_explicit_root() -> None:
+    """No else-branch may silently map an unmapped class to synthetic."""
+    from openalpha_bridge.cloud.objectstore import EVIDENCE_ROOTS
+
+    for member in EvidenceClass:
+        assert member in EVIDENCE_ROOTS, f"{member.value} has no explicit storage root"
