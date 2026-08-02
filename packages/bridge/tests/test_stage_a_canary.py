@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import json
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import ClassVar
 
 import pytest
 from openalpha_bridge.errors import BridgeTransformError
+from openalpha_bridge.phase2 import canary as canary_module
 from openalpha_bridge.phase2.cache import FeatureCache
 from openalpha_bridge.phase2.canary import (
     AMENDMENTS,
@@ -24,16 +26,22 @@ from openalpha_bridge.phase2.kronos import (
     KronosMode,
     ResolvedAssets,
 )
+from openalpha_bridge.phase2.measurement import (
+    ObservedRetrieval,
+    ObservingProvider,
+    directory_bytes,
+)
 from openalpha_bridge.phase2.observed import (
     ObservedEncode,
     ObservedKronosComponents,
     ObservedLinear,
     ObservedModule,
 )
-from openalpha_bridge.phase2.provider import DeterministicFakeProvider
+from openalpha_bridge.phase2.provider import DeterministicFakeProvider, RetrievalRequest
 
 ROOT = Path(__file__).resolve().parents[3]
 RESEARCH = ROOT / "research" / "bridge-v0"
+CANARY_MODULE = Path(canary_module.__file__)
 
 
 class _PseudoOfficialBackend(DeterministicFakeKronosBackend):
@@ -167,7 +175,7 @@ def test_canary_passes_and_reports_the_locked_contract(tmp_path: Path) -> None:
     assert encode.batched_shapes == ((1, 512), (1, 512))
     assert report.retrieved_candles == 512
     assert report.provider_request_count == 1
-    assert report.wall_clock_seconds >= 0.0
+    assert report.timing.total_worker_wall_seconds >= 0.0
 
 
 def test_canary_makes_exactly_one_provider_request_for_spy_only(tmp_path: Path) -> None:
@@ -175,6 +183,177 @@ def test_canary_makes_exactly_one_provider_request_for_spy_only(tmp_path: Path) 
     provider, _ = _run(tmp_path)
     assert len(provider.requests) == 1
     assert provider.requests[0].startswith("SPY:2015-05-07:2017-05-18")
+
+
+def test_the_reported_call_count_is_measured_not_asserted(tmp_path: Path) -> None:
+    """The count comes from the wrapper's observation list, not a literal."""
+    provider, report = _run(tmp_path)
+    assert report.provider_request_count == len(provider.requests)
+    assert report.provider_calls == (
+        ObservedRetrieval(
+            symbol="SPY",
+            interval="1d",
+            start="2015-05-07",
+            end_exclusive="2017-05-18",
+            maximum_candles=512,
+            returned_candles=512,
+        ),
+    )
+
+
+def _amended_request() -> RetrievalRequest:
+    return RetrievalRequest(
+        symbol="SPY",
+        start=date(2015, 5, 7),
+        end=date(2017, 5, 18),
+        maximum_candles=512,
+    )
+
+
+@pytest.mark.parametrize("extra_calls", [0, 1, 2])
+def test_any_call_count_other_than_one_fails_closed(extra_calls: int) -> None:
+    observing = ObservingProvider(DeterministicFakeProvider())
+    for _ in range(1 + extra_calls):
+        observing.fetch(_amended_request())
+    bounds = {
+        "symbol": "SPY",
+        "start": "2015-05-07",
+        "end_exclusive": "2017-05-18",
+        "maximum_candles": 512,
+    }
+    if extra_calls == 0:
+        assert observing.assert_exactly(**bounds).symbol == "SPY"  # pyright: ignore[reportArgumentType]
+        return
+    with pytest.raises(BridgeTransformError) as excinfo:
+        observing.assert_exactly(**bounds)  # pyright: ignore[reportArgumentType]
+    assert excinfo.value.failures[0].code == "CANARY_UNEXPECTED_PROVIDER_CALL_COUNT"
+    assert str(1 + extra_calls) in excinfo.value.failures[0].message
+
+
+def test_zero_calls_also_fails_closed() -> None:
+    """An empty observation list must not read as a satisfied requirement."""
+    observing = ObservingProvider(DeterministicFakeProvider())
+    with pytest.raises(BridgeTransformError) as excinfo:
+        observing.assert_exactly(
+            symbol="SPY",
+            start="2015-05-07",
+            end_exclusive="2017-05-18",
+            maximum_candles=512,
+        )
+    assert excinfo.value.failures[0].code == "CANARY_UNEXPECTED_PROVIDER_CALL_COUNT"
+
+
+def test_the_measured_boundary_is_canary_to_provider(tmp_path: Path) -> None:
+    """Documents exactly what the count does and does not cover.
+
+    The wrapper counts retrievals the canary requests. It cannot see HTTP
+    requests a provider issues internally to serve one retrieval, so the report
+    field is named for the boundary it actually measures.
+    """
+    _, report = _run(tmp_path)
+    assert report.provider_request_count == 1
+    field = type(report).model_fields["provider_request_count"]
+    assert field.description is not None
+    assert "canary" in field.description.lower()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("symbol", "QQQ"),
+        ("start", "2015-05-08"),
+        ("end_exclusive", "2017-05-19"),
+        ("maximum_candles", 256),
+    ],
+)
+def test_an_altered_request_fails_closed(field: str, value: object) -> None:
+    """The wrapper compares against the amended bounds, not against itself."""
+    observing = ObservingProvider(DeterministicFakeProvider())
+    observing.fetch(
+        RetrievalRequest(
+            symbol="SPY",
+            start=date(2015, 5, 7),
+            end=date(2017, 5, 18),
+            maximum_candles=512,
+        )
+    )
+    bounds: dict[str, object] = {
+        "symbol": "SPY",
+        "start": "2015-05-07",
+        "end_exclusive": "2017-05-18",
+        "maximum_candles": 512,
+    }
+    bounds[field] = value
+    with pytest.raises(BridgeTransformError) as excinfo:
+        observing.assert_exactly(**bounds)  # pyright: ignore[reportArgumentType]
+    assert excinfo.value.failures[0].code == "CANARY_UNEXPECTED_PROVIDER_REQUEST"
+    assert field in excinfo.value.failures[0].message
+
+
+def test_cache_bytes_are_measured_from_the_filesystem(tmp_path: Path) -> None:
+    asset_root = tmp_path / "hf"
+    asset_root.mkdir()
+    (asset_root / "preexisting.bin").write_bytes(b"\x00" * 4096)
+    _, report = _run(tmp_path, asset_cache_root=asset_root)
+    measured = report.cache_measurement
+
+    assert measured.asset_cache_bytes_before == 4096
+    assert measured.asset_cache_bytes_after == directory_bytes(asset_root)
+    assert measured.total_asset_cache_bytes == measured.asset_cache_bytes_after
+    # The fake backend downloads nothing, so the delta must be exactly zero
+    # rather than an estimate of what a real download would cost.
+    assert measured.newly_downloaded_asset_bytes == 0
+
+    assert measured.feature_cache_bytes_before == 0
+    assert measured.feature_cache_bytes_after == directory_bytes(tmp_path / "cache")
+    assert measured.feature_cache_bytes_after > 0
+    assert measured.new_shard_bytes == report.shard_bytes
+    shard = tmp_path / "cache" / report.shard_relative_path
+    assert shard.stat().st_size == report.shard_bytes
+
+
+def test_timing_scopes_are_separate_and_no_cost_is_estimated(tmp_path: Path) -> None:
+    _, report = _run(tmp_path)
+    timing = report.timing
+    scopes = (
+        timing.asset_resolution_seconds,
+        timing.primary_extraction_seconds,
+        timing.deterministic_replay_seconds,
+        timing.causality_extraction_seconds,
+        timing.cache_verification_seconds,
+    )
+    assert all(value >= 0.0 for value in scopes)
+    # Total worker wall time is its own measurement, not a sum of the scopes.
+    assert timing.total_worker_wall_seconds >= max(scopes)
+    assert timing.estimated_monetary_cost is None
+    payload = json.loads(report.model_dump_json())
+    assert payload["timing"]["estimated_monetary_cost"] is None
+    assert not any("cost" in key and key != "estimated_monetary_cost" for key in payload["timing"])
+
+
+def test_gpu_measurement_is_recorded_or_explicitly_absent(tmp_path: Path) -> None:
+    _, report = _run(tmp_path)
+    gpu = report.gpu_measurement
+    if gpu.cuda_available:
+        assert gpu.device_name
+        assert gpu.peak_allocated_bytes is not None and gpu.peak_allocated_bytes >= 0
+        assert gpu.peak_reserved_bytes is not None and gpu.peak_reserved_bytes >= 0
+    else:
+        # Absence is reported as absence. It is never reported as zero bytes,
+        # which would read as a device that allocated nothing.
+        assert gpu.device_name is None
+        assert gpu.peak_allocated_bytes is None
+        assert gpu.peak_reserved_bytes is None
+
+
+def test_no_measurement_is_a_hardcoded_literal() -> None:
+    """Guards against a regression to the previous `provider_request_count=1`."""
+    source = (CANARY_MODULE).read_text(encoding="utf-8")
+    assert "provider_request_count=observing.call_count" in source
+    assert "provider_request_count=1" not in source
+    assert "wall_clock_seconds=round(" not in source
+    for measured in ("asset_before", "asset_after", "feature_before", "feature_after"):
+        assert f"{measured} = directory_bytes(" in source or f"{measured} = 0" in source
 
 
 def test_canary_refuses_a_non_official_backend(tmp_path: Path) -> None:
@@ -205,9 +384,7 @@ def test_canary_module_has_no_path_into_later_stages() -> None:
     """
     import ast
 
-    path = (
-        ROOT / "packages" / "bridge" / "src" / "openalpha_bridge" / "phase2" / "canary.py"
-    )
+    path = ROOT / "packages" / "bridge" / "src" / "openalpha_bridge" / "phase2" / "canary.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
 
     forbidden_modules = {"pipeline", "runner", "training", "testgate", "gates", "metrics"}
@@ -264,9 +441,7 @@ def test_canary_denies_authorization_explicitly() -> None:
         ("canary_XYZ", "CANARY_INVALID_RUN_ID"),
     ],
 )
-def test_run_id_must_match_the_strict_canary_format(
-    tmp_path: Path, run_id: str, code: str
-) -> None:
+def test_run_id_must_match_the_strict_canary_format(tmp_path: Path, run_id: str, code: str) -> None:
     with pytest.raises(BridgeTransformError) as excinfo:
         run_stage_a_canary(
             provider=_CountingProvider(),
@@ -420,9 +595,7 @@ def test_encode_batched_shape_is_asserted() -> None:
     from openalpha_bridge.phase2.observed import assert_observed_matches_locks
 
     manifest = _bad_manifest(
-        encode=_observed_encode().model_copy(
-            update={"batched_shapes": ((1, 256), (1, 256))}
-        )
+        encode=_observed_encode().model_copy(update={"batched_shapes": ((1, 256), (1, 256))})
     )
     with pytest.raises(BridgeTransformError) as excinfo:
         assert_observed_matches_locks(

@@ -229,9 +229,7 @@ def test_app_module_imports_nothing_from_the_workspace_at_module_level() -> None
                 for alias in node.names
                 if alias.name.startswith("openalpha_")
             )
-    assert not offenders, (
-        f"workspace imports must stay inside functions, found: {offenders}"
-    )
+    assert not offenders, f"workspace imports must stay inside functions, found: {offenders}"
 
 
 def test_image_pins_and_verifies_the_official_kronos_source() -> None:
@@ -274,10 +272,76 @@ def test_image_source_constants_match_the_locked_spec() -> None:
     files = found["KRONOS_SOURCE_FILES"]
     assert isinstance(files, dict)
     assert files == {
-        "model/kronos.py": (
-            "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a"
-        ),
-        "model/module.py": (
-            "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f"
-        ),
+        "model/kronos.py": ("638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a"),
+        "model/module.py": ("a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f"),
     }
+
+
+def _image_pins() -> dict[str, str]:
+    """Read CANARY_RUNTIME_PINS from the Modal app without importing modal."""
+    tree = ast.parse(_source())
+    for node in tree.body:
+        if isinstance(node, ast.AnnAssign | ast.Assign):
+            targets = [node.target] if isinstance(node, ast.AnnAssign) else node.targets
+            names = [t.id for t in targets if isinstance(t, ast.Name)]
+            if "CANARY_RUNTIME_PINS" in names and node.value is not None:
+                return ast.literal_eval(node.value)
+    pytest.fail("the Modal app declares no CANARY_RUNTIME_PINS")
+
+
+def test_image_pins_match_the_runtime_manifest() -> None:
+    """The image literals and the package manifest must never drift."""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "packages" / "bridge" / "src"))
+    try:
+        from openalpha_bridge.phase2.runtime_pins import CANARY_RUNTIME_PINS
+    finally:
+        sys.path.pop(0)
+    assert _image_pins() == CANARY_RUNTIME_PINS
+
+
+def test_every_canary_dependency_is_pinned_exactly() -> None:
+    pins = _image_pins()
+    required = {
+        "torch",
+        "numpy",
+        "pandas",
+        "tqdm",
+        "einops",
+        "huggingface-hub",
+        "safetensors",
+        "yfinance",
+        "pydantic",
+    }
+    assert required <= set(pins)
+    for name, version in pins.items():
+        assert version[0].isdigit(), f"{name} pin {version!r} is not an exact version"
+        for operator in (">=", "<=", "~=", ">", "<", "*"):
+            assert operator not in version, f"{name} pin {version!r} is a range"
+
+
+def test_image_installs_no_ranged_canary_dependency() -> None:
+    """A ranged specifier for a canary package would defeat the pinning."""
+    source = _source()
+    for name in ("numpy", "pandas", "tqdm", "einops", "safetensors", "yfinance"):
+        assert f'"{name}>=' not in source, f"{name} is installed with a range"
+
+
+def test_pins_match_the_lockfile() -> None:
+    """uv.lock is the source of authority; the manifest must agree with it."""
+    import re
+
+    text = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    resolved: dict[str, str] = {}
+    for block in text.split("[[package]]"):
+        name = re.search(r'^name = "([^"]+)"', block, re.MULTILINE)
+        version = re.search(r'^version = "([^"]+)"', block, re.MULTILINE)
+        if name and version:
+            resolved[name.group(1)] = version.group(1)
+
+    for name, pinned in _image_pins().items():
+        assert name in resolved, f"{name} is pinned but absent from uv.lock"
+        assert resolved[name] == pinned, (
+            f"{name} pinned {pinned} but uv.lock resolves {resolved[name]}"
+        )

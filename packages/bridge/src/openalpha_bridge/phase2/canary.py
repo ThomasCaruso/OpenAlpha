@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
@@ -49,6 +50,17 @@ from .kronos import (
     TOKENIZER_SPEC,
     KronosBackend,
     KronosMode,
+)
+from .measurement import (
+    CacheMeasurement,
+    GpuMeasurement,
+    ObservedRetrieval,
+    ObservingProvider,
+    TimingScopes,
+    directory_bytes,
+    gpu_snapshot,
+    reset_gpu_statistics,
+    scoped_timer,
 )
 from .observed import ObservedKronosComponents, assert_observed_matches_locks
 from .provider import Candle, MarketSeries, Phase2Provider, RetrievalRequest, validate_series
@@ -133,7 +145,6 @@ class CanaryWindow(BaseModel):
 
 
 CANARY_WINDOW = CanaryWindow()
-
 
 
 class CanaryFailure(BaseModel):
@@ -222,21 +233,19 @@ class CanaryReport(BaseModel):
     shard_bytes: int
     cache_read_verified: bool
 
-    peak_gpu_memory_bytes: int | None
-    wall_clock_seconds: float
-    provider_request_count: int = Field(ge=0)
-    downloaded_asset_bytes: int | None
+    provider_calls: tuple[ObservedRetrieval, ...]
+    provider_request_count: int = Field(
+        ge=0,
+        description=(
+            "Retrievals the canary requested, measured at the canary-to-provider "
+            "boundary. It does not count HTTP requests a provider issues "
+            "internally to serve one retrieval."
+        ),
+    )
+    cache_measurement: CacheMeasurement
+    gpu_measurement: GpuMeasurement
+    timing: TimingScopes
     completed_at: datetime
-
-
-def _peak_gpu_memory() -> int | None:
-    try:
-        import torch  # pyright: ignore[reportMissingImports]
-    except ImportError:
-        return None
-    if not torch.cuda.is_available():
-        return None
-    return int(torch.cuda.max_memory_allocated())
 
 
 _RUN_ID_PATTERN = re.compile(r"^canary_[0-9a-f]{8,32}$")
@@ -273,13 +282,19 @@ def run_stage_a_canary(
     research_root: Any,
     source_commit: str,
     run_id: str,
-    downloaded_asset_bytes: int | None = None,
+    asset_cache_root: Any | None = None,
     deployed_commit: str | None = None,
     now: datetime | None = None,
 ) -> CanaryReport:
     """Execute the canary end to end, or fail closed and preserve the negative."""
     _validate_invocation(run_id, source_commit, deployed_commit)
-    started = time.perf_counter()
+    worker_started = time.perf_counter()
+    reset_gpu_statistics()
+
+    observing = ObservingProvider(provider)
+    asset_root = Path(asset_cache_root) if asset_cache_root is not None else None
+    asset_before = directory_bytes(asset_root) if asset_root else 0
+    feature_before = directory_bytes(cache.root)
 
     # 1. locks and amendments
     observed_locks = verify_locked_hashes(research_root)
@@ -296,7 +311,7 @@ def run_stage_a_canary(
     # 2. retrieve ONLY the amended window
     from datetime import date
 
-    series: MarketSeries = provider.fetch(
+    series: MarketSeries = observing.fetch(
         RetrievalRequest(
             symbol=CANARY_WINDOW.symbol,
             start=date.fromisoformat(CANARY_WINDOW.retrieval_start_inclusive),
@@ -305,14 +320,22 @@ def run_stage_a_canary(
         )
     )
     validate_series(series)
-    if len(series.candles) != EXAMPLE_LENGTH:
+    observed_call = observing.assert_exactly(
+        symbol=CANARY_WINDOW.symbol,
+        start=CANARY_WINDOW.retrieval_start_inclusive,
+        end_exclusive=CANARY_WINDOW.retrieval_end_exclusive,
+        maximum_candles=EXAMPLE_LENGTH,
+    )
+    if observed_call.returned_candles != EXAMPLE_LENGTH:
         raise _fail(
             "CANARY_UNEXPECTED_CANDLE_COUNT",
-            f"expected {EXAMPLE_LENGTH} candles, retrieved {len(series.candles)}",
+            f"expected {EXAMPLE_LENGTH} candles, retrieved {observed_call.returned_candles}",
         )
 
     # 3. official assets
-    assets = backend.resolve_assets()
+    with scoped_timer() as asset_timer:
+        assets = backend.resolve_assets()
+    asset_after = directory_bytes(asset_root) if asset_root else 0
     if not assets.revisions_verified:
         raise _fail("CANARY_ASSETS_UNVERIFIED", "official asset revisions did not verify")
 
@@ -339,7 +362,8 @@ def run_stage_a_canary(
     extractor = FeatureExtractor(backend)
     candles: tuple[Candle, ...] = series.candles
     source_sha = series.normalized_sha256
-    extracted = extractor.extract(spec=spec, candles=candles, source_data_sha256=source_sha)
+    with scoped_timer() as extraction_timer:
+        extracted = extractor.extract(spec=spec, candles=candles, source_data_sha256=source_sha)
 
     observed = getattr(backend, "observed", None)
     if not isinstance(observed, ObservedKronosComponents):
@@ -357,7 +381,8 @@ def run_stage_a_canary(
     )
 
     # 5. byte-identical replay
-    replay = extractor.extract(spec=spec, candles=candles, source_data_sha256=source_sha)
+    with scoped_timer() as replay_timer:
+        replay = extractor.extract(spec=spec, candles=candles, source_data_sha256=source_sha)
     canonical = extracted.canonical_sha256()
     replay_matched = replay.canonical_sha256() == canonical
     if not replay_matched:
@@ -381,21 +406,18 @@ def run_stage_a_canary(
         volume=original.volume * 1.5,
         amount=original.amount * 1.5,
     )
-    disturbed = extractor.extract(
-        spec=spec, candles=tuple(perturbed), source_data_sha256=source_sha
-    )
+    with scoped_timer() as causality_timer:
+        disturbed = extractor.extract(
+            spec=spec, candles=tuple(perturbed), source_data_sha256=source_sha
+        )
 
     # The perturbation must actually reach the official representation, or the
     # causality assertion below would hold vacuously.
     effective = (
         not np.array_equal(extracted.coarse_ids[pivot:], disturbed.coarse_ids[pivot:])
         or not np.array_equal(extracted.fine_ids[pivot:], disturbed.fine_ids[pivot:])
-        or not np.array_equal(
-            extracted.bipolar_latent[pivot:], disturbed.bipolar_latent[pivot:]
-        )
-        or not np.array_equal(
-            extracted.frozen_hidden[pivot:], disturbed.frozen_hidden[pivot:]
-        )
+        or not np.array_equal(extracted.bipolar_latent[pivot:], disturbed.bipolar_latent[pivot:])
+        or not np.array_equal(extracted.frozen_hidden[pivot:], disturbed.frozen_hidden[pivot:])
     )
     if not effective:
         raise _fail(
@@ -452,8 +474,9 @@ def run_stage_a_canary(
             "bridge_input": f"float32[{EXAMPLE_LENGTH},{BRIDGE_INPUT_DIMENSION}]",
         },
     )
-    shard = cache.write(extracted.to_cached_example(identity))
-    restored = cache.read(shard)
+    with scoped_timer() as cache_timer:
+        shard = cache.write(extracted.to_cached_example(identity))
+        restored = cache.read(shard)
     cache_verified = (
         restored.sequence_id == extracted.sequence_id
         and restored.identity.identity_sha256 == identity.identity_sha256
@@ -461,6 +484,7 @@ def run_stage_a_canary(
     )
     if not cache_verified:
         raise _fail("CANARY_CACHE_VERIFICATION_FAILED", "the cached shard did not round trip")
+    feature_after = directory_bytes(cache.root)
 
     return CanaryReport(
         outcome=CANARY_SUCCESS_CODE,
@@ -502,9 +526,33 @@ def run_stage_a_canary(
         shard_content_sha256=shard.content_sha256,
         shard_bytes=shard.size_bytes,
         cache_read_verified=cache_verified,
-        peak_gpu_memory_bytes=_peak_gpu_memory(),
-        wall_clock_seconds=round(time.perf_counter() - started, 3),
-        provider_request_count=1,
-        downloaded_asset_bytes=downloaded_asset_bytes,
+        provider_calls=tuple(observing.calls),
+        provider_request_count=observing.call_count,
+        cache_measurement=CacheMeasurement(
+            asset_cache_bytes_before=asset_before,
+            asset_cache_bytes_after=asset_after,
+            newly_downloaded_asset_bytes=max(0, asset_after - asset_before),
+            total_asset_cache_bytes=asset_after,
+            feature_cache_bytes_before=feature_before,
+            feature_cache_bytes_after=feature_after,
+            new_shard_bytes=shard.size_bytes,
+            total_canary_feature_cache_bytes=feature_after,
+        ),
+        gpu_measurement=gpu_snapshot(),
+        timing=TimingScopes(
+            asset_resolution_seconds=asset_timer.seconds,
+            primary_extraction_seconds=extraction_timer.seconds,
+            deterministic_replay_seconds=replay_timer.seconds,
+            causality_extraction_seconds=causality_timer.seconds,
+            cache_verification_seconds=cache_timer.seconds,
+            official_numerical_path_seconds=round(
+                asset_timer.seconds
+                + extraction_timer.seconds
+                + replay_timer.seconds
+                + causality_timer.seconds,
+                6,
+            ),
+            total_worker_wall_seconds=round(time.perf_counter() - worker_started, 6),
+        ),
         completed_at=now or datetime.now(UTC),
     )

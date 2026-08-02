@@ -32,8 +32,29 @@ APP_VERSION = "1.0.0"
 
 # Pinned, code-defined, built by Modal. The user never builds Docker locally.
 PYTHON_VERSION = "3.13"
-TORCH_VERSION = "2.5.1"
+
+# Exact runtime pins live in openalpha_bridge.phase2.runtime_pins, resolved from
+# uv.lock. They are duplicated here as literals only because `modal deploy`
+# imports this file before the workspace packages are importable; a packaging
+# test asserts the two never drift apart.
+CANARY_RUNTIME_PINS: dict[str, str] = {
+    "torch": "2.13.0",
+    "numpy": "2.5.1",
+    "pandas": "3.0.5",
+    "tqdm": "4.70.0",
+    "einops": "0.8.2",
+    "huggingface-hub": "0.36.2",
+    "safetensors": "0.8.0",
+    "yfinance": "1.5.2",
+    "pydantic": "2.13.4",
+}
+TORCH_VERSION = CANARY_RUNTIME_PINS["torch"]
 CUDA_INDEX = "https://download.pytorch.org/whl/cu124"
+
+
+def _pin(name: str) -> str:
+    return f"{name}=={CANARY_RUNTIME_PINS[name]}"
+
 
 # The pinned official Kronos source. Mirrors experiment.yaml official_source;
 # openalpha_bridge.phase2.kronos.SOURCE_SPEC is the authority and a deployment
@@ -45,6 +66,7 @@ KRONOS_SOURCE_FILES: dict[str, str] = {
     "model/kronos.py": "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a",
     "model/module.py": "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f",
 }
+
 
 def _repo_root() -> Path | None:
     """The repository root when deploying, or None inside the container.
@@ -61,6 +83,7 @@ def _repo_root() -> Path | None:
         return None
     candidate = here.parents[2]
     return candidate if (candidate / "packages" / "bridge").is_dir() else None
+
 
 #: Workspace packages copied into the image, and their import locations.
 #:
@@ -91,18 +114,19 @@ def _build_image() -> Any:
             extra_index_url=CUDA_INDEX,
         )
         .pip_install(
-            "numpy>=2.5,<3",
-            "pydantic>=2.11,<3",
-            "yfinance==1.5.2",
-            "huggingface-hub>=0.34,<1",
-            "safetensors>=0.4,<1",
+            # Every canary-relevant package is pinned exactly, from uv.lock.
+            _pin("numpy"),
+            _pin("pydantic"),
+            _pin("yfinance"),
+            _pin("huggingface-hub"),
+            _pin("safetensors"),
+            # Runtime imports of the pinned official Kronos source.
+            _pin("pandas"),
+            _pin("tqdm"),
+            _pin("einops"),
+            # Control plane; not part of the official numerical path.
             "boto3>=1.35,<2",
             "fastapi>=0.115,<1",
-            # Runtime dependencies of the pinned official Kronos source. Pinned
-            # explicitly rather than relied on transitively.
-            "pandas>=2.2,<3",
-            "tqdm>=4.66,<5",
-            "einops>=0.8,<1",
         )
         # Clone the pinned official source, check out the exact detached
         # revision, and verify both the revision and every locked file hash.
@@ -299,9 +323,7 @@ def phase2_gpu_worker(run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     _register_secrets()
     store = _build_store()
 
-    identity_key = (
-        f"openalpha/bridge-phase2/runs/{run_id}/identity/run_identity.json"
-    )
+    identity_key = f"openalpha/bridge-phase2/runs/{run_id}/identity/run_identity.json"
     identity = get_model(store, identity_key, CloudRunIdentity)
 
     cache_root = Path(CACHE_ROOT)
@@ -367,9 +389,7 @@ def phase2_synthetic_worker(run_id: str, payload: dict[str, Any]) -> dict[str, A
     _register_secrets()
     store = _build_store()
 
-    identity_key = (
-        f"openalpha-synthetic/bridge-phase2/runs/{run_id}/identity/run_identity.json"
-    )
+    identity_key = f"openalpha-synthetic/bridge-phase2/runs/{run_id}/identity/run_identity.json"
     identity = get_model(store, identity_key, CloudRunIdentity)
 
     with tempfile.TemporaryDirectory() as scratch:
@@ -486,6 +506,9 @@ def stage_a_official_canary(source_commit: str, run_id: str) -> dict[str, Any]:
         research_root=Path("/root/research/bridge-v0"),
         source_commit=source_commit,
         run_id=run_id,
+        # Measured from this directory before and after asset resolution, so the
+        # reported download size is filesystem truth rather than an estimate.
+        asset_cache_root=cache_root / "huggingface",
     )
 
     # A prefix distinct from both the real and the synthetic run namespaces.

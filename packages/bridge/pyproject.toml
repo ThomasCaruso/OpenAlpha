@@ -17,7 +17,15 @@ dependencies = [
 # Base execution: provider retrieval only. No Torch, no model assets.
 bridge-core = ["yfinance==1.5.2"]
 # Pinned Kronos asset resolution and hash verification.
-bridge-kronos = ["huggingface-hub>=0.34,<1", "safetensors>=0.4,<1"]
+# einops and tqdm are runtime imports of the pinned official Kronos source,
+# so they are declared here to give the lockfile authority over their versions.
+bridge-kronos = [
+  "huggingface-hub>=0.34,<1",
+  "safetensors>=0.4,<1",
+  "einops>=0.8,<1",
+  "tqdm>=4.66,<5",
+  "pandas>=2.2,<4",
+]
 # Stage C training. Pulls Torch; never required by the base test suite.
 bridge-training = ["torch>=2.5,<3"]
 # Control plane and S3-compatible artifact store (Cloudflare R2 by default).
