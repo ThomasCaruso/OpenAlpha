@@ -497,13 +497,30 @@ def phase2_synthetic_worker(run_id: str, payload: dict[str, Any]) -> dict[str, A
 
 @app.function(image=image, secrets=secrets, timeout=CONTROL_TIMEOUT)
 def verify_deployment() -> dict[str, Any]:
-    """Fail deployment when the image and the committed locks disagree."""
+    """Fail deployment when the image and the committed locks disagree.
+
+    Two independent families of document are checked, and both are returned
+    separately. ``locked_hashes`` covers the sealed experiment and its three
+    amendments. ``diagnostic_specification_hashes`` covers the two frozen
+    inference diagnostic specifications, which are separately hashed and are
+    not part of the sealed chain.
+
+    The diagnostic specifications used to be absent here. That made this check
+    look like it covered the image's research directory when it covered only
+    part of it, so a drifted diagnostic specification would have reached the
+    worker with the deployment check reporting success.
+    """
     from pathlib import Path
 
+    from openalpha_bridge.diagnostic.spec import verify_diagnostic_specifications
     from openalpha_bridge.phase2.identity import verify_locked_hashes
     from openalpha_bridge.windowing import score_mask_sha256
 
-    observed = verify_locked_hashes(Path("/root/research/bridge-v0"))
+    research_root = Path("/root/research/bridge-v0")
+    # Both verifiers raise on any mismatch or missing file, so reaching the
+    # return statement is itself the evidence. Nothing here is hard-coded.
+    observed = verify_locked_hashes(research_root)
+    diagnostic_hashes = verify_diagnostic_specifications(research_root)
     return {
         "app": APP_NAME,
         "version": APP_VERSION,
@@ -512,6 +529,7 @@ def verify_deployment() -> dict[str, Any]:
         "torch": TORCH_VERSION,
         "score_mask_sha256": score_mask_sha256(),
         "locked_hashes": observed,
+        "diagnostic_specification_hashes": diagnostic_hashes,
         # Raises here if the binding is missing or malformed, so a broken
         # deployment is caught by the check rather than by the canary.
         "deployed_commit": _require_deployed_commit(),
