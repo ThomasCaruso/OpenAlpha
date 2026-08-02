@@ -42,11 +42,15 @@ from .identity import (
 from .kronos import (
     BRIDGE_INPUT_DIMENSION,
     DECODER_HIDDEN_DIMENSION,
+    EFFECTIVE_DECODER_BLOCKS,
     QUANTIZED_LATENT_DIMENSION,
     SOURCE_SPEC,
+    TOKENIZER_INPUT_DIMENSION,
+    TOKENIZER_SPEC,
     KronosBackend,
     KronosMode,
 )
+from .observed import ObservedKronosComponents, assert_observed_matches_locks
 from .provider import Candle, MarketSeries, Phase2Provider, RetrievalRequest, validate_series
 from .states import EvidenceClass
 
@@ -197,7 +201,7 @@ class CanaryReport(BaseModel):
     tokenizer_config_sha256: str | None
     tokenizer_weights_sha256: str | None
     frozen_parameter_sha256: str | None
-    observed_components: dict[str, str]
+    observed_components: ObservedKronosComponents
 
     coarse_id_range: tuple[int, int]
     fine_id_range: tuple[int, int]
@@ -312,11 +316,45 @@ def run_stage_a_canary(
     if not assets.revisions_verified:
         raise _fail("CANARY_ASSETS_UNVERIFIED", "official asset revisions did not verify")
 
+    observed_source = dict(getattr(backend, "observed_source_files", {}))
+    if observed_source != dict(SOURCE_SPEC.files):
+        raise _fail(
+            "CANARY_SOURCE_FILES_MISMATCH",
+            "the executed official source files do not equal SOURCE_SPEC.files",
+        )
+    asset_checks = (
+        ("repository", assets.repository, TOKENIZER_SPEC.repository),
+        ("revision", assets.revision, TOKENIZER_SPEC.revision),
+        ("config_sha256", assets.observed_config_sha256, TOKENIZER_SPEC.config_sha256),
+        ("weights_sha256", assets.observed_weights_sha256, TOKENIZER_SPEC.weights_sha256),
+    )
+    drifted = sorted(name for name, got, want in asset_checks if got != want)
+    if drifted:
+        raise _fail(
+            "CANARY_TOKENIZER_IDENTITY_MISMATCH",
+            f"resolved tokenizer does not equal TOKENIZER_SPEC: {', '.join(drifted)}",
+        )
+
     # 4. extraction over the official path
     extractor = FeatureExtractor(backend)
     candles: tuple[Candle, ...] = series.candles
     source_sha = series.normalized_sha256
     extracted = extractor.extract(spec=spec, candles=candles, source_data_sha256=source_sha)
+
+    observed = getattr(backend, "observed", None)
+    if not isinstance(observed, ObservedKronosComponents):
+        raise _fail(
+            "CANARY_OBSERVED_MANIFEST_MISSING",
+            "the backend produced no runtime-observed component manifest",
+        )
+    assert_observed_matches_locks(
+        observed,
+        quantized_latent_dimension=QUANTIZED_LATENT_DIMENSION,
+        decoder_hidden_dimension=DECODER_HIDDEN_DIMENSION,
+        tokenizer_input_dimension=TOKENIZER_INPUT_DIMENSION,
+        expected_decoder_blocks=EFFECTIVE_DECODER_BLOCKS,
+        expected_sequence_length=EXAMPLE_LENGTH,
+    )
 
     # 5. byte-identical replay
     replay = extractor.extract(spec=spec, candles=candles, source_data_sha256=source_sha)
@@ -447,10 +485,7 @@ def run_stage_a_canary(
         tokenizer_config_sha256=assets.observed_config_sha256,
         tokenizer_weights_sha256=assets.observed_weights_sha256,
         frozen_parameter_sha256=assets.frozen_parameter_sha256,
-        observed_components={
-            "post_quant_embed": f"Linear({QUANTIZED_LATENT_DIMENSION},{DECODER_HIDDEN_DIMENSION})",
-            "decoder_blocks": "3 causal blocks",
-        },
+        observed_components=observed,
         coarse_id_range=(int(extracted.coarse_ids.min()), int(extracted.coarse_ids.max())),
         fine_id_range=(int(extracted.fine_ids.min()), int(extracted.fine_ids.max())),
         bipolar_latent_shape=(EXAMPLE_LENGTH, QUANTIZED_LATENT_DIMENSION),

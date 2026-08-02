@@ -199,7 +199,14 @@ def load_official_kronos(
             ) from error
         return module
 
-    verified_module = _execute("module")
+    # The pinned kronos.py does `sys.path.append("../")`. That mutation must
+    # not survive the load, so the entry list is snapshotted and restored.
+    original_sys_path = list(sys.path)
+    try:
+        verified_module = _execute("module")
+    except BaseException:
+        sys.path[:] = original_sys_path
+        raise
 
     # A bare namespace object with no loader and no __path__: nothing can be
     # imported *through* it, and its body is never executed.
@@ -211,9 +218,11 @@ def load_official_kronos(
     try:
         loaded: Any = _execute("kronos")
     finally:
-        # The alias exists only for the duration of the verified execution.
+        # The alias exists only for the duration of the verified execution, and
+        # sys.path is restored exactly, on success and on failure alike.
         sys.modules.pop("model.module", None)
         sys.modules.pop("model", None)
+        sys.path[:] = original_sys_path
 
     if loaded is None or not hasattr(loaded, "KronosTokenizer"):
         available = sorted(n for n in dir(loaded) if not n.startswith("_")) if loaded else []

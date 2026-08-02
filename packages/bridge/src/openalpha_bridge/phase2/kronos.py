@@ -20,6 +20,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from ..windowing import EXAMPLE_LENGTH
+from .observed import (
+    ObservedEncode,
+    ObservedKronosComponents,
+    ObservedLinear,
+    ObservedModule,
+    describe_module,
+)
 from .optional import require_module
 
 __all__ = [
@@ -262,6 +269,13 @@ class OfficialKronosBackend:
         self._model = None
         self._observed_source_files: dict[str, str] = {}
         self._dependency_versions: dict[str, str] = {}
+        self._observed: ObservedKronosComponents | None = None
+        self._resolved_attributes: dict[str, str] = {}
+
+    @property
+    def observed(self) -> ObservedKronosComponents | None:
+        """Runtime-observed component manifest, populated on resolve/encode."""
+        return self._observed
 
     @property
     def observed_source_files(self) -> dict[str, str]:
@@ -338,11 +352,7 @@ class OfficialKronosBackend:
             parameter.requires_grad_(False)
         self._model = tokenizer
 
-        _assert_linear(
-            self._component("post_quant_embed"),
-            QUANTIZED_LATENT_DIMENSION,
-            DECODER_HIDDEN_DIMENSION,
-        )
+        self._observed = self._observe(tokenizer)
         _ = torch  # the import is required for device placement above
 
         return ResolvedAssets(
@@ -371,6 +381,7 @@ class OfficialKronosBackend:
         for name in names:
             found = getattr(tokenizer, name, None)
             if found is not None:
+                self._resolved_attributes[names[0]] = name
                 return found
         available = sorted(n for n in dir(tokenizer) if not n.startswith("_"))
         raise _fail(
@@ -389,6 +400,59 @@ class OfficialKronosBackend:
         return array
 
     # ------------------------------------------------------------- numerical
+
+
+    def _observe(self, tokenizer: Any) -> ObservedKronosComponents:
+        """Read the manifest off the live tokenizer. Nothing is hardcoded."""
+
+        def _linear(key: str, *names: str) -> ObservedLinear:
+            module = self._component(*names)
+            cls, mod = describe_module(module)
+            return ObservedLinear(
+                attribute=self._resolved_attributes.get(key, names[0]),
+                class_name=cls,
+                module=mod,
+                in_features=int(getattr(module, "in_features", -1)),
+                out_features=int(getattr(module, "out_features", -1)),
+                has_bias=getattr(module, "bias", None) is not None,
+            )
+
+        projection = _linear("post_quant_embed", "post_quant_embed")
+        head = _linear("head", "head")
+
+        self._component("indices_to_bits")
+        blocks = self._component("decoder", "decoder_blocks", "dec_blocks")
+        container_cls, container_mod = describe_module(blocks)
+        observed_blocks = []
+        for block in blocks:
+            cls, mod = describe_module(block)
+            observed_blocks.append(
+                ObservedModule(attribute="block", class_name=cls, module=mod)
+            )
+
+        tokenizer_cls, tokenizer_mod = describe_module(tokenizer)
+        parameters = list(tokenizer.parameters())
+        return ObservedKronosComponents(
+            tokenizer_class=tokenizer_cls,
+            tokenizer_module=tokenizer_mod,
+            indices_to_bits_attribute=self._resolved_attributes.get(
+                "indices_to_bits", "indices_to_bits"
+            ),
+            projection=projection,
+            decoder_attribute=self._resolved_attributes.get("decoder", "decoder"),
+            decoder_container_class=container_cls,
+            decoder_container_module=container_mod,
+            decoder_block_count=len(observed_blocks),
+            decoder_blocks=tuple(observed_blocks),
+            head=head,
+            encode=None,
+            device=str(self._device),
+            training_mode=bool(getattr(tokenizer, "training", False)),
+            total_parameters=sum(int(p.numel()) for p in parameters),
+            trainable_parameters=sum(
+                int(p.numel()) for p in parameters if bool(p.requires_grad)
+            ),
+        )
 
     def encode_tokens(
         self, features: NDArray[np.float32]
@@ -419,6 +483,24 @@ class OfficialKronosBackend:
         coarse = encoded[0].detach().to("cpu").reshape(-1).to(torch.int64).numpy()
         fine = encoded[1].detach().to("cpu").reshape(-1).to(torch.int64).numpy()
         assert_token_ranges(coarse, fine)
+
+        if self._observed is not None and self._observed.encode is None:
+            self._observed = self._observed.model_copy(
+                update={
+                    "encode": ObservedEncode(
+                        return_container=type(encoded).__name__,
+                        tensor_count=len(encoded),
+                        batched_shapes=tuple(
+                            tuple(int(d) for d in tensor.shape) for tensor in encoded
+                        ),
+                        batched_dtypes=tuple(str(tensor.dtype) for tensor in encoded),
+                        coarse_flat_shape=tuple(int(d) for d in coarse.shape),
+                        fine_flat_shape=tuple(int(d) for d in fine.shape),
+                        coarse_flat_dtype=str(coarse.dtype),
+                        fine_flat_dtype=str(fine.dtype),
+                    )
+                }
+            )
         return coarse, fine
 
     def bipolar_latent(

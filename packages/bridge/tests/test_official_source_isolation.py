@@ -175,3 +175,36 @@ def test_synthetic_package_is_not_named_model() -> None:
 def test_locked_source_spec_matches_the_experiment() -> None:
     assert SOURCE_SPEC.revision == "67b630e67f6a18c9e9be918d9b4337c960db1e9a"
     assert set(SOURCE_SPEC.files) == {"model/kronos.py", "model/module.py"}
+
+
+def test_sys_path_is_restored_exactly_after_a_successful_load(tmp_path: Path) -> None:
+    """The pinned kronos.py appends to sys.path; that must not survive."""
+    root = _fake_source(
+        tmp_path,
+        kronos_body=(
+            "import sys\n"
+            'sys.path.append("../")\n'
+            "from model.module import *\n\n\n"
+            "class KronosTokenizer:\n"
+            "    marker = MODULE_MARKER\n"
+        ),
+    )
+    before = list(sys.path)
+    load_official_kronos(root, _hashes(root), required_dependencies=("numpy",))
+    assert sys.path == before
+
+
+def test_sys_path_is_restored_exactly_after_a_failed_load(tmp_path: Path) -> None:
+    root = _fake_source(
+        tmp_path,
+        kronos_body=(
+            "import sys\n"
+            'sys.path.append("../")\n'
+            "from model.module import *\n"
+            "raise RuntimeError('boom')\n"
+        ),
+    )
+    before = list(sys.path)
+    with pytest.raises(BridgeTransformError):
+        load_official_kronos(root, _hashes(root), required_dependencies=("numpy",))
+    assert sys.path == before

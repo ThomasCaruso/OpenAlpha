@@ -18,9 +18,17 @@ from openalpha_bridge.phase2.canary import (
 )
 from openalpha_bridge.phase2.identity import AMENDMENT_3_SHA256
 from openalpha_bridge.phase2.kronos import (
+    SOURCE_SPEC,
+    TOKENIZER_SPEC,
     DeterministicFakeKronosBackend,
     KronosMode,
     ResolvedAssets,
+)
+from openalpha_bridge.phase2.observed import (
+    ObservedEncode,
+    ObservedKronosComponents,
+    ObservedLinear,
+    ObservedModule,
 )
 from openalpha_bridge.phase2.provider import DeterministicFakeProvider
 
@@ -29,26 +37,71 @@ RESEARCH = ROOT / "research" / "bridge-v0"
 
 
 class _PseudoOfficialBackend(DeterministicFakeKronosBackend):
-    """Reports the official mode so the canary's gate can be exercised.
+    """Reports the official mode and a well-formed observed manifest.
 
-    Numerically it is still the deterministic fake. It exists only to test the
-    canary's own logic; a real canary run uses OfficialKronosBackend.
+    Numerically it is still the deterministic fake; it exists only to exercise
+    the canary's own gates. A real canary run uses OfficialKronosBackend, whose
+    manifest is read off the live tokenizer.
     """
 
-    observed_source_files: ClassVar[dict[str, str]] = {"model/kronos.py": "e" * 64}
+    observed_source_files: ClassVar[dict[str, str]] = dict(SOURCE_SPEC.files)
     dependency_versions: ClassVar[dict[str, str]] = {"torch": "2.5.1"}
 
     @property
     def mode(self) -> KronosMode:
         return KronosMode.PINNED_OFFICIAL
 
+    @property
+    def observed(self) -> ObservedKronosComponents:
+        linear = lambda attr, i, o: ObservedLinear(
+            attribute=attr,
+            class_name="Linear",
+            module="torch.nn.modules.linear",
+            in_features=i,
+            out_features=o,
+            has_bias=True,
+        )
+        return ObservedKronosComponents(
+            tokenizer_class="KronosTokenizer",
+            tokenizer_module="openalpha_kronos_official.kronos",
+            indices_to_bits_attribute="indices_to_bits",
+            projection=linear("post_quant_embed", 20, 256),
+            decoder_attribute="decoder",
+            decoder_container_class="ModuleList",
+            decoder_container_module="torch.nn.modules.container",
+            decoder_block_count=3,
+            decoder_blocks=tuple(
+                ObservedModule(
+                    attribute="block",
+                    class_name="TransformerBlock",
+                    module="openalpha_kronos_official.module",
+                )
+                for _ in range(3)
+            ),
+            head=linear("head", 256, 6),
+            encode=ObservedEncode(
+                return_container="tuple",
+                tensor_count=2,
+                batched_shapes=((1, 512), (1, 512)),
+                batched_dtypes=("torch.int64", "torch.int64"),
+                coarse_flat_shape=(512,),
+                fine_flat_shape=(512,),
+                coarse_flat_dtype="int64",
+                fine_flat_dtype="int64",
+            ),
+            device="cpu",
+            training_mode=False,
+            total_parameters=1_234_567,
+            trainable_parameters=0,
+        )
+
     def resolve_assets(self) -> ResolvedAssets:
         return ResolvedAssets(
             kronos_mode=KronosMode.PINNED_OFFICIAL,
-            repository="NeoQuasar/Kronos-Tokenizer-2k",
-            revision="26966d0035065a0cae0ebad7af8ece35bc1fb51c",
-            observed_config_sha256="0" * 64,
-            observed_weights_sha256="1" * 64,
+            repository=TOKENIZER_SPEC.repository,
+            revision=TOKENIZER_SPEC.revision,
+            observed_config_sha256=TOKENIZER_SPEC.config_sha256,
+            observed_weights_sha256=TOKENIZER_SPEC.weights_sha256,
             frozen_parameter_sha256=self.frozen_parameter_sha256(),
             revisions_verified=True,
         )
@@ -102,6 +155,16 @@ def test_canary_passes_and_reports_the_locked_contract(tmp_path: Path) -> None:
     assert report.deterministic_replay_matched
     assert report.scored_suffix_causality_holds
     assert report.cache_read_verified
+    assert report.observed_components.projection.in_features == 20
+    assert report.observed_components.projection.out_features == 256
+    assert report.observed_components.decoder_block_count == 3
+    assert report.observed_components.head.out_features == 6
+    assert report.observed_components.trainable_parameters == 0
+    assert report.observed_components.training_mode is False
+    encode = report.observed_components.encode
+    assert encode is not None
+    assert encode.tensor_count == 2
+    assert encode.batched_shapes == ((1, 512), (1, 512))
     assert report.retrieved_candles == 512
     assert report.provider_request_count == 1
     assert report.wall_clock_seconds >= 0.0
@@ -295,3 +358,106 @@ def test_the_fake_backend_is_content_sensitive_and_causal() -> None:
     # Deterministic for identical input.
     assert _np.array_equal(c0, backend.encode_tokens(base)[0])
     assert _np.array_equal(f0, backend.encode_tokens(base)[1])
+
+
+# ------------------------- observed manifest enforcement (commit 1)
+
+
+def _bad_manifest(**overrides) -> ObservedKronosComponents:
+    base = _PseudoOfficialBackend().observed
+    return base.model_copy(update=overrides)
+
+
+def _observed_encode() -> ObservedEncode:
+    encode = _bad_manifest().encode
+    assert encode is not None  # the pseudo backend always records one
+    return encode
+
+
+@pytest.mark.parametrize(
+    ("overrides", "code"),
+    [
+        (
+            {"projection": _bad_manifest().projection.model_copy(update={"out_features": 128})},
+            "OBSERVED_PROJECTION_MISMATCH",
+        ),
+        ({"decoder_block_count": 4}, "OBSERVED_DECODER_BLOCK_COUNT_MISMATCH"),
+        (
+            {"head": _bad_manifest().head.model_copy(update={"out_features": 7})},
+            "OBSERVED_HEAD_MISMATCH",
+        ),
+        ({"training_mode": True}, "OBSERVED_TOKENIZER_IN_TRAINING_MODE"),
+        ({"trainable_parameters": 5}, "OBSERVED_TOKENIZER_NOT_FROZEN"),
+        ({"total_parameters": 0}, "OBSERVED_TOKENIZER_HAS_NO_PARAMETERS"),
+        ({"encode": None}, "OBSERVED_ENCODE_NOT_RECORDED"),
+    ],
+    ids=[
+        "projection",
+        "blocks",
+        "head",
+        "training",
+        "frozen",
+        "params",
+        "encode-missing",
+    ],
+)
+def test_observed_manifest_violations_fail_closed(overrides: dict, code: str) -> None:
+    from openalpha_bridge.phase2.observed import assert_observed_matches_locks
+
+    with pytest.raises(BridgeTransformError) as excinfo:
+        assert_observed_matches_locks(
+            _bad_manifest(**overrides),
+            quantized_latent_dimension=20,
+            decoder_hidden_dimension=256,
+            tokenizer_input_dimension=6,
+            expected_decoder_blocks=3,
+            expected_sequence_length=512,
+        )
+    assert excinfo.value.failures[0].code == code
+
+
+def test_encode_batched_shape_is_asserted() -> None:
+    from openalpha_bridge.phase2.observed import assert_observed_matches_locks
+
+    manifest = _bad_manifest(
+        encode=_observed_encode().model_copy(
+            update={"batched_shapes": ((1, 256), (1, 256))}
+        )
+    )
+    with pytest.raises(BridgeTransformError) as excinfo:
+        assert_observed_matches_locks(
+            manifest,
+            quantized_latent_dimension=20,
+            decoder_hidden_dimension=256,
+            tokenizer_input_dimension=6,
+            expected_decoder_blocks=3,
+            expected_sequence_length=512,
+        )
+    assert excinfo.value.failures[0].code == "OBSERVED_ENCODE_SHAPE_MISMATCH"
+
+
+def test_canary_rejects_drifted_source_files(tmp_path: Path) -> None:
+    class _Drifted(_PseudoOfficialBackend):
+        observed_source_files: ClassVar[dict[str, str]] = {"model/kronos.py": "9" * 64}
+
+    with pytest.raises(BridgeTransformError) as excinfo:
+        _run(tmp_path, backend=_Drifted())
+    assert excinfo.value.failures[0].code == "CANARY_SOURCE_FILES_MISMATCH"
+
+
+def test_canary_rejects_a_tokenizer_that_is_not_the_locked_one(tmp_path: Path) -> None:
+    class _Wrong(_PseudoOfficialBackend):
+        def resolve_assets(self) -> ResolvedAssets:
+            base = super().resolve_assets()
+            return base.model_copy(update={"observed_weights_sha256": "9" * 64})
+
+    with pytest.raises(BridgeTransformError) as excinfo:
+        _run(tmp_path, backend=_Wrong())
+    assert excinfo.value.failures[0].code == "CANARY_TOKENIZER_IDENTITY_MISMATCH"
+
+
+def test_report_serializes_the_observed_manifest_not_strings() -> None:
+    from openalpha_bridge.phase2.canary import CanaryReport
+
+    annotation = CanaryReport.model_fields["observed_components"].annotation
+    assert annotation is ObservedKronosComponents
