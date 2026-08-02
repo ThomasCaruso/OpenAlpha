@@ -19,11 +19,14 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
+
+from pydantic import BaseModel, ConfigDict
 
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from .backends import GeneratedPath, ResolvedDiagnosticAssets, StepSampling, TokenPair
@@ -33,12 +36,17 @@ from .source_conformance import SOURCE_REVISION, verify_source_files
 from .spec import KRONOS_MINI_SPEC
 
 __all__ = [
+    "OFFICIAL_ALIASES",
+    "OfficialAssetDigests",
     "OfficialForecastModel",
+    "OfficialRuntime",
     "OfficialTokenizerCodec",
     "isolated_official_source",
-    "load_official_components",
+    "load_and_freeze_official",
+    "official_runtime",
     "parameter_digest",
     "verify_asset_file",
+    "verify_official_assets",
 ]
 
 
@@ -76,21 +84,49 @@ def verify_asset_file(path: Path | str, expected_sha256: str, *, label: str) -> 
     return observed
 
 
+#: The only names this context creates. Everything else the block imports
+#: belongs to whoever imported it.
+OFFICIAL_ALIASES: Final[tuple[str, ...]] = ("model", "model.module", "model.kronos")
+
+
+class _Absent:
+    """Private sentinel: the alias did not exist before the context ran.
+
+    A plain ``None`` would be ambiguous, because ``None`` is a value a module
+    entry can legitimately hold during a partially completed import.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "<absent>"
+
+
+_ABSENT: Final[_Absent] = _Absent()
+
+
 @contextmanager
 def isolated_official_source(source_root: Path | str) -> Iterator[Any]:
-    """Import the verified official source, then put the interpreter back.
+    """Import the verified official source, then restore what it changed.
 
     The official ``kronos.py`` does ``sys.path.append("../")`` and
     ``from model.module import *``, so it can only be imported with a ``model``
-    package on the path. Both ``sys.path`` and ``sys.modules`` are snapshotted
-    and restored, so a diagnostic run leaves no import-system residue that a
-    later import could pick up instead of the real thing.
+    package on the path. This context owns exactly two things: that ``sys.path``
+    entry and the three ``model*`` aliases.
+
+    It used to delete every module that appeared in ``sys.modules`` during the
+    block. That is far more than it owns: loading a Torch model imports many
+    lazily-loaded compiled submodules, and evicting those left the interpreter
+    holding partially-initialised C extensions for anything that re-imported
+    them afterwards. Only the three aliases are touched now.
     """
     root = Path(source_root).resolve()
     verify_source_files(root)
 
     path_snapshot = list(sys.path)
-    modules_snapshot = dict(sys.modules)
+    alias_snapshot: dict[str, Any] = {
+        name: sys.modules.get(name, _ABSENT) for name in OFFICIAL_ALIASES
+    }
     try:
         sys.path.insert(0, str(root))
         package_spec = importlib.util.spec_from_file_location(
@@ -124,10 +160,14 @@ def isolated_official_source(source_root: Path | str) -> Iterator[Any]:
         kronos_spec.loader.exec_module(kronos)
         yield kronos
     finally:
+        # Only what this context modified, restored by identity. Nothing else
+        # imported during the block is unloaded.
         sys.path[:] = path_snapshot
-        for name in set(sys.modules) - set(modules_snapshot):
-            del sys.modules[name]
-        sys.modules.update(modules_snapshot)
+        for name, previous in alias_snapshot.items():
+            if previous is _ABSENT:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = previous
 
 
 def parameter_digest(*modules: Any) -> str:
@@ -166,71 +206,6 @@ def _freeze(module: Any, label: str) -> tuple[int, int]:
     if total <= 0:
         raise _fail("OFFICIAL_MODULE_HAS_NO_PARAMETERS", f"{label} reports no parameters")
     return total, trainable
-
-
-def load_official_components(
-    *,
-    source_root: Path | str,
-    tokenizer_directory: Path | str,
-    model_directory: Path | str,
-    tokenizer_spec: Any,
-    device: str = "cuda",
-) -> tuple[Any, Any, ResolvedDiagnosticAssets]:
-    """Verify every identity, then load and freeze both official modules.
-
-    Returns the tokenizer, the model and the observed asset identities. No
-    weight is read until after every digest has been checked.
-    """
-    tokenizer_dir = Path(tokenizer_directory)
-    model_dir = Path(model_directory)
-
-    tokenizer_config = verify_asset_file(
-        tokenizer_dir / "config.json", tokenizer_spec.config_sha256, label="tokenizer config"
-    )
-    tokenizer_weights = verify_asset_file(
-        tokenizer_dir / "model.safetensors",
-        tokenizer_spec.weights_sha256,
-        label="tokenizer weights",
-    )
-    model_config = verify_asset_file(
-        model_dir / "config.json", KRONOS_MINI_SPEC.config_sha256, label="model config"
-    )
-    model_weights = verify_asset_file(
-        model_dir / KRONOS_MINI_SPEC.weights_file,
-        KRONOS_MINI_SPEC.weights_sha256,
-        label="model weights",
-    )
-
-    source_digests = verify_source_files(source_root)
-
-    with isolated_official_source(source_root) as official:
-        tokenizer = official.KronosTokenizer.from_pretrained(str(tokenizer_dir))
-        model = official.Kronos.from_pretrained(str(model_dir))
-        tokenizer = tokenizer.to(device)
-        model = model.to(device)
-        tokenizer_total, tokenizer_trainable = _freeze(tokenizer, "tokenizer")
-        model_total, model_trainable = _freeze(model, "model")
-        digest = parameter_digest(tokenizer, model)
-
-    assets = ResolvedDiagnosticAssets(
-        tokenizer_repository=tokenizer_spec.repository,
-        tokenizer_revision=tokenizer_spec.revision,
-        tokenizer_config_sha256=tokenizer_config,
-        tokenizer_weights_sha256=tokenizer_weights,
-        model_repository=KRONOS_MINI_SPEC.repository,
-        model_revision=KRONOS_MINI_SPEC.revision,
-        model_config_sha256=model_config,
-        model_weights_sha256=model_weights,
-        source_revision=SOURCE_REVISION,
-        source_as_committed_sha256={d.relative_path: d.as_committed_sha256 for d in source_digests},
-        source_crlf_normalized_sha256={
-            d.relative_path: d.crlf_normalized_sha256 for d in source_digests
-        },
-        parameter_sha256=digest,
-        trainable_parameter_count=tokenizer_trainable + model_trainable,
-        total_parameter_count=tokenizer_total + model_total,
-    )
-    return tokenizer, model, assets
 
 
 def _rows_to_tensor(rows: tuple[OfficialRow, ...], state: NormalizationState, device: str) -> Any:
@@ -630,3 +605,151 @@ def _safe_log(probability: float) -> float:
             ),
         )
     return math.log(probability)
+
+
+class OfficialAssetDigests(BaseModel):
+    """Every asset digest, observed before a single weight is read."""
+
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
+
+    tokenizer_config_sha256: str
+    tokenizer_weights_sha256: str
+    model_config_sha256: str
+    model_weights_sha256: str
+
+
+def verify_official_assets(
+    *,
+    tokenizer_directory: Path | str,
+    model_directory: Path | str,
+    tokenizer_spec: Any,
+) -> OfficialAssetDigests:
+    """Hash all four resolved files, or fail closed. Loads nothing."""
+    tokenizer_dir = Path(tokenizer_directory)
+    model_dir = Path(model_directory)
+    return OfficialAssetDigests(
+        tokenizer_config_sha256=verify_asset_file(
+            tokenizer_dir / "config.json",
+            tokenizer_spec.config_sha256,
+            label="tokenizer config",
+        ),
+        tokenizer_weights_sha256=verify_asset_file(
+            tokenizer_dir / "model.safetensors",
+            tokenizer_spec.weights_sha256,
+            label="tokenizer weights",
+        ),
+        model_config_sha256=verify_asset_file(
+            model_dir / "config.json", KRONOS_MINI_SPEC.config_sha256, label="model config"
+        ),
+        model_weights_sha256=verify_asset_file(
+            model_dir / KRONOS_MINI_SPEC.weights_file,
+            KRONOS_MINI_SPEC.weights_sha256,
+            label="model weights",
+        ),
+    )
+
+
+def load_and_freeze_official(
+    official: Any,
+    *,
+    tokenizer_directory: Path | str,
+    model_directory: Path | str,
+    device: str = "cuda",
+) -> tuple[Any, Any, tuple[int, int]]:
+    """Load both modules from an already-imported verified ``official``.
+
+    Owns no context of its own, so the caller decides how long the official
+    source stays imported. Returns the tokenizer, the model, and the total and
+    trainable parameter counts across both.
+    """
+    tokenizer = official.KronosTokenizer.from_pretrained(str(Path(tokenizer_directory)))
+    model = official.Kronos.from_pretrained(str(Path(model_directory)))
+    tokenizer = tokenizer.to(device)
+    model = model.to(device)
+    tokenizer_total, tokenizer_trainable = _freeze(tokenizer, "tokenizer")
+    model_total, model_trainable = _freeze(model, "model")
+    return (
+        tokenizer,
+        model,
+        (
+            tokenizer_total + model_total,
+            tokenizer_trainable + model_trainable,
+        ),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class OfficialRuntime:
+    """Everything the diagnostic needs, valid only inside its context."""
+
+    codec: OfficialTokenizerCodec
+    model: OfficialForecastModel
+    assets: ResolvedDiagnosticAssets
+    parameter_digest: Callable[[], str]
+
+
+@contextmanager
+def official_runtime(
+    *,
+    source_root: Path | str,
+    tokenizer_directory: Path | str,
+    model_directory: Path | str,
+    tokenizer_spec: Any,
+    device: str = "cuda",
+) -> Iterator[OfficialRuntime]:
+    """One context that owns the whole official runtime lifetime.
+
+    Verifies every asset, enters the isolated official source exactly once,
+    loads and freezes both modules inside it, builds the codec and forecaster
+    inside it, and keeps it entered while the caller uses them.
+
+    The previous arrangement loaded inside one context, exited it, and then
+    reopened a second one to build the wrappers. That meant the objects doing
+    inference outlived the import context that produced them, and the probe and
+    the diagnostic exercised different lifetimes: the probe used its wrappers
+    while a context was still open, the diagnostic used them after both had
+    closed. Only one of those was ever tested, and it was not the one the
+    diagnostic used.
+    """
+    digests = verify_official_assets(
+        tokenizer_directory=tokenizer_directory,
+        model_directory=model_directory,
+        tokenizer_spec=tokenizer_spec,
+    )
+    source_digests = verify_source_files(source_root)
+
+    with isolated_official_source(source_root) as official:
+        tokenizer, model, (total, trainable) = load_and_freeze_official(
+            official,
+            tokenizer_directory=tokenizer_directory,
+            model_directory=model_directory,
+            device=device,
+        )
+        assets = ResolvedDiagnosticAssets(
+            tokenizer_repository=tokenizer_spec.repository,
+            tokenizer_revision=tokenizer_spec.revision,
+            tokenizer_config_sha256=digests.tokenizer_config_sha256,
+            tokenizer_weights_sha256=digests.tokenizer_weights_sha256,
+            model_repository=KRONOS_MINI_SPEC.repository,
+            model_revision=KRONOS_MINI_SPEC.revision,
+            model_config_sha256=digests.model_config_sha256,
+            model_weights_sha256=digests.model_weights_sha256,
+            source_revision=SOURCE_REVISION,
+            source_as_committed_sha256={
+                d.relative_path: d.as_committed_sha256 for d in source_digests
+            },
+            source_crlf_normalized_sha256={
+                d.relative_path: d.crlf_normalized_sha256 for d in source_digests
+            },
+            parameter_sha256=parameter_digest(tokenizer, model),
+            trainable_parameter_count=trainable,
+            total_parameter_count=total,
+        )
+        yield OfficialRuntime(
+            codec=OfficialTokenizerCodec(tokenizer=tokenizer, official=official, device=device),
+            model=OfficialForecastModel(
+                model=model, tokenizer=tokenizer, official=official, device=device
+            ),
+            assets=assets,
+            parameter_digest=lambda: parameter_digest(tokenizer, model),
+        )

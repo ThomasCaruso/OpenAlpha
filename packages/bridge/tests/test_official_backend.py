@@ -52,37 +52,39 @@ def test_a_missing_asset_fails_closed(tmp_path: Path) -> None:
 
 
 def test_assets_are_verified_before_any_weight_is_read() -> None:
-    """Every digest check precedes the first from_pretrained call."""
-    source = inspect.getsource(official_backend.load_official_components)
-    first_load = source.index("from_pretrained")
+    """Verification and loading are separate, and verification comes first."""
+    verify = inspect.getsource(official_backend.verify_official_assets)
     for check in ("tokenizer config", "tokenizer weights", "model config", "model weights"):
-        assert source.index(check) < first_load
-    assert source.index("verify_source_files(source_root)") < first_load
+        assert check in verify
+    # The verifier loads nothing at all.
+    assert "from_pretrained" not in verify
+
+    runtime = inspect.getsource(official_backend.official_runtime)
+    assert runtime.index("verify_official_assets(") < runtime.index("load_and_freeze_official(")
+    assert runtime.index("verify_source_files(source_root)") < runtime.index(
+        "load_and_freeze_official("
+    )
 
 
 # ============================================================ import isolation
 
 
-def test_isolated_import_restores_path_and_modules() -> None:
-    """A real import of the verified source, then the interpreter put back.
+def test_isolated_import_restores_path_and_official_aliases() -> None:
+    """A real import of the verified source, then the aliases put back.
 
     The official kronos.py imports torch, which the base environment does not
     have, so the import is expected to fail here. What matters is that the
-    failure still leaves sys.path and sys.modules exactly as they were.
+    failure still restores sys.path exactly and leaves none of the three
+    official aliases behind.
     """
     path_before = list(sys.path)
-    modules_before = dict(sys.modules)
 
-    # Torch is absent by design in this environment, so the import inside is
-    # expected to raise. Swallowing it is the point: what is under test is that
-    # the interpreter is restored even when the body fails.
     with contextlib.suppress(Exception), isolated_official_source(VENDOR):
         pass
 
     assert sys.path == path_before
-    assert set(sys.modules) == set(modules_before)
-    for leaked in ("model", "model.kronos", "model.module"):
-        assert leaked not in sys.modules
+    for alias in official_backend.OFFICIAL_ALIASES:
+        assert alias not in sys.modules
 
 
 def test_isolated_import_rejects_unverified_source(tmp_path: Path) -> None:
@@ -98,10 +100,16 @@ def test_isolated_import_rejects_unverified_source(tmp_path: Path) -> None:
 def test_isolation_snapshots_before_it_mutates() -> None:
     source = inspect.getsource(official_backend.isolated_official_source)
     assert source.index("path_snapshot = list(sys.path)") < source.index("sys.path.insert")
-    assert source.index("modules_snapshot = dict(sys.modules)") < source.index(
-        'sys.modules["model.module"]'
-    )
+    assert source.index("alias_snapshot") < source.index('sys.modules["model.module"]')
     assert "finally:" in source
+
+
+def test_isolation_never_purges_unrelated_modules() -> None:
+    """The defect that produced the SystemError, asserted structurally."""
+    source = inspect.getsource(official_backend.isolated_official_source)
+    assert "set(sys.modules) - set(modules_snapshot)" not in source
+    assert "for name, previous in alias_snapshot.items():" in source
+    assert official_backend.OFFICIAL_ALIASES == ("model", "model.module", "model.kronos")
 
 
 # ========================================================== freezing contract
@@ -117,11 +125,15 @@ def test_the_freeze_helper_evals_and_clears_every_gradient() -> None:
 
 
 def test_both_official_modules_are_frozen_and_counted() -> None:
-    source = inspect.getsource(official_backend.load_official_components)
-    assert '_freeze(tokenizer, "tokenizer")' in source
-    assert '_freeze(model, "model")' in source
-    assert "trainable_parameter_count=tokenizer_trainable + model_trainable" in source
-    assert "total_parameter_count=tokenizer_total + model_total" in source
+    loader = inspect.getsource(official_backend.load_and_freeze_official)
+    assert '_freeze(tokenizer, "tokenizer")' in loader
+    assert '_freeze(model, "model")' in loader
+    assert "tokenizer_total + model_total" in loader
+    assert "tokenizer_trainable + model_trainable" in loader
+
+    runtime = inspect.getsource(official_backend.official_runtime)
+    assert "trainable_parameter_count=trainable" in runtime
+    assert "total_parameter_count=total" in runtime
 
 
 def test_generation_runs_under_inference_mode() -> None:
@@ -316,5 +328,5 @@ def test_the_ordinary_suite_downloads_no_official_asset() -> None:
     for network in ("requests", "urllib", "httpx", "hf_hub_download", "snapshot_download"):
         assert network not in source
     # from_pretrained is called against an already-resolved local directory.
-    assert "from_pretrained(str(tokenizer_dir))" in source
-    assert "from_pretrained(str(model_dir))" in source
+    assert "from_pretrained(str(Path(tokenizer_directory)))" in source
+    assert "from_pretrained(str(Path(model_directory)))" in source

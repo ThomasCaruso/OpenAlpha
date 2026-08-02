@@ -288,8 +288,7 @@ def test_the_modal_probe_exists_and_is_its_own_function() -> None:
 def test_the_modal_probe_restricts_both_downloads() -> None:
     body = _probe_function()
     assert body.count("snapshot_download(") == 2
-    assert body.count("allow_patterns=wanted") == 2
-    assert 'wanted = ["config.json", "model.safetensors"]' in body
+    assert body.count("allow_patterns=list(OFFICIAL_SNAPSHOT_ALLOW_PATTERNS)") == 2
 
 
 def test_the_modal_probe_requires_cuda_before_doing_anything() -> None:
@@ -301,9 +300,21 @@ def test_the_modal_probe_requires_cuda_before_doing_anything() -> None:
 
 def test_the_modal_probe_verifies_assets_and_freezes() -> None:
     body = _probe_function()
-    assert "load_official_components(" in body
-    assert "isolated_official_source(source_root)" in body
-    assert "parameter_digest(tokenizer, model)" in body
+    assert "official_runtime(" in body
+    assert "runtime.parameter_digest" in body
+    # No separate loader, and no second import context.
+    assert "load_official_components(" not in body
+    assert "isolated_official_source(" not in body
+
+
+def test_the_probe_uses_its_wrappers_while_the_context_is_open() -> None:
+    """The lifetime the diagnostic uses, which the old probe did not."""
+    body = _probe_function()
+    opened = body.index("with official_runtime(")
+    used = body.index("run_frozen_inference_runtime_probe(")
+    assert opened < used
+    # The call sits inside the with block, so the context is still entered.
+    assert body[opened:used].count("\n    ") >= 1
 
 
 def test_the_modal_probe_retrieves_no_market_data() -> None:

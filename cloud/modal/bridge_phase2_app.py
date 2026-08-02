@@ -652,13 +652,8 @@ def frozen_inference_diagnostic(source_commit: str, run_id: str) -> dict[str, An
     """
     from pathlib import Path
 
-    from openalpha_bridge.diagnostic.official_backend import (
-        OfficialForecastModel,
-        OfficialTokenizerCodec,
-        isolated_official_source,
-        load_official_components,
-        parameter_digest,
-    )
+    from openalpha_bridge.diagnostic.official_backend import official_runtime
+    from openalpha_bridge.diagnostic.spec import OFFICIAL_SNAPSHOT_ALLOW_PATTERNS
     from openalpha_bridge.diagnostic.worker import run_diagnostic_worker
     from openalpha_bridge.phase2.kronos import TOKENIZER_SPEC
     from openalpha_bridge.phase2.provider import YahooDailyProvider
@@ -668,37 +663,38 @@ def frozen_inference_diagnostic(source_commit: str, run_id: str) -> dict[str, An
     os.environ.setdefault("HF_HOME", str(cache_root / "huggingface"))
     source_root = Path(os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH", KRONOS_SOURCE_ROOT))
 
-    def resolve():
-        """Verify, load and freeze. Called only when there is work to do."""
+    def resolve_runtime():
+        """The one official runtime context, entered only when there is work.
+
+        Returns the context manager rather than an entered runtime, so the
+        worker owns the lifetime and the tokenizer and model stay imported for
+        as long as they are used.
+        """
         from huggingface_hub import snapshot_download
 
         tokenizer_dir = snapshot_download(
             repo_id=TOKENIZER_SPEC.repository,
             revision=TOKENIZER_SPEC.revision,
             cache_dir=str(cache_root / "huggingface"),
+            allow_patterns=list(OFFICIAL_SNAPSHOT_ALLOW_PATTERNS),
         )
         model_dir = snapshot_download(
             repo_id=KRONOS_MINI_REPOSITORY,
             revision=KRONOS_MINI_REVISION,
             cache_dir=str(cache_root / "huggingface"),
+            allow_patterns=list(OFFICIAL_SNAPSHOT_ALLOW_PATTERNS),
         )
-        tokenizer, model, assets = load_official_components(
+        return official_runtime(
             source_root=source_root,
             tokenizer_directory=tokenizer_dir,
             model_directory=model_dir,
             tokenizer_spec=TOKENIZER_SPEC,
             device="cuda",
         )
-        with isolated_official_source(source_root) as official:
-            codec = OfficialTokenizerCodec(tokenizer=tokenizer, official=official, device="cuda")
-            forecaster = OfficialForecastModel(
-                model=model, tokenizer=tokenizer, official=official, device="cuda"
-            )
-            return codec, forecaster, assets, lambda: parameter_digest(tokenizer, model)
 
     result = run_diagnostic_worker(
         store=_build_store(),
-        resolve=resolve,
+        resolve_runtime=resolve_runtime,
         provider_factory=lambda: YahooDailyProvider(stage="frozen-inference-diagnostic"),
         research_root=Path("/root/research/bridge-v0"),
         source_commit=source_commit,
@@ -732,17 +728,12 @@ def verify_frozen_inference_runtime() -> dict[str, Any]:
     """
     from pathlib import Path
 
-    from openalpha_bridge.diagnostic.official_backend import (
-        OfficialForecastModel,
-        OfficialTokenizerCodec,
-        isolated_official_source,
-        load_official_components,
-        parameter_digest,
-    )
+    from openalpha_bridge.diagnostic.official_backend import official_runtime
     from openalpha_bridge.diagnostic.runtime_probe import (
         RuntimeEnvironment,
         run_frozen_inference_runtime_probe,
     )
+    from openalpha_bridge.diagnostic.spec import OFFICIAL_SNAPSHOT_ALLOW_PATTERNS
     from openalpha_bridge.phase2.kronos import TOKENIZER_SPEC
 
     _register_secrets()
@@ -768,39 +759,35 @@ def verify_frozen_inference_runtime() -> dict[str, Any]:
         numpy_version=numpy.__version__,
     )
 
-    # Only the two files that are needed and hash-verified. allow_patterns
-    # keeps the download to those; without it the whole repository is pulled,
-    # including files nothing verifies.
-    wanted = ["config.json", "model.safetensors"]
+    # Exactly the files the diagnostic fetches, and every one hash-verified
+    # before a weight is read.
     tokenizer_dir = snapshot_download(
         repo_id=TOKENIZER_SPEC.repository,
         revision=TOKENIZER_SPEC.revision,
         cache_dir=str(cache_root / "huggingface"),
-        allow_patterns=wanted,
+        allow_patterns=list(OFFICIAL_SNAPSHOT_ALLOW_PATTERNS),
     )
     model_dir = snapshot_download(
         repo_id=KRONOS_MINI_REPOSITORY,
         revision=KRONOS_MINI_REVISION,
         cache_dir=str(cache_root / "huggingface"),
-        allow_patterns=wanted,
+        allow_patterns=list(OFFICIAL_SNAPSHOT_ALLOW_PATTERNS),
     )
 
-    tokenizer, model, assets = load_official_components(
+    # The same shared context the diagnostic uses, held open while the probe
+    # runs its inference, then exited.
+    with official_runtime(
         source_root=source_root,
         tokenizer_directory=tokenizer_dir,
         model_directory=model_dir,
         tokenizer_spec=TOKENIZER_SPEC,
         device="cuda",
-    )
-
-    with isolated_official_source(source_root) as official:
+    ) as runtime:
         result = run_frozen_inference_runtime_probe(
-            codec=OfficialTokenizerCodec(tokenizer=tokenizer, official=official, device="cuda"),
-            model=OfficialForecastModel(
-                model=model, tokenizer=tokenizer, official=official, device="cuda"
-            ),
-            assets=assets,
-            parameter_digest=lambda: parameter_digest(tokenizer, model),
+            codec=runtime.codec,
+            model=runtime.model,
+            assets=runtime.assets,
+            parameter_digest=runtime.parameter_digest,
             environment=environment,
             run_id="runtime_probe",
             deployed_commit=_require_deployed_commit(),

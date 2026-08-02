@@ -6,8 +6,10 @@ No network, no official asset, no Torch, no held-out partition.
 from __future__ import annotations
 
 import ast
+import contextlib
 import inspect
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -40,32 +42,121 @@ COMMIT = "a" * 40
 RUN_ID = "canary_0badc0de"
 
 
-class _Resolver:
-    """Stands in for asset resolution, and counts whether it was called."""
+class _OpennessProxy:
+    """Delegates to a double, recording whether the context was open per call.
 
-    def __init__(self, *, policy=None, assets=None, raises: Exception | None = None) -> None:
+    Frozen inference has to happen while the import context that produced the
+    tokenizer and the model is still entered. This is how a test observes that
+    for every call rather than only at construction.
+    """
+
+    def __init__(self, inner, resolver, record, watched) -> None:
+        self._inner = inner
+        self._resolver = resolver
+        self._record = record
+        self._watched = frozenset(watched)
+
+    def __getattr__(self, name: str):
+        value = getattr(self._inner, name)
+        if name not in self._watched or not callable(value):
+            return value
+
+        def watched(*args, **kwargs):
+            self._record.setdefault(name, []).append(self._resolver.open)
+            return value(*args, **kwargs)
+
+        return watched
+
+
+class _FakeRuntime:
+    """What the shared official runtime yields, in test form."""
+
+    def __init__(self, codec, model, assets, parameter_digest) -> None:
+        self.codec = codec
+        self.model = model
+        self.assets = assets
+        self.parameter_digest = parameter_digest
+
+
+class _Resolver:
+    """Stands in for the official runtime context.
+
+    Counts entries and exits, so a test can prove the context is entered only
+    when there is work, stays open for the whole computation, and is exited on
+    every path including failure.
+    """
+
+    def __init__(
+        self,
+        *,
+        policy=None,
+        assets=None,
+        raises: Exception | None = None,
+        raise_on_enter: Exception | None = None,
+        record: dict[str, list[bool]] | None = None,
+    ) -> None:
         self._policy = policy or (lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
         self._assets = assets or fake_assets()
         self._raises = raises
+        self._raise_on_enter = raise_on_enter
+        self._record = record
         self.calls = 0
+        self.entered = 0
+        self.exited = 0
+        self.open = False
+
+    @contextlib.contextmanager
+    def _context(self):
+        self.entered += 1
+        self.open = True
+        try:
+            if self._raise_on_enter is not None:
+                raise self._raise_on_enter
+            codec = FakeCodec()
+            model = FakeForecastModel(codec=codec, path_for=self._policy)
+            if self._record is not None:
+                codec = _OpennessProxy(codec, self, self._record, ("encode", "decode"))
+                model = _OpennessProxy(model, self, self._record, ("generate",))
+            yield _FakeRuntime(codec, model, self._assets, frozen_digest())
+        finally:
+            self.open = False
+            self.exited += 1
 
     def __call__(self):
         self.calls += 1
         if self._raises is not None:
             raise self._raises
-        codec = FakeCodec()
-        model = FakeForecastModel(codec=codec, path_for=self._policy)
-        return codec, model, self._assets, frozen_digest()
+        return self._context()
+
+
+class _WatchedProvider(_SingleWindowProvider):
+    """Records whether the runtime context was open when retrieval happened."""
+
+    def __init__(self, resolver: _Resolver) -> None:
+        super().__init__()
+        self._resolver = resolver
+        self.open_at_fetch: list[bool] = []
+
+    def fetch(self, request):
+        self.open_at_fetch.append(self._resolver.open)
+        return super().fetch(request)
 
 
 class _ProviderFactory:
-    def __init__(self) -> None:
+    def __init__(self, resolver: _Resolver | None = None) -> None:
         self.calls = 0
         self.last: _SingleWindowProvider | None = None
+        self._resolver = resolver
+        #: Whether the runtime context was open at construction time.
+        self.context_open_at_construction: bool | None = None
 
     def __call__(self):
         self.calls += 1
-        self.last = _SingleWindowProvider()
+        if self._resolver is None:
+            self.last = _SingleWindowProvider()
+        else:
+            self.context_open_at_construction = self._resolver.open
+            self.last = _WatchedProvider(self._resolver)
         return self.last
 
 
@@ -75,7 +166,7 @@ def _run(*, store=None, resolver=None, factory=None, run_id=RUN_ID, commit=COMMI
     factory = factory or _ProviderFactory()
     result = run_diagnostic_worker(
         store=store,
-        resolve=resolver,
+        resolve_runtime=resolver,
         provider_factory=factory,
         research_root=RESEARCH,
         source_commit=commit,
@@ -266,6 +357,171 @@ def test_the_artifact_authorizes_nothing() -> None:
     assert result.scientific_result_available is False
     payload = json.loads(json.dumps(result.payload))
     assert payload["claim_boundary"] == ("DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE")
+
+
+# =========================================== the runtime context lifecycle
+
+
+def test_the_runtime_context_is_not_entered_for_an_existing_artifact() -> None:
+    """A duplicate invocation must not import official source or load weights."""
+    _, store, first, _ = _run()
+    assert (first.calls, first.entered, first.exited) == (1, 1, 1)
+
+    second = _Resolver()
+    result, _, _, factory = _run(store=store, resolver=second)
+
+    assert result.already_existed is True
+    assert second.calls == 0, "the runtime was resolved for a duplicate"
+    assert second.entered == 0, "the runtime context was entered for a duplicate"
+    assert factory.calls == 0
+
+
+def test_the_provider_is_constructed_only_after_the_context_is_open() -> None:
+    resolver = _Resolver()
+    factory = _ProviderFactory(resolver)
+    _run(resolver=resolver, factory=factory)
+    assert factory.calls == 1
+    assert factory.context_open_at_construction is True
+
+    source = inspect.getsource(worker_module.run_diagnostic_worker)
+    assert source.index("with resolve_runtime() as runtime:") < source.index(
+        "provider = provider_factory()"
+    )
+
+
+def test_the_context_stays_open_for_retrieval_and_every_method() -> None:
+    record: dict[str, list[bool]] = {}
+    resolver = _Resolver(record=record)
+    factory = _ProviderFactory(resolver)
+    result, _, _, _ = _run(resolver=resolver, factory=factory)
+    assert result.outcome == DIAGNOSTIC_SUCCESS_CODE
+
+    provider = factory.last
+    assert isinstance(provider, _WatchedProvider)
+    assert provider.open_at_fetch == [True], "retrieval ran with the context closed"
+
+    # Methods A-D all encode, generate and decode; every one of those calls
+    # must have happened while the importing context was still entered.
+    for name in ("encode", "generate", "decode"):
+        observed = record.get(name, [])
+        assert observed, f"{name} was never called"
+        assert all(observed), f"{name} ran {observed.count(False)} times with the context closed"
+
+    assert resolver.open is False, "the context outlived the computation"
+
+
+def test_the_context_is_exited_after_success_and_after_either_failure() -> None:
+    success = _Resolver()
+    _run(resolver=success)
+    assert (success.entered, success.exited, success.open) == (1, 1, False)
+
+    typed = _Resolver(assets=fake_assets(trainable=17_605))
+    typed_result, _, _, _ = _run(resolver=typed)
+    assert typed_result.outcome == DIAGNOSTIC_FAILURE_CODE
+    assert (typed.entered, typed.exited, typed.open) == (1, 1, False)
+
+    operational = _Resolver(raise_on_enter=RuntimeError("import blew up"))
+    op_result, _, _, _ = _run(resolver=operational)
+    assert op_result.outcome == DIAGNOSTIC_OPERATIONAL_FAILURE_CODE
+    assert (operational.entered, operational.exited, operational.open) == (1, 1, False)
+
+
+def test_a_context_entry_failure_is_preserved_as_an_operational_artifact() -> None:
+    """The SystemError shape: the failure was in entering, not in the science."""
+    resolver = _Resolver(
+        raise_on_enter=SystemError("initialization of _internal failed without raising")
+    )
+    factory = _ProviderFactory(resolver)
+    result, store, _, _ = _run(resolver=resolver, factory=factory)
+
+    assert result.outcome == DIAGNOSTIC_OPERATIONAL_FAILURE_CODE
+    assert result.outcome != DIAGNOSTIC_FAILURE_CODE
+    assert result.conclusion == DiagnosticConclusion.DIAGNOSTIC_OPERATIONAL_FAILURE.value
+    assert result.payload["exception_class"] == "SystemError"
+    assert result.payload["message"] == OPERATIONAL_FAILURE_MESSAGE
+    assert factory.calls == 0, "a provider was built after the context failed to open"
+    assert len(store.list_keys("")) == 1
+
+    body = store.get(result.artifact_key).body.decode("utf-8")
+    assert "initialization of _internal" not in body
+
+
+def test_the_artifact_stays_sanitised_while_the_log_carries_the_detail() -> None:
+    """The durable record says nothing; the operator log says enough to debug."""
+
+    class _Capture(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.messages: list[str] = []
+
+        def emit(self, record: logging.LogRecord) -> None:
+            self.messages.append(record.getMessage())
+
+    secret = "https://provider.invalid/v1?apikey=hunter2-secret"
+    logger = logging.getLogger("openalpha.test.worker")
+    handler = _Capture()
+    logger.addHandler(handler)
+    store = InMemoryObjectStore()
+    try:
+        result = run_diagnostic_worker(
+            store=store,
+            resolve_runtime=_Resolver(raise_on_enter=ConnectionResetError(secret)),
+            provider_factory=_ProviderFactory(),
+            research_root=RESEARCH,
+            source_commit=COMMIT,
+            deployed_commit=COMMIT,
+            run_id=RUN_ID,
+            now=NOW,
+            logger=logger,
+        )
+    finally:
+        logger.removeHandler(handler)
+
+    logged = "\n".join(handler.messages)
+    assert "exception_class=ConnectionResetError" in logged
+    assert "stage=enter_official_runtime" in logged
+    assert f"run_id={RUN_ID}" in logged
+    assert "frames=[" in logged
+    assert "test_diagnostic_worker.py:" in logged
+    for leaked in ("hunter2", "provider.invalid", "apikey"):
+        assert leaked not in logged, "the log leaked exception text"
+
+    body = store.get(result.artifact_key).body.decode("utf-8")
+    for leaked in ("hunter2", "provider.invalid", "apikey", "enter_official_runtime", "frames"):
+        assert leaked not in body, "the durable artifact gained unsanitised detail"
+
+
+def test_a_typed_failure_is_never_logged() -> None:
+    """It already carries a message this code wrote, so nothing is emitted."""
+
+    class _Capture(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.messages: list[str] = []
+
+        def emit(self, record: logging.LogRecord) -> None:
+            self.messages.append(record.getMessage())
+
+    logger = logging.getLogger("openalpha.test.worker.typed")
+    handler = _Capture()
+    logger.addHandler(handler)
+    try:
+        result = run_diagnostic_worker(
+            store=InMemoryObjectStore(),
+            resolve_runtime=_Resolver(assets=fake_assets(trainable=17_605)),
+            provider_factory=_ProviderFactory(),
+            research_root=RESEARCH,
+            source_commit=COMMIT,
+            deployed_commit=COMMIT,
+            run_id=RUN_ID,
+            now=NOW,
+            logger=logger,
+        )
+    finally:
+        logger.removeHandler(handler)
+
+    assert result.outcome == DIAGNOSTIC_FAILURE_CODE
+    assert handler.messages == []
 
 
 # ====================================================== nothing else is reachable

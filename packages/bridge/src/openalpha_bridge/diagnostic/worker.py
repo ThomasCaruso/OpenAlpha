@@ -10,6 +10,7 @@ Execution stops after the artifact is written.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -17,10 +18,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 from ..cloud.objectstore import ObjectStore
+from ..errors import BridgeTransformError
 from ..phase2.invocation import WorkerInvocation
 from ..phase2.states import EvidenceClass
 from .artifact import DiagnosticTerminalArtifact, publish_diagnostic_artifact
 from .runner import run_frozen_inference_diagnostic
+from .safe_logging import StageTracker, log_operational_failure
 
 __all__ = ["DiagnosticWorkerResult", "run_diagnostic_worker"]
 
@@ -52,13 +55,14 @@ class DiagnosticWorkerResult(BaseModel):
 def run_diagnostic_worker(
     *,
     store: ObjectStore,
-    resolve: Any,
+    resolve_runtime: Any,
     provider_factory: Any,
     research_root: Path | str,
     source_commit: str,
     deployed_commit: str,
     run_id: str,
     now: datetime | None = None,
+    logger: logging.Logger | None = None,
 ) -> DiagnosticWorkerResult:
     """Run the diagnostic once and store exactly one terminal artifact.
 
@@ -67,33 +71,64 @@ def run_diagnostic_worker(
     1. Every identifier is validated. Nothing below runs on an unchecked
        string, so no path, cache or object key is built from one.
     2. An existing terminal artifact is retrieved and verified. If one exists,
-       neither the provider nor the model is touched: ``resolve`` and
-       ``provider_factory`` are callables and are never invoked.
-    3. Only then are the assets resolved and the provider constructed.
+       ``resolve_runtime`` is never entered and ``provider_factory`` is never
+       called, so no weight is loaded and no retrieval is issued.
+    3. Only then is the official runtime entered, and it stays entered for the
+       whole computation. The tokenizer and the model do their inference while
+       the context that imported them is still open, which is the lifetime the
+       runtime probe exercises too.
 
-    ``resolve`` returns ``(codec, model, assets, parameter_digest)``. It is a
-    callable rather than a value so that a duplicate invocation genuinely
-    avoids loading weights rather than merely avoiding using them.
+    ``resolve_runtime`` is a zero-argument callable returning a context manager
+    that yields an object with ``codec``, ``model``, ``assets`` and
+    ``parameter_digest``.
     """
+    stage = StageTracker("validate_invocation")
     invocation = WorkerInvocation.validate_all(
         run_id=run_id, source_commit=source_commit, deployed_commit=deployed_commit
     )
 
     def execute():
-        codec, model, assets, parameter_digest = resolve()
-        return run_frozen_inference_diagnostic(
-            provider=provider_factory(),
-            codec=codec,
-            model=model,
-            assets=assets,
-            invocation=invocation,
-            research_root=Path(research_root),
-            parameter_digest=parameter_digest,
-            now=now,
-        )
+        # publish_diagnostic_artifact calls this only when no terminal artifact
+        # exists, so entering the runtime here is what keeps a duplicate
+        # invocation from loading anything.
+        stage.enter("enter_official_runtime")
+        with resolve_runtime() as runtime:
+            stage.enter("construct_provider")
+            provider = provider_factory()
+            return run_frozen_inference_diagnostic(
+                provider=provider,
+                codec=runtime.codec,
+                model=runtime.model,
+                assets=runtime.assets,
+                invocation=invocation,
+                research_root=Path(research_root),
+                parameter_digest=runtime.parameter_digest,
+                now=now,
+                stage=stage,
+            )
 
+    def execute_and_log():
+        try:
+            return execute()
+        except BridgeTransformError:
+            # Typed failures already say what went wrong, in a message this
+            # code wrote. They need no sanitising and no extra logging.
+            raise
+        except Exception as error:
+            # The artifact will carry only the class and a fixed message, so
+            # the safe location detail has to go somewhere. It goes here.
+            log_operational_failure(
+                error,
+                run_id=invocation.run_id,
+                deployed_commit=invocation.deployed_commit,
+                stage=stage.stage,
+                logger=logger,
+            )
+            raise
+
+    stage.enter("verify_existing_artifact")
     artifact: DiagnosticTerminalArtifact = publish_diagnostic_artifact(
-        store, invocation=invocation, execute=execute, now=now
+        store, invocation=invocation, execute=execute_and_log, now=now
     )
     return DiagnosticWorkerResult(
         artifact_key=artifact.key,

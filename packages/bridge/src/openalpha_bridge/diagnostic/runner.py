@@ -45,6 +45,7 @@ from .methods import (
 )
 from .normalization import NormalizationState, fit_context_state
 from .official_input import OFFICIAL_COLUMNS, ColumnPresence, OfficialRow, OfficialSeries
+from .safe_logging import StageTracker
 from .spec import (
     CONTEXT_CANDLES,
     KRONOS_MINI_SPEC,
@@ -285,6 +286,7 @@ def run_frozen_inference_diagnostic(
     settings: InferenceSettings = OFFICIAL_INFERENCE_SETTINGS,
     seeds: tuple[int, ...] = ROLLOUT_SEEDS,
     now: datetime | None = None,
+    stage: StageTracker | None = None,
 ) -> DiagnosticArtifact:
     """Execute methods A, B, C and D and compute the preregistered conclusion.
 
@@ -296,10 +298,14 @@ def run_frozen_inference_diagnostic(
     started = time.perf_counter()
     stamped = now or datetime.now(UTC)
     reset_gpu_statistics()
+    # Purely operational: records how far execution got so an unexpected
+    # failure can name a stage. It influences no measurement.
+    track = (stage or StageTracker()).enter
 
     specifications = verify_diagnostic_specifications(research_root)
     parameter_before = str(parameter_digest())
 
+    track("retrieve_series")
     observing = _CountingProvider(provider)
     series = observing.fetch(
         RetrievalRequest(
@@ -323,6 +329,7 @@ def run_frozen_inference_diagnostic(
 
     official = build_official_series(series)
 
+    track("fit_normalization")
     # Fitted exactly once, from the 448 context rows only. Every method is
     # handed this object; none may fit its own.
     state = fit_context_state(official.context)
@@ -335,7 +342,9 @@ def run_frozen_inference_diagnostic(
             ),
         )
 
+    track("method_a")
     method_a = run_method_a(codec=codec, series=official, state=state)
+    track("method_b")
     method_b = run_method_b(
         model=model,
         codec=codec,
@@ -344,7 +353,9 @@ def run_frozen_inference_diagnostic(
         settings=settings,
         seed=seeds[0],
     )
+    track("method_c")
     method_c = run_method_c(forecast=method_b, series=official)
+    track("method_d")
     method_d = run_method_d(
         model=model,
         codec=codec,
@@ -369,6 +380,7 @@ def run_frozen_inference_diagnostic(
                 ),
             )
 
+    track("verify_parameters")
     parameter_after = str(parameter_digest())
     if parameter_after != parameter_before:
         raise _fail(
@@ -387,6 +399,7 @@ def run_frozen_inference_diagnostic(
             ),
         )
 
+    track("compute_decision")
     # Method B and Method D rollout zero share a seed and settings, so a
     # deterministic path must produce identical output. Disagreement means the
     # run is not reproducible and no scientific reading of it is safe.

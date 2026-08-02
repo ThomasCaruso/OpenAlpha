@@ -27,6 +27,7 @@ __all__ = [
     "DIAGNOSTIC_EVIDENCE_CLASS_VALUE",
     "KRONOS_MINI_SPEC",
     "OFFICIAL_INFERENCE_SETTINGS",
+    "OFFICIAL_SNAPSHOT_ALLOW_PATTERNS",
     "OFFICIAL_SOURCE_FILES",
     "PRIMARY_METRIC",
     "ROLLOUT_COUNT",
@@ -71,6 +72,15 @@ V4_SPECIFICATION_SHA256: Final[str] = (
     "bd407722adfc3ebf92eb187828d42c2c9cfa57b2fdc0406121f27d39a5c44977"
 )
 OPERATIVE_SPECIFICATION_NAME: Final[str] = V4_SPECIFICATION_NAME
+
+#: The only files either official repository is fetched for. Both the
+#: diagnostic and the runtime probe use this exact set, and every one of
+#: them is hash-verified before a weight is read. Fetching more would pull
+#: files nothing verifies.
+OFFICIAL_SNAPSHOT_ALLOW_PATTERNS: Final[tuple[str, ...]] = (
+    "config.json",
+    "model.safetensors",
+)
 
 CLAIM_BOUNDARY: Final[str] = "DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"
 
