@@ -94,3 +94,14 @@ the 17,605 parameters, the 269 feature dimension, the score mask, periods,
 symbols, partitions, training configuration, metrics, bootstrap, thresholds,
 gates, one-time test-opening semantics, and the real and synthetic evidence
 classes are all unchanged.
+
+## Timestamp basis
+
+The amendment records `amended_on: 2026-08-02`. That date is **UTC**. At the
+moment of creation it was 2026-08-02 in UTC and still 2026-08-01 in
+America/Denver, the author's local zone.
+
+This note clarifies the basis; it does not change it. The locked YAML is
+byte-identical and its SHA-256 remains
+`d9484020a22df42c93edc19941374c628ea891f08c8bee8151b82264c00bb12b`. Every date
+in the amendment, and every timestamp the pipeline records, is UTC.
