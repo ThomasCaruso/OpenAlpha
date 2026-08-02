@@ -1,0 +1,161 @@
+schema_version: openalpha-bridge-v0-phase2-amendment-v3
+experiment_id: openalpha-kronos-bridge-2k-feasibility
+phase: phase_2_reconstruction_feasibility
+status: pre_data_scale_feature_definition_and_stage_a_canary
+amended_on: 2026-08-02
+claim_boundary: DEVELOPMENT COMPATIBILITY RESEARCH - NO RECONSTRUCTION RESULT
+
+original_lock:
+  path: research/bridge-v0/experiment.yaml
+  sha256: d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2
+  bytes_modified: false
+
+amendment_1:
+  path: research/bridge-v0/phase2-preregistration-amendment.yaml
+  sha256: 4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8
+  bytes_modified: false
+
+amendment_2:
+  path: research/bridge-v0/phase2-amendment-2-context-prefix.yaml
+  sha256: 66f3c8171c2805bccf4b924125bd206edad27c957dfff40a0abf3864fbab10c1
+  bytes_modified: false
+
+execution_state_at_amendment:
+  provider_requests: 0
+  retrieved_candles: 0
+  kronos_checkpoint_loads: 0
+  tokenizer_encodes: 0
+  bridge_optimizer_steps: 0
+  validation_metrics_inspected: false
+  reconstruction_test_opened: false
+  external_slices_opened: false
+  chosen_using_empirical_reconstruction_results: false
+
+reason:
+  summary: >-
+    The original lock names the 13 scale features but does not give their
+    formulas. An implementation must choose exact equations, so the choice is
+    recorded here before any real feature is extracted rather than left implicit
+    in code.
+  formulas_selected_from: locked_feature_names_only
+  formulas_selected_from_results: false
+
+# ---------------------------------------------------------------- definitions
+
+scale_feature_definitions:
+  count: 13
+  order_source: experiment.yaml bridge_architecture.tensors.scale_features.ordered_features
+  prefix_length: 448
+  suffix_length: 64
+  anchor_close: final_close_of_the_448_candle_prefix
+  population_standard_deviation_ddof: 0
+  statistics_computed_over: the_448_candle_prefix_only
+  formulas:
+    log_anchor_close: log(anchor_close)
+    open_mean_relative_to_anchor: prefix_population_mean(open) / anchor_close
+    high_mean_relative_to_anchor: prefix_population_mean(high) / anchor_close
+    low_mean_relative_to_anchor: prefix_population_mean(low) / anchor_close
+    close_mean_relative_to_anchor: prefix_population_mean(close) / anchor_close
+    log1p_open_std_over_anchor: log1p(prefix_population_std(open) / anchor_close)
+    log1p_high_std_over_anchor: log1p(prefix_population_std(high) / anchor_close)
+    log1p_low_std_over_anchor: log1p(prefix_population_std(low) / anchor_close)
+    log1p_close_std_over_anchor: log1p(prefix_population_std(close) / anchor_close)
+    log1p_volume_mean: log1p(prefix_population_mean(volume))
+    log1p_volume_std: log1p(prefix_population_std(volume))
+    log1p_amount_mean: log1p(prefix_population_mean(amount))
+    log1p_amount_std: log1p(prefix_population_std(amount))
+  broadcast: the_13_values_are_repeated_across_all_512_positions
+  dtype: float32
+
+causality_claim:
+  meaning: >-
+    No scored-suffix candle influences any of the 13 values, because every
+    statistic is computed over the 448-candle prefix alone.
+  not_claimed: >-
+    It is NOT claimed that a later prefix candle cannot affect an earlier prefix
+    row. The 13 values are prefix-wide statistics broadcast to every position, so
+    a change anywhere in the prefix changes them at every position, including
+    earlier ones. Position-level causality within the prefix is a property of the
+    frozen Kronos decoder trunk, not of these features.
+  scored_suffix_isolation_testable: true
+
+# ------------------------------------------------------------ Stage A canary
+
+stage_a_official_canary:
+  purpose: >-
+    One isolated official-asset compatibility check on real data. It proves the
+    official numerical path executes and matches the locked contract. It is not
+    a reconstruction-quality result.
+  evidence_class: development_compatibility_canary
+  symbol: SPY
+  interval: 1d
+  partition: train
+  window_selection_rule: >-
+    the first locked stride-64 training window whose complete 512 candles fall
+    inside the Amendment 1 Stage A request period [2015-05-04, 2023-01-01)
+  sequence_id: ecd7fd5797a9147a
+  prefix_start: 2015-05-07
+  prefix_end: 2017-02-14
+  target_start: 2017-02-15
+  target_end: 2017-05-17
+  window_length: 512
+  prefix_candles: 448
+  scored_suffix_candles: 64
+  retrieval_request:
+    symbol: SPY
+    start_inclusive: 2015-05-07
+    end_exclusive: 2017-05-18
+    expected_complete_candles: 512
+    maximum_provider_requests: 1
+  prohibited_retrieval:
+    validation_partition: true
+    reconstruction_test_partition: true
+    external_later_period: true
+    unseen_symbol_set: true
+  performs:
+    - lock_and_amendment_verification
+    - official_source_and_tokenizer_hash_verification
+    - official_encode_to_coarse_and_fine_identifiers
+    - official_bipolar_latent
+    - official_post_quant_embed_projection
+    - official_three_causal_decoder_blocks
+    - amended_269_dimensional_representation
+    - byte_identical_repeated_extraction
+    - scored_suffix_causality_check_on_the_official_backend
+    - identity_bound_cache_write_and_verified_read
+    - immutable_canary_report
+  prohibited:
+    stage_b: true
+    stage_c: true
+    training: true
+    checkpoint_creation: true
+    checkpoint_selection: true
+    test_partition_opening: true
+    metric_or_gate_evaluation: true
+  success_code: STAGE_A_OFFICIAL_CANARY_PASSED
+  success_meaning: >-
+    The official frozen path executes and matches the locked contract on one real
+    training window. Nothing about Bridge reconstruction quality, range-MAE
+    improvement, or feasibility follows from it.
+  authorizes_stage_b: false
+  authorizes_real_run: false
+  negative_result_handling: preserve_and_stop
+
+# ------------------------------------------------------------ unchanged locks
+
+unchanged_by_this_amendment:
+  experiment_file_bytes: true
+  amendment_1_bytes: true
+  amendment_2_bytes: true
+  bridge_architecture: true
+  trainable_parameter_count_17605: true
+  feature_dimensionality_269: true
+  score_mask: true
+  chronological_periods: true
+  source_universe: true
+  training_configuration: true
+  metrics: true
+  paired_bootstrap_procedure: true
+  success_and_failure_thresholds: true
+  one_time_test_opening_semantics: true
+  evidence_classifications_for_real_and_synthetic: true

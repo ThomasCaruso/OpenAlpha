@@ -21,6 +21,7 @@ from .states import EvidenceClass
 __all__ = [
     "AMENDMENT_1_SHA256",
     "AMENDMENT_2_SHA256",
+    "AMENDMENT_3_SHA256",
     "EXPERIMENT_SHA256",
     "RunIdentity",
     "canonical_json",
@@ -33,6 +34,7 @@ __all__ = [
 EXPERIMENT_SHA256 = "d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2"
 AMENDMENT_1_SHA256 = "4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8"
 AMENDMENT_2_SHA256 = "66f3c8171c2805bccf4b924125bd206edad27c957dfff40a0abf3864fbab10c1"
+AMENDMENT_3_SHA256 = "d9484020a22df42c93edc19941374c628ea891f08c8bee8151b82264c00bb12b"
 
 
 def canonical_json(value: Any) -> bytes:
@@ -68,6 +70,7 @@ def verify_locked_hashes(research_root: Path) -> dict[str, str]:
         "experiment.yaml": EXPERIMENT_SHA256,
         "phase2-preregistration-amendment.yaml": AMENDMENT_1_SHA256,
         "phase2-amendment-2-context-prefix.yaml": AMENDMENT_2_SHA256,
+        "phase2-amendment-3-scale-features.yaml": AMENDMENT_3_SHA256,
     }
     observed: dict[str, str] = {}
     for name, want in expected.items():
