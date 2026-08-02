@@ -838,3 +838,147 @@ def test_pipeline_rejects_a_non_report_object(tmp_path: Path) -> None:
     result = pipeline.stage_a(Fake())  # type: ignore[arg-type]
     assert result.state is Phase2State.BLOCKED
     assert result.detail["blocker"] == "STAGE_A_REPORT_WRONG_TYPE"
+
+
+# ------------------- one altered field must block Stage A (item 2)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "provider",
+        "official_source_file_sha256",
+        "score_mask_sha256",
+        "target_start",
+        "tokenizer_weights_sha256",
+        "representation_version",
+        "tensor_specification",
+    ],
+)
+def test_one_altered_shard_identity_field_blocks_stage_a(
+    tmp_path: Path, field: str
+) -> None:
+    """A single drifted shard-bound field must stop Stage A advancing."""
+    from openalpha_bridge.phase2.cache import CacheIdentity
+
+    candles = _candles()
+    cache = FeatureCache(tmp_path / "cache")
+    spec = _spec(candles)
+    extracted = FeatureExtractor(DeterministicFakeKronosBackend()).extract(
+        spec=spec, candles=candles, source_data_sha256="0" * 64
+    )
+
+    assets = _assets()
+    base = {
+        "run_id": "syn_stage_a",
+        "experiment_sha256": "d" * 64,
+        "amendment_sha256": ("1" * 64, "2" * 64, "3" * 64),
+        "score_mask_sha256": score_mask_sha256(),
+        "source_commit": "a" * 40,
+        "evidence_class": "development_compatibility_canary",
+        "provider": "deterministic_fake",
+        "provider_client_version": "fake-1",
+        "symbol": spec.symbol,
+        "interval": spec.interval,
+        "partition": Partition.TRAIN,
+        "prefix_start": spec.prefix_start.isoformat(),
+        "prefix_end": spec.prefix_end.isoformat(),
+        "target_start": spec.target_start.isoformat(),
+        "target_end": spec.target_end.isoformat(),
+        "candle_data_sha256": "0" * 64,
+        "official_source_repository": SOURCE_SPEC.repository,
+        "official_source_revision": SOURCE_SPEC.revision,
+        "official_source_file_sha256": dict(SOURCE_SPEC.files),
+        "tokenizer_repository": assets.repository,
+        "tokenizer_revision": assets.revision,
+        "tokenizer_config_sha256": assets.observed_config_sha256,
+        "tokenizer_weights_sha256": assets.observed_weights_sha256,
+        "frozen_parameter_sha256": assets.frozen_parameter_sha256,
+        "feature_schema_version": "openalpha.bridge.phase2.cache.v2",
+        "representation_version": "openalpha.bridge.financial.v1",
+        "tensor_specification": {"bridge_input": "float32[512,269]"},
+    }
+    drift = {
+        "provider": "another_provider",
+        "official_source_file_sha256": {"model/kronos.py": "9" * 64},
+        "score_mask_sha256": "9" * 64,
+        "target_start": "1999-01-01",
+        "tokenizer_weights_sha256": "9" * 64,
+        "representation_version": "openalpha.bridge.financial.v999",
+        "tensor_specification": {"bridge_input": "float32[512,268]"},
+    }
+    # The drifted value must survive the write-time consistency check, which
+    # only compares the fields that describe the example itself.
+    tainted = dict(base)
+    tainted[field] = drift[field]
+    ref = cache.write(extracted.to_cached_example(CacheIdentity(**tainted)))
+
+    from openalpha_bridge.phase2.stage_a import StageASequenceRecord
+
+    record = StageASequenceRecord(
+        sequence_id=extracted.sequence_id,
+        symbol=spec.symbol,
+        interval=spec.interval,
+        partition="train",
+        target_start=spec.target_start.isoformat(),
+        target_end=spec.target_end.isoformat(),
+        prefix_start=spec.prefix_start.isoformat(),
+        prefix_end=spec.prefix_end.isoformat(),
+        bridge_input_shape=(512, 269),
+        bridge_input_dtype="float32",
+        canonical_sha256=extracted.canonical_sha256(),
+        shard_relative_path=ref.relative_path,
+        shard_content_sha256=ref.content_sha256,
+        shard_size_bytes=ref.size_bytes,
+        deterministic_replay_matched=True,
+    )
+    from openalpha_bridge.phase2.stage_a import StageAReport
+
+    report = StageAReport(
+        run_id="syn_stage_a",
+        experiment_sha256="d" * 64,
+        amendment_sha256=("1" * 64, "2" * 64, "3" * 64),
+        source_commit="a" * 40,
+        evidence_class="development_compatibility_canary",
+        provider="deterministic_fake",
+        provider_mode="fake",
+        provider_client_version="fake-1",
+        kronos_mode="fake",
+        kronos_repository=assets.repository,
+        kronos_revision=assets.revision,
+        kronos_config_sha256=assets.observed_config_sha256,
+        kronos_weights_sha256=assets.observed_weights_sha256,
+        frozen_parameter_sha256=assets.frozen_parameter_sha256,
+        official_source_repository=SOURCE_SPEC.repository,
+        official_source_revision=SOURCE_SPEC.revision,
+        official_source_file_sha256=dict(SOURCE_SPEC.files),
+        cache_schema_version="openalpha.bridge.phase2.cache.v2",
+        representation_version="openalpha.bridge.financial.v1",
+        prefix_length=448,
+        suffix_length=64,
+        score_mask_sha256=score_mask_sha256(),
+        bridge_input_dimension=269,
+        retrieved_candles=512,
+        sequences=(record,),
+        completed_at=datetime(2026, 8, 2, tzinfo=UTC),
+        passed=True,
+    )
+
+    with pytest.raises(BridgeTransformError) as excinfo:
+        verify_stage_a_report(
+            report,
+            run_id="syn_stage_a",
+            experiment_sha256="d" * 64,
+            amendment_sha256=("1" * 64, "2" * 64, "3" * 64),
+            evidence_class="development_compatibility_canary",
+            source_commit="a" * 40,
+            provider_identity="deterministic_fake",
+            assets=assets,
+            expected_sequence_ids=frozenset({extracted.sequence_id}),
+            cache=cache,
+            expected_tensor_specification={"bridge_input": "float32[512,269]"},
+        )
+    assert excinfo.value.failures[0].code in {
+        "STAGE_A_SHARD_IDENTITY_MISMATCH",
+        "SHARD_IDENTITY_MISMATCH",
+    }

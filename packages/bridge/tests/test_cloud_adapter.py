@@ -44,7 +44,7 @@ from openalpha_bridge.cloud.testgate import (
 )
 from openalpha_bridge.errors import BridgeTransformError
 from openalpha_bridge.phase2.gates import TerminalConclusion
-from openalpha_bridge.phase2.identity import EXPERIMENT_SHA256
+from openalpha_bridge.phase2.identity import AMENDMENT_3_SHA256, EXPERIMENT_SHA256
 from openalpha_bridge.phase2.kronos import DeterministicFakeKronosBackend, KronosMode
 from openalpha_bridge.phase2.pipeline import Phase2Config
 from openalpha_bridge.phase2.provider import DeterministicFakeProvider, ProviderMode
@@ -190,6 +190,99 @@ def _stage_a_report(sequences: int = 1):
         sequences=records,
         completed_at=datetime(2026, 8, 2, tzinfo=UTC),
         passed=True,
+    )
+
+
+def _real_stage_a_for(runner_identity, cache_dir: Path, tmp_path: Path):
+    """A genuinely extracted Stage A report bound to the runner's own identity.
+
+    The runner now audits Stage A evidence against the active run, so a
+    fabricated report is correctly rejected. Orchestration tests must therefore
+    supply real evidence written to the runner's own cache directory.
+    """
+    from datetime import date, timedelta
+
+    from openalpha_bridge.phase2.cache import FeatureCache
+    from openalpha_bridge.phase2.features import FeatureExtractor
+    from openalpha_bridge.phase2.kronos import SOURCE_SPEC
+    from openalpha_bridge.phase2.provider import Candle, MarketSeries
+    from openalpha_bridge.phase2.stage_a import run_stage_a
+    from openalpha_bridge.windowing import (
+        CONTEXT_PREFIX_LENGTH,
+        EXAMPLE_LENGTH,
+        SCORED_SUFFIX_LENGTH,
+        Partition,
+        SequenceSpec,
+        sequence_id,
+    )
+
+    start = date(2020, 1, 1)
+    candles = []
+    level = 100.0
+    for index in range(EXAMPLE_LENGTH):
+        level = max(5.0, level * 1.0005)
+        close = level * 1.0002
+        volume = 1.0e6
+        candles.append(
+            Candle(
+                session=start + timedelta(days=index),
+                open=level,
+                high=max(level, close) * 1.001,
+                low=min(level, close) / 1.001,
+                close=close,
+                volume=volume,
+                amount=volume * close,
+            )
+        )
+        level = close
+    candles = tuple(candles)
+
+    spec = SequenceSpec(
+        sequence_id=sequence_id(
+            symbol="SPY",
+            interval="1d",
+            partition=Partition.TRAIN,
+            target_start=candles[CONTEXT_PREFIX_LENGTH].session,
+            target_end=candles[-1].session,
+        ),
+        symbol="SPY",
+        interval="1d",
+        partition=Partition.TRAIN,
+        prefix_start=candles[0].session,
+        prefix_end=candles[CONTEXT_PREFIX_LENGTH - 1].session,
+        target_start=candles[CONTEXT_PREFIX_LENGTH].session,
+        target_end=candles[-1].session,
+        prefix_length=CONTEXT_PREFIX_LENGTH,
+        suffix_length=SCORED_SUFFIX_LENGTH,
+        target_overlaps_other_target=False,
+    )
+    series = MarketSeries(
+        symbol="SPY",
+        interval="1d",
+        provider="deterministic_fake",
+        provider_mode=ProviderMode.FAKE,
+        client_version="fake-1",
+        retrieval_timestamp=None,
+        candles=candles,
+    )
+    backend = DeterministicFakeKronosBackend()
+    return run_stage_a(
+        run_id=runner_identity.run_id,
+        experiment_sha256=runner_identity.active_experiment_sha256,
+        source_commit=runner_identity.source_commit,
+        evidence_class=runner_identity.evidence_class.value,
+        series=series,
+        specs=(spec,),
+        extractor=FeatureExtractor(backend),
+        assets=backend.resolve_assets(),
+        cache=FeatureCache(cache_dir, repository_root=REPOSITORY_ROOT),
+        completed_at=datetime(2026, 8, 2, tzinfo=UTC),
+        amendment_sha256=(
+            runner_identity.amendment_1_sha256,
+            runner_identity.amendment_2_sha256,
+            AMENDMENT_3_SHA256,
+        ),
+        verified_source_file_sha256=dict(SOURCE_SPEC.files),
     )
 
 
@@ -779,6 +872,7 @@ def _runner(store: InMemoryObjectStore, tmp_path: Path) -> CloudRunner:
         training_symbols=("SPY", "QQQ"),
         unseen_symbols=("IWM",),
     )
+    report = _real_stage_a_for(identity, tmp_path / "cache", tmp_path)
     return CloudRunner(
         store=store,
         identity=identity,
@@ -788,7 +882,7 @@ def _runner(store: InMemoryObjectStore, tmp_path: Path) -> CloudRunner:
         training_backend=NumpyTrainingBackend(),
         guards=ResourceGuards(),
         clock=_Clock(),
-        stage_a_report=_stage_a_report(),
+        stage_a_report=report,
     )
 
 

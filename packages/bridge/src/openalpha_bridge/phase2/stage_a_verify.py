@@ -47,6 +47,7 @@ def verify_stage_a_report(
     assets: ResolvedAssets,
     expected_sequence_ids: frozenset[str],
     cache: FeatureCache,
+    expected_tensor_specification: dict[str, str] | None = None,
 ) -> StageAReport:
     """Verify Stage A evidence against the active run, or fail closed."""
     if not isinstance(report, StageAReport):
@@ -142,20 +143,89 @@ def verify_stage_a_report(
             )
         )
         identity = restored.identity
-        if identity.experiment_sha256 != experiment_sha256:
-            raise _fail(
-                "STAGE_A_SHARD_IDENTITY_MISMATCH",
-                f"{record.sequence_id} shard binds a different experiment",
+        shard_checks: list[tuple[str, object, object]] = [
+            ("run_id", identity.run_id, run_id),
+            ("experiment_sha256", identity.experiment_sha256, experiment_sha256),
+            (
+                "amendment_sha256",
+                tuple(identity.amendment_sha256),
+                tuple(amendment_sha256),
+            ),
+            ("score_mask_sha256", identity.score_mask_sha256, score_mask_sha256()),
+            ("evidence_class", identity.evidence_class, evidence_class),
+            ("provider", identity.provider, provider_identity),
+            (
+                "provider_client_version",
+                identity.provider_client_version,
+                report.provider_client_version,
+            ),
+            ("symbol", identity.symbol, record.symbol),
+            ("interval", identity.interval, record.interval),
+            ("partition", identity.partition.value, record.partition),
+            ("prefix_start", identity.prefix_start, record.prefix_start),
+            ("prefix_end", identity.prefix_end, record.prefix_end),
+            ("target_start", identity.target_start, record.target_start),
+            ("target_end", identity.target_end, record.target_end),
+            (
+                "official_source_repository",
+                identity.official_source_repository,
+                SOURCE_SPEC.repository,
+            ),
+            (
+                "official_source_revision",
+                identity.official_source_revision,
+                SOURCE_SPEC.revision,
+            ),
+            (
+                "official_source_file_sha256",
+                identity.official_source_file_sha256,
+                dict(SOURCE_SPEC.files),
+            ),
+            ("tokenizer_repository", identity.tokenizer_repository, assets.repository),
+            ("tokenizer_revision", identity.tokenizer_revision, assets.revision),
+            (
+                "tokenizer_config_sha256",
+                identity.tokenizer_config_sha256,
+                assets.observed_config_sha256,
+            ),
+            (
+                "tokenizer_weights_sha256",
+                identity.tokenizer_weights_sha256,
+                assets.observed_weights_sha256,
+            ),
+            (
+                "frozen_parameter_sha256",
+                identity.frozen_parameter_sha256,
+                assets.frozen_parameter_sha256,
+            ),
+            (
+                "feature_schema_version",
+                identity.feature_schema_version,
+                CACHE_SCHEMA_VERSION,
+            ),
+            (
+                "representation_version",
+                identity.representation_version,
+                report.representation_version,
+            ),
+            ("candle_data_sha256", identity.candle_data_sha256, restored.source_data_sha256),
+        ]
+        if source_commit is not None:
+            shard_checks.append(("source_commit", identity.source_commit, source_commit))
+        if expected_tensor_specification is not None:
+            shard_checks.append(
+                (
+                    "tensor_specification",
+                    identity.tensor_specification,
+                    expected_tensor_specification,
+                )
             )
-        if tuple(identity.amendment_sha256) != tuple(amendment_sha256):
+
+        drifted = sorted(name for name, got, want in shard_checks if got != want)
+        if drifted:
             raise _fail(
                 "STAGE_A_SHARD_IDENTITY_MISMATCH",
-                f"{record.sequence_id} shard binds different amendments",
-            )
-        if identity.run_id != run_id:
-            raise _fail(
-                "STAGE_A_SHARD_IDENTITY_MISMATCH",
-                f"{record.sequence_id} shard belongs to run {identity.run_id}",
+                f"{record.sequence_id} shard identity drifted: {', '.join(drifted)}",
             )
 
     return report

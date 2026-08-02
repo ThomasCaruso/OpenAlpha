@@ -15,6 +15,7 @@ from typing import Any
 
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from ..phase2.gates import GateTable, TerminalConclusion, evaluate_conclusion
+from ..phase2.identity import AMENDMENT_3_SHA256
 from ..phase2.kronos import KronosBackend, KronosMode
 from ..phase2.pipeline import Phase2Config, Phase2Pipeline
 from ..phase2.provider import Phase2Provider, ProviderMode
@@ -267,7 +268,38 @@ class CloudRunner:
                       "openalpha.bridge.phase2.assets.v1")
         self._record(Phase2State.ASSETS_RESOLVED, stage="assets")
 
-        stage_a = pipeline.stage_a(self._stage_a_report)
+        # Stage A evidence is audited against the active run before it may
+        # advance anything. verify_stage_a_report is the production caller here;
+        # only its verified return value reaches the pipeline.
+        verified_report = None
+        if self._stage_a_report is not None:
+            from ..phase2.cache import FeatureCache
+            from ..phase2.stage_a_verify import verify_stage_a_report
+
+            resolved = self._kronos.resolve_assets()
+            verified_report = verify_stage_a_report(
+                self._stage_a_report,
+                run_id=self._identity.run_id,
+                experiment_sha256=self._identity.active_experiment_sha256,
+                amendment_sha256=(
+                    self._identity.amendment_1_sha256,
+                    self._identity.amendment_2_sha256,
+                    AMENDMENT_3_SHA256,
+                ),
+                evidence_class=self._identity.evidence_class.value,
+                source_commit=self._identity.source_commit,
+                provider_identity=self._provider.name,
+                assets=resolved,
+                expected_sequence_ids=frozenset(
+                    record.sequence_id for record in self._stage_a_report.sequences
+                ),
+                cache=FeatureCache(
+                    self._pipeline_config.cache_directory,
+                    repository_root=self._pipeline_config.repository_root,
+                ),
+            )
+
+        stage_a = pipeline.stage_a(verified_report)
         if stage_a.state is Phase2State.BLOCKED:
             blocker = str(stage_a.detail.get("blocker", "STAGE_A_EXTRACTION_NOT_PERFORMED"))
             self._record(Phase2State.BLOCKED, stage="stage_a", reason=blocker)

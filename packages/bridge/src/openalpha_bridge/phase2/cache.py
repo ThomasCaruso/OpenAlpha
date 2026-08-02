@@ -333,7 +333,12 @@ class FeatureCache:
                 "SHARD_HASH_MISMATCH",
                 f"{ref.relative_path} expected {ref.content_sha256}, observed {observed}",
             )
-        return _decode(payload)
+        example = _decode(payload)
+        # A decoded shard is only usable if it still satisfies the locked shape
+        # contract and its bound identity still describes it.
+        example.validate_shapes()
+        self._assert_identity_consistent(example)
+        return example
 
     def recover_interrupted_writes(self) -> tuple[str, ...]:
         """Delete partial temporaries left by an interrupted run."""
