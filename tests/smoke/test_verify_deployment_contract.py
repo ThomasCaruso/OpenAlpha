@@ -25,6 +25,8 @@ from openalpha_bridge.diagnostic.spec import (
     V1_SPECIFICATION_SHA256,
     V2_SPECIFICATION_NAME,
     V2_SPECIFICATION_SHA256,
+    V3_SPECIFICATION_NAME,
+    V3_SPECIFICATION_SHA256,
     verify_diagnostic_specifications,
 )
 from openalpha_bridge.errors import BridgeTransformError
@@ -49,6 +51,7 @@ SEALED = {
 DIAGNOSTIC = {
     V1_SPECIFICATION_NAME: V1_SPECIFICATION_SHA256,
     V2_SPECIFICATION_NAME: V2_SPECIFICATION_SHA256,
+    V3_SPECIFICATION_NAME: V3_SPECIFICATION_SHA256,
 }
 
 
@@ -149,7 +152,9 @@ def test_both_diagnostic_specifications_are_returned(research_copy: Path) -> Non
     assert set(observed) == {
         "phase2-frozen-inference-diagnostic.yaml",
         "phase2-frozen-inference-diagnostic-v2.yaml",
+        "phase2-frozen-inference-diagnostic-v3.yaml",
     }
+    assert len(observed) == 3
 
 
 def test_the_diagnostic_values_match_the_locked_constants(research_copy: Path) -> None:
@@ -160,6 +165,9 @@ def test_the_diagnostic_values_match_the_locked_constants(research_copy: Path) -
     )
     assert payload["diagnostic_specification_hashes"][V2_SPECIFICATION_NAME] == (
         "c39fff4541afcc948cd80fcc545398312897efe723deca26554143989e4a175e"
+    )
+    assert payload["diagnostic_specification_hashes"][V3_SPECIFICATION_NAME] == (
+        "f10076b6676a72552b1c9c96720d0087c009fc939e4667509bfcfccf7929bcb6"
     )
 
 

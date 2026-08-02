@@ -45,6 +45,7 @@ from openalpha_bridge.diagnostic.spec import (
     TOTAL_CANDLES,
     V1_SPECIFICATION_SHA256,
     V2_SPECIFICATION_SHA256,
+    V3_SPECIFICATION_SHA256,
     WINDOW,
 )
 from openalpha_bridge.errors import BridgeTransformError
@@ -339,16 +340,27 @@ def test_any_invalid_round_trip_candle_is_a_strict_observation() -> None:
     assert a.validity_all.invalid_candle_count == 1
     assert a.validity_all.invalid_candle_fraction < 0.01  # immaterial
     assert a.structural_invalidity_observed is True
-    assert artifact.conclusion is DiagnosticConclusion.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED
-    assert artifact.decision.matched_rule_id == "R2"
+    # v3: recorded as a finding, never primary, and it no longer suppresses
+    # the later rules. Every one of them is still evaluated.
+    assert (
+        DiagnosticConclusion.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED in artifact.matched_findings
+    )
+    assert artifact.conclusion is not (
+        DiagnosticConclusion.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED
+    )
+    later = {"R3", "R4", "R5", "R6", "R7", "R8"}
+    evaluated = {e.rule_id for e in artifact.decision.evaluations}
+    assert later <= evaluated
 
 
 def test_material_round_trip_invalidity_is_separately_labelled() -> None:
     codec = FakeCodec(corrupt_round_trip=True, corrupt_fraction=0.5)
     artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01), codec=codec)
     assert artifact.method_a.validity_all.invalid_candle_fraction > 0.01
-    assert artifact.conclusion is DiagnosticConclusion.ROUNDTRIP_MATERIAL_INVALIDITY
-    assert artifact.decision.matched_rule_id == "R1"
+    assert DiagnosticConclusion.ROUNDTRIP_MATERIAL_INVALIDITY in artifact.matched_findings
+    # R1 may be primary, but the later findings still had to be evaluated.
+    later = {"R3", "R4", "R5", "R6", "R7", "R8"}
+    assert later <= {e.rule_id for e in artifact.decision.evaluations}
 
 
 # ===================================================== narrow conclusion vocabulary
@@ -360,33 +372,46 @@ def test_retired_causal_labels_cannot_be_produced(retired: str) -> None:
     assert RETIRED_LABELS[retired]
 
 
-def test_the_vocabulary_is_exactly_the_nine_specified_labels() -> None:
+def test_the_vocabulary_is_exactly_the_v3_labels() -> None:
     assert {c.value for c in DiagnosticConclusion} == {
-        "ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED",
+        "DIAGNOSTIC_OPERATIONAL_FAILURE",
+        "REPRODUCIBILITY_FAILURE",
         "ROUNDTRIP_MATERIAL_INVALIDITY",
+        "ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED",
+        "ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS",
+        "ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS",
+        "CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE",
         "NO_VALID_ROLLOUTS_OBSERVED",
-        "VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD",
         "LOW_VALID_ROLLOUT_FRACTION",
+        "VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD",
         "PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT",
+        "NO_SKILL_AGAINST_PERSISTENCE",
+        "SKILL_AGAINST_PERSISTENCE_OBSERVED",
         "NO_PREREGISTERED_EFFECT_DETECTED",
         "DIAGNOSTIC_INCONCLUSIVE",
-        "DIAGNOSTIC_OPERATIONAL_FAILURE",
     }
 
 
 def test_the_default_final_rule_is_not_causal() -> None:
+    """A wildly wrong but valid forecast beats no baseline, and says so."""
     wrong_but_valid = _shift(TRUE_TARGET, 1.30)
     artifact, _, _, _ = _run(lambda seed, ctx: wrong_but_valid)
-    assert artifact.decision.matched_rule_id == "R8"
-    assert artifact.conclusion is DiagnosticConclusion.NO_PREREGISTERED_EFFECT_DETECTED
     assert artifact.decision.forecast_origins == 1
+    assert DiagnosticConclusion.NO_SKILL_AGAINST_PERSISTENCE in artifact.matched_findings
+    assert artifact.conclusion is DiagnosticConclusion.NO_SKILL_AGAINST_PERSISTENCE
+    assert artifact.recommended_next_experiment.value == ("ABANDON_STRUCTURAL_VALIDITY_DIRECTION")
 
 
 def test_no_valid_rollouts_is_typed_and_nothing_is_substituted() -> None:
     artifact, _, _, _ = _run(lambda seed, ctx: _make_invalid(_shift(TRUE_TARGET, 1.01)))
-    assert artifact.conclusion is DiagnosticConclusion.NO_VALID_ROLLOUTS_OBSERVED
-    assert artifact.decision.matched_rule_id == "R3"
+    assert DiagnosticConclusion.NO_VALID_ROLLOUTS_OBSERVED in artifact.matched_findings
     assert artifact.method_d.valid_only_ensemble is None
+    # k == 0, so there is no size to match and every control statistic is null.
+    controls = artifact.method_d.size_matched_controls
+    assert controls.k == 0
+    assert controls.scored_repetitions == 0
+    assert controls.mean_primary_error is None
+    assert controls.undefined_reason is not None
     assert artifact.method_d.valid_only_ensemble_error is None
     assert artifact.method_d.manual_seeded_ensemble is not None
 
@@ -397,19 +422,24 @@ def test_valid_only_ensemble_meeting_the_threshold_is_stated_as_such() -> None:
     artifact, _, _, _ = _run(
         lambda seed, ctx: accurate_valid if _position(seed) % 2 == 0 else inaccurate_invalid
     )
-    assert artifact.conclusion is (
+    assert (
         DiagnosticConclusion.VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+        in artifact.matched_findings
     )
-    assert artifact.decision.matched_rule_id == "R4"
+    # The comparison is against size-matched controls, not against all 64.
+    controls = artifact.method_d.size_matched_controls
+    assert controls.k == artifact.method_d.valid_rollout_count
+    assert controls.mean_primary_error is not None
+    assert not controls.degenerate
 
 
 def test_a_low_valid_fraction_is_described_not_diagnosed_as_a_support_defect() -> None:
     valid_path = _shift(TRUE_TARGET, 1.02)
     invalid_path = _make_invalid(_shift(TRUE_TARGET, 1.02))
     artifact, _, _, _ = _run(lambda seed, ctx: valid_path if _position(seed) < 3 else invalid_path)
-    assert artifact.conclusion is DiagnosticConclusion.LOW_VALID_ROLLOUT_FRACTION
-    assert artifact.decision.matched_rule_id == "R5"
+    assert DiagnosticConclusion.LOW_VALID_ROLLOUT_FRACTION in artifact.matched_findings
     assert artifact.method_d.valid_rollout_fraction < 0.25
+    assert artifact.method_d.size_matched_controls.k == 3
 
 
 def test_projection_without_threshold_improvement_is_described_locally() -> None:
@@ -424,18 +454,36 @@ def test_projection_without_threshold_improvement_is_described_locally() -> None
 
     artifact, _, _, _ = _run(policy)
     assert artifact.method_c.restores_validity
-    assert artifact.conclusion is (
+    assert (
         DiagnosticConclusion.PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT
+        in artifact.matched_findings
     )
-    assert artifact.decision.matched_rule_id == "R6"
 
 
 def test_every_rule_is_recorded_even_when_it_did_not_match() -> None:
     artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.30))
     ids = [e.rule_id for e in artifact.decision.evaluations]
-    assert ids == ["R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"]
+    assert ids == [
+        "R0",
+        "R0b",
+        "R1",
+        "R2",
+        "R2a",
+        "R2b",
+        "R2c",
+        "R3",
+        "R4",
+        "R5",
+        "R6",
+        "R7",
+        "R8",
+        "R9",
+        "R10",
+    ]
+    # v3 permits several simultaneous findings, so this is no longer one.
     matched = [e for e in artifact.decision.evaluations if e.matched]
-    assert len(matched) == 1
+    assert len(matched) >= 1
+    assert artifact.decision.primary_conclusion in artifact.matched_findings
 
 
 # ======================================================= probability definition
@@ -660,12 +708,13 @@ def test_the_artifact_authorizes_nothing_by_type() -> None:
         assert getattr(artifact, field) is False
 
 
-def test_both_specifications_are_verified_and_v2_is_operative() -> None:
+def test_all_three_specifications_are_verified_and_v3_is_operative() -> None:
     artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
     assert artifact.specification_v1_sha256 == V1_SPECIFICATION_SHA256
     assert artifact.specification_v2_sha256 == V2_SPECIFICATION_SHA256
-    assert artifact.operative_specification == "phase2-frozen-inference-diagnostic-v2.yaml"
-    assert artifact.schema_version == "openalpha.bridge.diagnostic.frozen_inference.v2"
+    assert artifact.specification_v3_sha256 == V3_SPECIFICATION_SHA256
+    assert artifact.operative_specification == "phase2-frozen-inference-diagnostic-v3.yaml"
+    assert artifact.schema_version == "openalpha.bridge.diagnostic.frozen_inference.v3"
 
 
 def test_a_tampered_specification_fails_closed(tmp_path: Path) -> None:
@@ -674,6 +723,7 @@ def test_a_tampered_specification_fails_closed(tmp_path: Path) -> None:
     for name in (
         "phase2-frozen-inference-diagnostic.yaml",
         "phase2-frozen-inference-diagnostic-v2.yaml",
+        "phase2-frozen-inference-diagnostic-v3.yaml",
     ):
         (fake_root / name).write_text("schema: tampered\n", encoding="utf-8")
     codec = FakeCodec()

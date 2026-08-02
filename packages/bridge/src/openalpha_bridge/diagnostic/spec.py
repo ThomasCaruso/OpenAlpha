@@ -22,6 +22,8 @@ from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 __all__ = [
     "CLAIM_BOUNDARY",
     "CONTEXT_CANDLES",
+    "CONTROL_REPETITIONS",
+    "CONTROL_SEED",
     "DIAGNOSTIC_EVIDENCE_CLASS_VALUE",
     "KRONOS_MINI_SPEC",
     "OFFICIAL_INFERENCE_SETTINGS",
@@ -36,6 +38,8 @@ __all__ = [
     "V1_SPECIFICATION_SHA256",
     "V2_SPECIFICATION_NAME",
     "V2_SPECIFICATION_SHA256",
+    "V3_SPECIFICATION_NAME",
+    "V3_SPECIFICATION_SHA256",
     "WINDOW",
     "DiagnosticThresholds",
     "ForecastModelSpec",
@@ -53,6 +57,13 @@ V2_SPECIFICATION_NAME: Final[str] = "phase2-frozen-inference-diagnostic-v2.yaml"
 V2_SPECIFICATION_SHA256: Final[str] = (
     "c39fff4541afcc948cd80fcc545398312897efe723deca26554143989e4a175e"
 )
+
+#: The operative document. v1 and v2 are preserved and still verified.
+V3_SPECIFICATION_NAME: Final[str] = "phase2-frozen-inference-diagnostic-v3.yaml"
+V3_SPECIFICATION_SHA256: Final[str] = (
+    "f10076b6676a72552b1c9c96720d0087c009fc939e4667509bfcfccf7929bcb6"
+)
+OPERATIVE_SPECIFICATION_NAME: Final[str] = V3_SPECIFICATION_NAME
 
 CLAIM_BOUNDARY: Final[str] = "DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"
 
@@ -184,6 +195,12 @@ ROLLOUT_COUNT: Final[int] = 64
 #: Fixed by the specification, not derived at execution time.
 ROLLOUT_SEEDS: Final[tuple[int, ...]] = tuple(20_150_507 + index for index in range(ROLLOUT_COUNT))
 
+#: Size-matched control sampling, fixed by v3. The seed is the window's
+#: exclusive end date, distinct from the rollout base seed so the two streams
+#: cannot be confused.
+CONTROL_SEED: Final[int] = 20_170_518
+CONTROL_REPETITIONS: Final[int] = 200
+
 
 class DiagnosticThresholds(BaseModel):
     """Every number the conclusion rules compare against."""
@@ -195,6 +212,11 @@ class DiagnosticThresholds(BaseModel):
     roundtrip_material_invalid_fraction: float = 0.01
     minimum_relative_improvement: float = 0.05
     valid_rollout_support_fraction_minimum: float = 0.25
+    #: Clipped input rows above this make the tokenizer reading inconclusive,
+    #: because the clip distorted the input before the tokenizer saw it.
+    material_clipping_row_fraction: float = 0.01
+    #: Skill against persistence must exceed this to count as skill at all.
+    minimum_persistence_skill: float = 0.0
 
 
 THRESHOLDS: Final[DiagnosticThresholds] = DiagnosticThresholds()
@@ -227,12 +249,13 @@ def _verify_one(research_root: Path, name: str, expected: str) -> str:
 def verify_diagnostic_specifications(research_root: Path | str) -> dict[str, str]:
     """Verify both documents, or fail closed.
 
-    v1 is checked even though it is superseded: it is preserved evidence of what
-    was specified before, and a superseded document that drifted would make the
-    supersession record meaningless.
+    v1 and v2 are checked even though both are superseded: they are preserved
+    evidence of what was specified before, and a superseded document that
+    drifted would make the supersession record meaningless. v3 is operative.
     """
     root = Path(research_root)
     return {
         V1_SPECIFICATION_NAME: _verify_one(root, V1_SPECIFICATION_NAME, V1_SPECIFICATION_SHA256),
         V2_SPECIFICATION_NAME: _verify_one(root, V2_SPECIFICATION_NAME, V2_SPECIFICATION_SHA256),
+        V3_SPECIFICATION_NAME: _verify_one(root, V3_SPECIFICATION_NAME, V3_SPECIFICATION_SHA256),
     }

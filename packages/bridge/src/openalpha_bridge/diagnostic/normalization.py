@@ -263,3 +263,55 @@ def fit_context_state(context: tuple[OfficialRow, ...]) -> NormalizationState:
         fitted_candle_count=len(context),
         state_sha256=digest,
     )
+
+
+class ClippingReport(BaseModel):
+    """How much of an input the symmetric clip actually touched.
+
+    predict() clips standardized values at plus or minus five. A value that
+    clipped was distorted before the tokenizer ever saw it, so an invalid
+    reconstruction at that row says something about the clip, not necessarily
+    about the decoder. Counting it is what keeps the two apart.
+    """
+
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
+
+    rows: int = Field(ge=0)
+    scalar_values: int = Field(ge=0)
+    clipped_scalar_values: int = Field(ge=0)
+    clipped_scalar_fraction: float
+    clipped_by_column: dict[str, int]
+    clipped_fraction_by_column: dict[str, float]
+    rows_with_any_clipped_channel: int = Field(ge=0)
+    row_clipped_fraction: float
+    #: Index of every row in which at least one channel clipped.
+    clipped_row_indices: tuple[int, ...]
+
+
+def clipping_report(state: NormalizationState, rows: tuple[OfficialRow, ...]) -> ClippingReport:
+    """Which scalars the clip moved, per column and per row."""
+    matrix = context_matrix(rows)
+    standardized = (matrix - state.mean_array()) / (state.std_array() + state.epsilon)
+    clipped = np.abs(standardized) > np.float32(state.clip_value)
+
+    by_column = {name: int(clipped[:, index].sum()) for index, name in enumerate(state.columns)}
+    row_flags = clipped.any(axis=1)
+    total_scalars = int(clipped.size)
+    total_clipped = int(clipped.sum())
+    row_count = len(rows)
+    return ClippingReport(
+        rows=row_count,
+        scalar_values=total_scalars,
+        clipped_scalar_values=total_clipped,
+        clipped_scalar_fraction=(total_clipped / total_scalars) if total_scalars else 0.0,
+        clipped_by_column=by_column,
+        clipped_fraction_by_column={
+            name: (count / row_count) if row_count else 0.0 for name, count in by_column.items()
+        },
+        rows_with_any_clipped_channel=int(row_flags.sum()),
+        row_clipped_fraction=(float(row_flags.sum()) / row_count) if row_count else 0.0,
+        clipped_row_indices=tuple(int(i) for i in np.flatnonzero(row_flags)),
+    )
+
+
+__all__ += ["ClippingReport", "clipping_report"]

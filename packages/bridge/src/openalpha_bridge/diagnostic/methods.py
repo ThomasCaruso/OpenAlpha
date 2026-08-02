@@ -16,6 +16,7 @@ one complete 512-token window.
 from __future__ import annotations
 
 import math
+import random
 import time
 from datetime import date
 from typing import Literal
@@ -26,14 +27,23 @@ from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from .backends import ForecastModel, GeneratedPath, StepSampling, TokenizerCodec, TokenPair
 from .metrics import (
     ForecastError,
+    PersistenceComparison,
     ReconstructionError,
+    compare_to_persistence,
     forecast_error,
     mean_of,
     reconstruction_error,
+    spearman,
 )
-from .normalization import NormalizationState
+from .normalization import ClippingReport, NormalizationState, clipping_report
 from .official_input import OfficialRow, OfficialSeries, TimeStamp
-from .spec import OFFICIAL_INFERENCE_SETTINGS, ROLLOUT_SEEDS, InferenceSettings
+from .spec import (
+    CONTROL_REPETITIONS,
+    CONTROL_SEED,
+    OFFICIAL_INFERENCE_SETTINGS,
+    ROLLOUT_SEEDS,
+    InferenceSettings,
+)
 from .validity import PathValidity, ProjectionOutcome, path_validity, project_path
 
 __all__ = [
@@ -42,6 +52,7 @@ __all__ = [
     "MethodCResult",
     "MethodDResult",
     "RolloutRecord",
+    "SizeMatchedControls",
     "run_method_a",
     "run_method_b",
     "run_method_c",
@@ -85,6 +96,18 @@ class MethodAResult(BaseModel):
     validity_target_suffix: PathValidity
     #: Any invalid round-trip candle at all. Independent of materiality.
     structural_invalidity_observed: bool
+
+    #: How much of the input the clip touched before the tokenizer saw it.
+    clipping_all: ClippingReport
+    clipping_target_suffix: ClippingReport
+    #: Invalidity split by whether the input row was clipped. A row whose input
+    #: was distorted by the clip cannot be attributed to the decoder.
+    invalid_rows_with_clipped_input: int
+    invalid_rows_with_unclipped_input: int
+    clipped_input_rows: int
+    unclipped_input_rows: int
+    invalid_fraction_given_clipped_input: float | None
+    invalid_fraction_given_unclipped_input: float | None
     seconds: float
 
 
@@ -100,6 +123,15 @@ def run_method_a(
 
     suffix = len(series.target)
     validity_all = path_validity(reconstruction)
+
+    clip_all = clipping_report(state, rows)
+    clipped_rows = set(clip_all.clipped_row_indices)
+    invalid_rows = {c.index for c in validity_all.per_candle if not c.valid}
+    clipped_count = len(clipped_rows)
+    unclipped_count = len(rows) - clipped_count
+    invalid_clipped = len(invalid_rows & clipped_rows)
+    invalid_unclipped = len(invalid_rows - clipped_rows)
+
     return MethodAResult(
         normalization_state_sha256=state.state_sha256,
         coarse_token_ids=coarse,
@@ -110,6 +142,18 @@ def run_method_a(
         validity_all=validity_all,
         validity_target_suffix=path_validity(reconstruction[-suffix:]),
         structural_invalidity_observed=validity_all.invalid_candle_count > 0,
+        clipping_all=clip_all,
+        clipping_target_suffix=clipping_report(state, rows[-suffix:]),
+        invalid_rows_with_clipped_input=invalid_clipped,
+        invalid_rows_with_unclipped_input=invalid_unclipped,
+        clipped_input_rows=clipped_count,
+        unclipped_input_rows=unclipped_count,
+        invalid_fraction_given_clipped_input=(
+            invalid_clipped / clipped_count if clipped_count else None
+        ),
+        invalid_fraction_given_unclipped_input=(
+            invalid_unclipped / unclipped_count if unclipped_count else None
+        ),
         seconds=round(time.perf_counter() - started, 6),
     )
 
@@ -130,6 +174,7 @@ class MethodBResult(BaseModel):
     raw_decoded: tuple[OfficialRow, ...]
     validity: PathValidity
     forecast_error: ForecastError
+    persistence: PersistenceComparison
     seconds: float
 
 
@@ -194,6 +239,9 @@ def run_method_b(
         raw_decoded=decoded,
         validity=path_validity(decoded),
         forecast_error=forecast_error(decoded, series.target, anchor_close=anchor),
+        persistence=compare_to_persistence(
+            decoded, series.target, anchor_close=anchor, label="method_b_raw"
+        ),
         seconds=round(time.perf_counter() - started, 6),
     )
 
@@ -211,6 +259,7 @@ class MethodCResult(BaseModel):
     forecast_error_before: ForecastError
     forecast_error_after: ForecastError
     primary_error_improvement: float | None
+    persistence_after: PersistenceComparison
     seconds: float
 
 
@@ -237,7 +286,150 @@ def run_method_c(*, forecast: MethodBResult, series: OfficialSeries) -> MethodCR
         forecast_error_before=forecast.forecast_error,
         forecast_error_after=error_after,
         primary_error_improvement=improvement,
+        persistence_after=compare_to_persistence(
+            outcome.projected,
+            series.target,
+            anchor_close=anchor,
+            label="method_c_projected",
+        ),
         seconds=round(time.perf_counter() - started, 6),
+    )
+
+
+class SizeMatchedControls(BaseModel):
+    """Ensembles of exactly k paths drawn from all rollouts, k = valid count.
+
+    The valid-only ensemble averages k paths while the manual ensemble averages
+    all of them, and averaging fewer paths cancels less noise. Comparing the
+    two therefore mixes selection-by-validity with ensemble size, and the size
+    term alone can dominate: with validity assigned at random and k around a
+    fifth of the rollouts, the smaller ensemble looks roughly twice as bad.
+
+    These controls hold k fixed and vary only which paths are chosen, so the
+    remaining difference is attributable to validity.
+    """
+
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
+
+    k: int = Field(ge=0)
+    seed: int
+    repetitions: int = Field(ge=0)
+    #: Controls actually scored. Fewer than `repetitions` when an error was
+    #: undefined, and zero when k is 0.
+    scored_repetitions: int = Field(ge=0)
+    #: True when k equals the rollout count, so every draw is the same set and
+    #: the control is identical to the manual ensemble by construction.
+    degenerate: bool
+    sampling: Literal["without_replacement_within_each_repetition"] = (
+        "without_replacement_within_each_repetition"
+    )
+
+    mean_primary_error: float | None = None
+    median_primary_error: float | None = None
+    standard_deviation_primary_error: float | None = None
+    minimum_primary_error: float | None = None
+    maximum_primary_error: float | None = None
+    #: Fraction of controls whose error is greater than the valid-only error.
+    #: 1.0 means valid-only beat every control.
+    valid_only_percentile_rank: float | None = None
+    relative_improvement_against_mean: float | None = None
+    relative_improvement_against_median: float | None = None
+    undefined_reason: str | None = None
+
+
+def _size_matched_controls(
+    *,
+    paths: list[tuple[OfficialRow, ...]],
+    k: int,
+    sessions: tuple[date, ...],
+    target: tuple[OfficialRow, ...],
+    anchor: float,
+    valid_only_error: float | None,
+    seed: int = CONTROL_SEED,
+    repetitions: int = CONTROL_REPETITIONS,
+) -> SizeMatchedControls:
+    """Draw k paths without replacement, repeatedly, and score each draw."""
+    total = len(paths)
+    if k <= 0:
+        return SizeMatchedControls(
+            k=k,
+            seed=seed,
+            repetitions=repetitions,
+            scored_repetitions=0,
+            degenerate=False,
+            undefined_reason="no valid rollouts, so there is no size to match",
+        )
+    if k > total:
+        return SizeMatchedControls(
+            k=k,
+            seed=seed,
+            repetitions=repetitions,
+            scored_repetitions=0,
+            degenerate=False,
+            undefined_reason=f"k {k} exceeds the {total} available rollouts",
+        )
+
+    degenerate = k == total
+    # Every draw of k = total is the same set, so one repetition says all there
+    # is to say and the rest would be identical work.
+    effective = 1 if degenerate else repetitions
+
+    generator = random.Random(seed)
+    errors: list[float] = []
+    indices = list(range(total))
+    for _ in range(effective):
+        chosen = generator.sample(indices, k)
+        ensemble = _ensemble([paths[i] for i in chosen], sessions)
+        if ensemble is None:
+            continue
+        error = forecast_error(ensemble, target, anchor_close=anchor)
+        if error.defined and error.close_return_mae is not None:
+            errors.append(error.close_return_mae)
+
+    if not errors:
+        return SizeMatchedControls(
+            k=k,
+            seed=seed,
+            repetitions=repetitions,
+            scored_repetitions=0,
+            degenerate=degenerate,
+            undefined_reason="every control ensemble produced an undefined error",
+        )
+
+    ordered = sorted(errors)
+    count = len(ordered)
+    mean_error = sum(ordered) / count
+    median_error = (
+        ordered[count // 2] if count % 2 else (ordered[count // 2 - 1] + ordered[count // 2]) / 2.0
+    )
+    variance = sum((value - mean_error) ** 2 for value in ordered) / count
+    rank = (
+        sum(1 for value in ordered if value > valid_only_error) / count
+        if valid_only_error is not None
+        else None
+    )
+    return SizeMatchedControls(
+        k=k,
+        seed=seed,
+        repetitions=repetitions,
+        scored_repetitions=count,
+        degenerate=degenerate,
+        mean_primary_error=mean_error,
+        median_primary_error=median_error,
+        standard_deviation_primary_error=variance**0.5,
+        minimum_primary_error=ordered[0],
+        maximum_primary_error=ordered[-1],
+        valid_only_percentile_rank=rank,
+        relative_improvement_against_mean=(
+            1.0 - valid_only_error / mean_error
+            if valid_only_error is not None and mean_error
+            else None
+        ),
+        relative_improvement_against_median=(
+            1.0 - valid_only_error / median_error
+            if valid_only_error is not None and median_error
+            else None
+        ),
     )
 
 
@@ -276,6 +468,15 @@ class MethodDResult(BaseModel):
 
     valid_group_mean_primary_error: float | None
     invalid_group_mean_primary_error: float | None
+    #: Secondary, unconfounded evidence: per-path errors, not ensembles.
+    group_absolute_difference: float | None
+    group_relative_difference: float | None
+    #: Descriptive rank association between a rollout's invalid candle count
+    #: and its forecast error, at this origin only.
+    invalidity_error_spearman: float | None
+
+    #: The de-confounded comparison the filtering rule uses.
+    size_matched_controls: SizeMatchedControls
 
     valid_only_ensemble: tuple[OfficialRow, ...] | None
     valid_only_ensemble_error: ForecastError | None
@@ -285,6 +486,10 @@ class MethodDResult(BaseModel):
     manual_seeded_ensemble: tuple[OfficialRow, ...] | None
     manual_seeded_ensemble_error: ForecastError | None
     manual_ensemble_is_official: Literal[False] = False
+
+    #: Persistence comparisons for the two ensembles.
+    valid_only_persistence: PersistenceComparison | None
+    manual_ensemble_persistence: PersistenceComparison | None
 
     distinct_token_paths: int = Field(ge=0)
     repeated_path_count: int = Field(ge=0)
@@ -382,6 +587,44 @@ def run_method_d(
     valid_ensemble = _ensemble([r.raw_decoded for r in valid], sessions)
     manual_ensemble = _ensemble([r.raw_decoded for r in records], sessions)
 
+    valid_only_error = (
+        forecast_error(valid_ensemble, series.target, anchor_close=anchor)
+        if valid_ensemble is not None
+        else None
+    )
+    controls = _size_matched_controls(
+        paths=[r.raw_decoded for r in records],
+        k=len(valid),
+        sessions=sessions,
+        target=series.target,
+        anchor=anchor,
+        valid_only_error=(
+            valid_only_error.close_return_mae
+            if valid_only_error is not None and valid_only_error.defined
+            else None
+        ),
+    )
+
+    valid_mean = mean_of(primaries(valid))
+    invalid_mean = mean_of(primaries(invalid))
+    absolute_difference = (
+        invalid_mean - valid_mean if valid_mean is not None and invalid_mean is not None else None
+    )
+    relative_difference = (
+        absolute_difference / invalid_mean
+        if absolute_difference is not None and invalid_mean
+        else None
+    )
+    scorable = [
+        r
+        for r in records
+        if r.forecast_error.defined and r.forecast_error.close_return_mae is not None
+    ]
+    association = spearman(
+        [float(r.invalid_candle_count) for r in scorable],
+        [float(r.forecast_error.close_return_mae) for r in scorable],  # type: ignore[arg-type]
+    )
+
     signatures = [(r.coarse_token_ids, r.fine_token_ids) for r in records]
     counts: dict[tuple, int] = {}
     for signature in signatures:
@@ -407,19 +650,25 @@ def run_method_d(
         rollout_count=len(records),
         valid_rollout_count=len(valid),
         valid_rollout_fraction=(len(valid) / len(records)) if records else 0.0,
-        valid_group_mean_primary_error=mean_of(primaries(valid)),
-        invalid_group_mean_primary_error=mean_of(primaries(invalid)),
+        valid_group_mean_primary_error=valid_mean,
+        invalid_group_mean_primary_error=invalid_mean,
+        group_absolute_difference=absolute_difference,
+        group_relative_difference=relative_difference,
+        invalidity_error_spearman=association,
+        size_matched_controls=controls,
         valid_only_ensemble=valid_ensemble,
-        valid_only_ensemble_error=(
-            forecast_error(valid_ensemble, series.target, anchor_close=anchor)
-            if valid_ensemble is not None
-            else None
-        ),
+        valid_only_ensemble_error=valid_only_error,
         manual_seeded_ensemble=manual_ensemble,
         manual_seeded_ensemble_error=(
             forecast_error(manual_ensemble, series.target, anchor_close=anchor)
             if manual_ensemble is not None
             else None
+        ),
+        valid_only_persistence=compare_to_persistence(
+            valid_ensemble, series.target, anchor_close=anchor, label="valid_only_ensemble"
+        ),
+        manual_ensemble_persistence=compare_to_persistence(
+            manual_ensemble, series.target, anchor_close=anchor, label="manual_seeded_ensemble"
         ),
         distinct_token_paths=len(counts),
         repeated_path_count=repeated,

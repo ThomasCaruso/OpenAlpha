@@ -1,0 +1,383 @@
+schema: openalpha.research.phase2.frozen_inference_diagnostic.v3
+title: Frozen inference diagnostic for constrained Kronos decoding, revision 3
+status: development_only_diagnostic_specification
+claim_boundary: DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE
+
+supersedes:
+  document: phase2-frozen-inference-diagnostic-v2.yaml
+  sha256: c39fff4541afcc948cd80fcc545398312897efe723deca26554143989e4a175e
+  chain:
+    - document: phase2-frozen-inference-diagnostic.yaml
+      sha256: c909e156a61ac5b5323de9e794aad20521839c0f43f491fb356c1968f730101b
+  status_of_superseded_documents: >
+    v1 and v2 are preserved byte-identical and remain verified. Neither was
+    ever executed, so nothing was concluded under either.
+  reason: >
+    v2 was methodologically defective in four ways that a green test suite did
+    not surface, and each could have produced a valid immutable artifact that
+    answered nothing.
+
+    First, v2 stopped at the first matching rule. The properties this
+    diagnostic measures are not mutually exclusive, and the rule most likely to
+    match first, round-trip invalidity, is the least decision-relevant. A
+    single invalid candle in 512 would have terminated evaluation before
+    rollout support, projection, filtering or baseline skill were considered,
+    spending the one available origin without selecting a branch.
+
+    Second, v2 compared a valid-only ensemble of k paths against an ensemble of
+    all 64. Averaging fewer paths cancels less noise, so that comparison mixed
+    selection-by-validity with ensemble size. Simulated with validity assigned
+    at random, so that validity carries no information by construction, the
+    valid-only ensemble looked about 2.3 times worse at a 20 per cent valid
+    fraction and the improvement rule fired in none of 4000 trials. The rule
+    was therefore structurally incapable of detecting the effect it existed to
+    detect, in exactly the low-valid-fraction regime where constrained search
+    would be the justified next step.
+
+    Third, v2 had no baseline of any kind, so no error figure it produced had a
+    referent and the branch "corrected outputs remain inaccurate" could not be
+    reached on evidence.
+
+    Fourth, Method A clips its inputs at plus or minus five standard deviations
+    of the context before the tokenizer sees them, and v2 recorded no clipping
+    exposure. An invalid reconstruction of a clipped row says something about
+    the clip, not necessarily about the decoder, and v2 could not tell the two
+    apart.
+
+relationship_to_sealed_specifications: >
+  Separately hashed. Amends nothing. experiment.yaml and amendments 1, 2 and 3
+  keep their exact bytes and digests.
+
+inherits_unchanged_from_v2:
+  - prohibitions
+  - data window, symbol, frequency, calendar and partition
+  - full official six-channel input identity and timestamp derivation
+  - context-only float32 normalization, fitted once from the 448 context rows
+  - pinned tokenizer, forecasting model and official source identities
+  - inference settings derived from KronosPredictor.predict defaults
+  - sampling and probability definitions
+  - the official complete-window decode order
+  - structural validity definition
+  - the manual versus official ensemble distinction
+  - single forecast origin, and the refusal to generalize from it
+
+decision_semantics:
+  replaces: first_match_only
+  with: evaluate_every_rule_then_select_a_primary
+  requirements:
+    - Every rule is evaluated even when an earlier rule matches.
+    - >
+      The artifact reports primary_conclusion, matched_findings, evaluations
+      containing every rule matched or not, and recommended_next_experiment.
+    - >
+      R1 may be the primary conclusion when material round-trip invalidity is
+      observed, but it no longer suppresses later findings.
+    - >
+      R2 is a recorded finding and is never primary. On its own it selects no
+      branch.
+    - >
+      Findings concerning rollout support, projection, filtering and baseline
+      skill are always present regardless of what matched earlier.
+    - Several findings may hold simultaneously.
+    - No causal or general claim is derived from one origin.
+  primary_priority:
+    - DIAGNOSTIC_OPERATIONAL_FAILURE
+    - REPRODUCIBILITY_FAILURE
+    - CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE
+    - ROUNDTRIP_MATERIAL_INVALIDITY
+    - NO_VALID_ROLLOUTS_OBSERVED
+    - VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+    - LOW_VALID_ROLLOUT_FRACTION
+    - PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT
+    - NO_SKILL_AGAINST_PERSISTENCE
+    - DIAGNOSTIC_INCONCLUSIVE
+    - NO_PREREGISTERED_EFFECT_DETECTED
+
+conclusion_vocabulary:
+  - DIAGNOSTIC_OPERATIONAL_FAILURE
+  - REPRODUCIBILITY_FAILURE
+  - ROUNDTRIP_MATERIAL_INVALIDITY
+  - ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED
+  - ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS
+  - ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS
+  - CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE
+  - NO_VALID_ROLLOUTS_OBSERVED
+  - LOW_VALID_ROLLOUT_FRACTION
+  - VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+  - PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT
+  - NO_SKILL_AGAINST_PERSISTENCE
+  - SKILL_AGAINST_PERSISTENCE_OBSERVED
+  - NO_PREREGISTERED_EFFECT_DETECTED
+  - DIAGNOSTIC_INCONCLUSIVE
+
+recommended_next_experiment_vocabulary:
+  - REPAIR_REPRODUCIBILITY
+  - INVESTIGATE_CLIPPING_EXPOSURE
+  - CONSTRAINED_OUTPUT_DECODER
+  - CONSTRAINED_TOKEN_SEARCH
+  - REJECTION_SAMPLING_STUDY
+  - ABANDON_STRUCTURAL_VALIDITY_DIRECTION
+  - NONE_DIAGNOSTIC_INCONCLUSIVE
+
+retired_conclusion_labels:
+  INVALIDITY_NOT_CAUSAL_TO_FORECAST_ERROR: a causal claim one origin cannot support
+  GENERATED_TOKEN_SUPPORT_DEFECT: a claim about generative support from one sample
+  TOKENIZER_DECODER_DEFECT: asserts a defect rather than reporting an observation
+  VALIDITY_FILTER_IMPROVES_FORECAST: generalizes beyond the measurement
+  VALIDITY_REPAIR_ONLY: reads as a general finding about repair
+
+size_matched_controls:
+  purpose: >
+    Separate selection by validity from ensemble size. The valid-only ensemble
+    averages k paths; comparing it against an ensemble of all 64 confounds the
+    two, and the size term alone can dominate.
+  k: valid_rollout_count
+  drawn_from: the complete 64-rollout set, valid and invalid alike
+  sampling: without replacement within each repetition
+  seed: 20170518
+  repetitions: 200
+  degenerate_case: >
+    When k equals the rollout count every draw is the same set, so a single
+    repetition is performed and the control is flagged degenerate. The
+    filtering rule does not fire on a degenerate control, because there is no
+    selection left to attribute anything to.
+  handling:
+    k_equals_zero: >
+      No controls. Every control statistic is null with a stated reason, and
+      NO_VALID_ROLLOUTS_OBSERVED is recorded instead.
+    k_equals_one: >
+      Controls are single paths. Permitted; the comparison is still like for
+      like.
+    k_equals_rollout_count: degenerate, as above
+    undefined_forecast_errors: >
+      A control whose ensemble error is undefined is skipped and the scored
+      repetition count records how many survived. When none survive every
+      statistic is null with a stated reason.
+  recorded:
+    - mean control primary error
+    - median control primary error
+    - standard deviation of control primary error
+    - minimum and maximum control primary error
+    - valid-only percentile rank among the controls
+    - valid-only relative improvement against the control mean
+    - valid-only relative improvement against the control median
+    - scored repetition count
+    - degenerate flag
+  filtering_rule_uses: the size-matched control mean, never the all-rollout ensemble
+
+secondary_evidence:
+  purpose: >
+    Per-path evidence, unaffected by ensemble size, retained alongside the
+    ensemble comparison.
+  recorded:
+    - valid_group_mean_primary_error
+    - invalid_group_mean_primary_error
+    - absolute difference between the group means
+    - relative difference between the group means
+    - >
+      Spearman rank correlation between a rollout's invalid candle count and
+      its primary forecast error
+  interpretation_limit: >
+    Descriptive, at this origin, over 64 rollouts. It is not evidence of a
+    causal relationship and is never reported as one.
+
+excluded_intervention:
+  probability_weighted_ensemble:
+    status: deliberately_excluded
+    reason: >
+      The rollouts are already drawn from the model distribution. Weighting
+      sampled paths again by their sampling probabilities would estimate a
+      probability-squared distribution rather than the ordinary model
+      expectation, which is a different quantity and not the one under study.
+
+persistence_baseline:
+  definition: >
+    The predicted close equals the final observed context close at every target
+    step, so the predicted one-step log return is exactly zero at every step.
+  recorded:
+    - persistence close-return MAE
+    - persistence close-level MAE
+    - candidate close-return MAE
+    - candidate close-level MAE
+    - close-return skill
+    - close-level skill
+    - directional accuracy
+    - scored step count
+  skill_definition: 1 - candidate_error / persistence_error
+  skill_reading:
+    positive: the candidate beat the baseline
+    zero: the candidate matched the baseline
+    negative: the candidate was worse than the baseline
+  undefined_when: the persistence error is zero or either error is undefined
+  minimum_skill_threshold: 0.0
+  computed_for:
+    - method_b_raw
+    - method_c_projected
+    - manual_seeded_ensemble
+    - valid_only_ensemble
+  claim_limit: >
+    No trading or economic performance claim is made or implied. Skill against
+    a zero-return baseline on one 64-step window is a diagnostic quantity only.
+
+directional_accuracy:
+  definition: >
+    Per step, compare the sign of the predicted one-step log return against the
+    sign of the actual one-step log return, both anchored on the final observed
+    context close.
+  denominator: steps where both the predicted and the actual return are nonzero
+  numerator: steps within that denominator whose signs agree
+  zero_handling: >
+    A step whose predicted or actual return is exactly zero has no direction to
+    agree about. It is excluded from both numerator and denominator and counted
+    separately.
+  recorded:
+    - scored steps
+    - directional steps, the denominator
+    - agreeing steps, the numerator
+    - accuracy, or null when the denominator is zero
+    - predicted zero steps
+    - actual zero steps
+    - both zero steps
+
+clipping_analysis:
+  purpose: >
+    Method A applies the context-fitted normalization and the plus or minus
+    five clip to all 512 known rows before encoding. A target-suffix value can
+    therefore be distorted before the tokenizer sees it, and an invalid
+    reconstruction at that row cannot be attributed to the decoder.
+  recorded:
+    - clipped scalar count and fraction, by channel
+    - rows with any clipped channel, count and fraction
+    - the same statistics over the final 64-row suffix
+    - invalid reconstructed rows whose input was clipped
+    - invalid reconstructed rows whose input was entirely unclipped
+    - invalidity fraction conditional on clipped input
+    - invalidity fraction conditional on unclipped input
+  findings:
+    ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS: >
+      At least one invalid reconstruction had an input the clip never touched.
+      This is the reading that implicates the decoder.
+    ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS: >
+      Invalid reconstructions occurred and every one had a clipped input, so
+      the clip is confounded with the decoder and neither is isolated.
+    CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE: >
+      The clipped row fraction exceeds its materiality threshold, so the
+      tokenizer reading is inconclusive regardless of the invalidity counts.
+  material_clipping_row_fraction: 0.01
+  prohibition: >
+    Clipping-induced distortion must never be reported as ordinary
+    tokenizer-decoder invalidity.
+
+reproducibility_check:
+  premise: >
+    Method B and Method D rollout zero use the same seed and the same
+    settings, so a deterministic path must produce identical output.
+  compared:
+    - coarse tokens
+    - fine tokens
+    - sampling log probabilities
+    - raw decoded six-channel suffix
+    - validity result
+    - forecast metrics
+  on_disagreement: >
+    REPRODUCIBILITY_FAILURE is recorded and becomes the primary conclusion
+    ahead of every scientific finding, and the recommended next experiment is
+    REPAIR_REPRODUCIBILITY. The run must not proceed to a normal scientific
+    reading.
+  cost: none; both quantities are already computed
+
+thresholds:
+  roundtrip_material_invalid_fraction: 0.01
+  minimum_relative_improvement: 0.05
+  valid_rollout_support_fraction_minimum: 0.25
+  material_clipping_row_fraction: 0.01
+  minimum_persistence_skill: 0.0
+
+ordered_rules:
+  - id: R0
+    finding: DIAGNOSTIC_OPERATIONAL_FAILURE
+    condition: a method raised an operational failure or did not complete
+    terminal: true
+  - id: R0b
+    finding: REPRODUCIBILITY_FAILURE
+    condition: Method B and Method D rollout zero were compared and disagree
+  - id: R1
+    finding: ROUNDTRIP_MATERIAL_INVALIDITY
+    condition: method_a_invalid_candle_fraction > roundtrip_material_invalid_fraction
+  - id: R2
+    finding: ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED
+    condition: method_a_invalid_candle_count > 0
+    never_primary: true
+  - id: R2a
+    finding: ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS
+    condition: invalid_rows_with_unclipped_input > 0
+  - id: R2b
+    finding: ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS
+    condition: >
+      method_a_invalid_candle_count > 0 and invalid_rows_with_unclipped_input == 0
+      and invalid_rows_with_clipped_input > 0
+  - id: R2c
+    finding: CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE
+    condition: row_clipped_fraction > material_clipping_row_fraction
+  - id: R3
+    finding: NO_VALID_ROLLOUTS_OBSERVED
+    condition: valid_rollout_count == 0
+  - id: R4
+    finding: VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+    condition: >
+      controls are non-degenerate and valid_only_primary_error <=
+      control_mean_primary_error * (1 - minimum_relative_improvement)
+  - id: R5
+    finding: LOW_VALID_ROLLOUT_FRACTION
+    condition: >
+      valid_rollout_count > 0 and valid_rollout_fraction <
+      valid_rollout_support_fraction_minimum
+  - id: R6
+    finding: PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT
+    condition: >
+      method_b_path_is_invalid and method_c_projection_restores_validity and
+      method_c_primary_error > method_b_primary_error *
+      (1 - minimum_relative_improvement)
+  - id: R7
+    finding: SKILL_AGAINST_PERSISTENCE_OBSERVED
+    condition: best close-return skill across candidates > minimum_persistence_skill
+  - id: R8
+    finding: NO_SKILL_AGAINST_PERSISTENCE
+    condition: best close-return skill across candidates <= minimum_persistence_skill
+  - id: R9
+    finding: DIAGNOSTIC_INCONCLUSIVE
+    condition: a quantity the decision rules require could not be computed
+  - id: R10
+    finding: NO_PREREGISTERED_EFFECT_DETECTED
+    condition: no rule other than the bare round-trip observation matched
+
+artifact:
+  count: 1
+  immutable: true
+  evidence_class: development_compatibility_canary
+  storage_root: diagnostic_only
+  records:
+    - primary_conclusion
+    - matched_findings
+    - evaluations for every rule
+    - recommended_next_experiment
+    - reproducibility check
+    - all three specification hashes, with v3 marked operative
+  authorizes_training: false
+  authorizes_stage_b: false
+  authorizes_stage_c: false
+  authorizes_test_opening: false
+  authorizes_production_inference: false
+  authorizes_trading_claims: false
+  scientific_result_available: false
+
+contingent_next_experiment:
+  name: constraint_aware_coarse_fine_token_beam_search
+  status: not_implemented_and_not_authorized
+  implement_only_if_recommended_next_experiment_is_either:
+    - CONSTRAINED_TOKEN_SEARCH
+    - REJECTION_SAMPLING_STUDY
+
+stop_condition: >
+  Execution stops after the diagnostic artifact is written. No stage advances,
+  no partition is opened, and no outcome authorizes further computation.

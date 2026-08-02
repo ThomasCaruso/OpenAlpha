@@ -1,12 +1,20 @@
-"""The preregistered decision rules, v2.
+"""The preregistered decision rules, v3.
 
-Every label states what was observed on this window. None asserts a cause, a
-property of the model's token support, or a general property of repair. One
-forecast origin and 64 stochastic rollouts cannot establish any of those, so
-the vocabulary does not contain words that would claim them.
+v2 stopped at the first matching rule. That was wrong for this diagnostic: the
+properties it measures are not mutually exclusive, and the rule most likely to
+match first, round-trip invalidity, is also the least decision-relevant. A run
+in which the tokenizer round trip produced a single invalid candle would have
+terminated evaluation before rollout support, projection, filtering or baseline
+skill were ever considered, and the one origin available would have been spent
+without selecting a branch.
 
-The conclusion is computed. There is no parameter anywhere that lets a caller
-supply one, and the default final rule is descriptive rather than causal.
+v3 evaluates every rule. One of them becomes the ``primary_conclusion`` by a
+fixed priority; the rest remain in ``matched_findings``, and every rule,
+matched or not, stays in ``evaluations``. ``recommended_next_experiment`` is
+derived from the whole set rather than from the primary alone.
+
+Every label is descriptive and local to this origin. None asserts a cause, a
+property of the model's token support, or a general property of repair.
 """
 
 from __future__ import annotations
@@ -20,9 +28,12 @@ from .methods import MethodAResult, MethodBResult, MethodCResult, MethodDResult
 from .spec import THRESHOLDS, DiagnosticThresholds
 
 __all__ = [
+    "PRIMARY_PRIORITY",
     "RETIRED_LABELS",
     "ConclusionOutcome",
     "DiagnosticConclusion",
+    "NextExperiment",
+    "ReproducibilityCheck",
     "RuleEvaluation",
     "decide",
 ]
@@ -31,23 +42,69 @@ __all__ = [
 class DiagnosticConclusion(StrEnum):
     """The complete vocabulary. Descriptive and local, never causal."""
 
-    ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED = "ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED"
+    # Operational
+    DIAGNOSTIC_OPERATIONAL_FAILURE = "DIAGNOSTIC_OPERATIONAL_FAILURE"
+    REPRODUCIBILITY_FAILURE = "REPRODUCIBILITY_FAILURE"
+
+    # Round trip
     ROUNDTRIP_MATERIAL_INVALIDITY = "ROUNDTRIP_MATERIAL_INVALIDITY"
+    ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED = "ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED"
+    ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS = "ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS"
+    ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS = (
+        "ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS"
+    )
+    CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE = (
+        "CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE"
+    )
+
+    # Rollouts and filtering
     NO_VALID_ROLLOUTS_OBSERVED = "NO_VALID_ROLLOUTS_OBSERVED"
+    LOW_VALID_ROLLOUT_FRACTION = "LOW_VALID_ROLLOUT_FRACTION"
     VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD = (
         "VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD"
     )
-    LOW_VALID_ROLLOUT_FRACTION = "LOW_VALID_ROLLOUT_FRACTION"
     PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT = (
         "PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT"
     )
+
+    # Baseline skill
+    NO_SKILL_AGAINST_PERSISTENCE = "NO_SKILL_AGAINST_PERSISTENCE"
+    SKILL_AGAINST_PERSISTENCE_OBSERVED = "SKILL_AGAINST_PERSISTENCE_OBSERVED"
+
+    # Defaults
     NO_PREREGISTERED_EFFECT_DETECTED = "NO_PREREGISTERED_EFFECT_DETECTED"
     DIAGNOSTIC_INCONCLUSIVE = "DIAGNOSTIC_INCONCLUSIVE"
-    DIAGNOSTIC_OPERATIONAL_FAILURE = "DIAGNOSTIC_OPERATIONAL_FAILURE"
 
 
-#: Labels this diagnostic may never emit, and why. Kept in code so a future
-#: edit that reintroduces one has to delete the reason first.
+class NextExperiment(StrEnum):
+    """What this origin suggests doing next. A suggestion, not an authorization."""
+
+    REPAIR_REPRODUCIBILITY = "REPAIR_REPRODUCIBILITY"
+    INVESTIGATE_CLIPPING_EXPOSURE = "INVESTIGATE_CLIPPING_EXPOSURE"
+    CONSTRAINED_OUTPUT_DECODER = "CONSTRAINED_OUTPUT_DECODER"
+    CONSTRAINED_TOKEN_SEARCH = "CONSTRAINED_TOKEN_SEARCH"
+    REJECTION_SAMPLING_STUDY = "REJECTION_SAMPLING_STUDY"
+    ABANDON_STRUCTURAL_VALIDITY_DIRECTION = "ABANDON_STRUCTURAL_VALIDITY_DIRECTION"
+    NONE_DIAGNOSTIC_INCONCLUSIVE = "NONE_DIAGNOSTIC_INCONCLUSIVE"
+
+
+#: Priority for selecting the primary conclusion. R2's structural observation
+#: is deliberately absent: it is a finding, never primary, because on its own
+#: it does not select a branch.
+PRIMARY_PRIORITY: tuple[DiagnosticConclusion, ...] = (
+    DiagnosticConclusion.DIAGNOSTIC_OPERATIONAL_FAILURE,
+    DiagnosticConclusion.REPRODUCIBILITY_FAILURE,
+    DiagnosticConclusion.CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE,
+    DiagnosticConclusion.ROUNDTRIP_MATERIAL_INVALIDITY,
+    DiagnosticConclusion.NO_VALID_ROLLOUTS_OBSERVED,
+    DiagnosticConclusion.VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD,
+    DiagnosticConclusion.LOW_VALID_ROLLOUT_FRACTION,
+    DiagnosticConclusion.PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT,
+    DiagnosticConclusion.NO_SKILL_AGAINST_PERSISTENCE,
+    DiagnosticConclusion.DIAGNOSTIC_INCONCLUSIVE,
+    DiagnosticConclusion.NO_PREREGISTERED_EFFECT_DETECTED,
+)
+
 RETIRED_LABELS: dict[str, str] = {
     "INVALIDITY_NOT_CAUSAL_TO_FORECAST_ERROR": (
         "a causal claim; one origin and 64 stochastic rollouts cannot identify a cause"
@@ -65,27 +122,48 @@ RETIRED_LABELS: dict[str, str] = {
 }
 
 
+class ReproducibilityCheck(BaseModel):
+    """Method B against Method D rollout zero. Same seed, same settings."""
+
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
+
+    performed: bool
+    agrees: bool
+    coarse_tokens_agree: bool | None = None
+    fine_tokens_agree: bool | None = None
+    sampling_log_probabilities_agree: bool | None = None
+    raw_decoded_suffix_agrees: bool | None = None
+    validity_agrees: bool | None = None
+    forecast_metrics_agree: bool | None = None
+    detail: str | None = None
+
+
 class RuleEvaluation(BaseModel):
-    """One rule, its inputs, and whether it fired."""
+    """One rule, its inputs, and whether it fired. Every rule is recorded."""
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
     rule_id: str
-    conclusion: DiagnosticConclusion
+    finding: DiagnosticConclusion
     matched: bool
     detail: str
     observed: dict[str, float | None]
 
 
 class ConclusionOutcome(BaseModel):
-    """The computed conclusion and the full evaluation trace."""
+    """Several simultaneous findings, one of which is primary."""
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
-    conclusion: DiagnosticConclusion
-    matched_rule_id: str
-    thresholds: DiagnosticThresholds
+    primary_conclusion: DiagnosticConclusion
+    primary_rule_id: str
+    #: Every finding that matched, in rule order. May be empty.
+    matched_findings: tuple[DiagnosticConclusion, ...]
+    #: Every rule, matched or not.
     evaluations: tuple[RuleEvaluation, ...]
+    recommended_next_experiment: NextExperiment
+    reproducibility: ReproducibilityCheck
+    thresholds: DiagnosticThresholds
     forecast_origins: Literal[1] = 1
     authorizes_training: Literal[False] = False
     authorizes_stage_b: Literal[False] = False
@@ -101,58 +179,85 @@ def _primary(error) -> float | None:
     return error.close_return_mae
 
 
+def _skill(comparison) -> float | None:
+    if comparison is None or not comparison.defined:
+        return None
+    return comparison.close_return_skill
+
+
+def _recommend(
+    matched: set[DiagnosticConclusion], thresholds: DiagnosticThresholds
+) -> NextExperiment:
+    """Derived from the whole finding set, not from the primary alone."""
+    C = DiagnosticConclusion
+    if C.DIAGNOSTIC_OPERATIONAL_FAILURE in matched:
+        return NextExperiment.NONE_DIAGNOSTIC_INCONCLUSIVE
+    if C.REPRODUCIBILITY_FAILURE in matched:
+        return NextExperiment.REPAIR_REPRODUCIBILITY
+    if C.CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE in matched:
+        return NextExperiment.INVESTIGATE_CLIPPING_EXPOSURE
+    # No skill anywhere makes the structural direction moot regardless of what
+    # the validity findings say: repairing geometry cannot create signal.
+    if C.NO_SKILL_AGAINST_PERSISTENCE in matched:
+        return NextExperiment.ABANDON_STRUCTURAL_VALIDITY_DIRECTION
+    if C.ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS in matched:
+        return NextExperiment.CONSTRAINED_OUTPUT_DECODER
+    if C.NO_VALID_ROLLOUTS_OBSERVED in matched:
+        return NextExperiment.CONSTRAINED_TOKEN_SEARCH
+    if C.VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD in matched:
+        return NextExperiment.REJECTION_SAMPLING_STUDY
+    if C.LOW_VALID_ROLLOUT_FRACTION in matched:
+        return NextExperiment.CONSTRAINED_TOKEN_SEARCH
+    if C.DIAGNOSTIC_INCONCLUSIVE in matched:
+        return NextExperiment.NONE_DIAGNOSTIC_INCONCLUSIVE
+    return NextExperiment.ABANDON_STRUCTURAL_VALIDITY_DIRECTION
+
+
 def decide(
     *,
     method_a: MethodAResult | None,
     method_b: MethodBResult | None,
     method_c: MethodCResult | None,
     method_d: MethodDResult | None,
+    reproducibility: ReproducibilityCheck | None = None,
     operational_failure: bool = False,
     thresholds: DiagnosticThresholds = THRESHOLDS,
 ) -> ConclusionOutcome:
-    """Evaluate the ordered rules and return the first that matches."""
+    """Evaluate every rule, then select a primary conclusion by priority."""
+    C = DiagnosticConclusion
     evaluations: list[RuleEvaluation] = []
 
     def record(
         rule_id: str,
-        conclusion: DiagnosticConclusion,
+        finding: DiagnosticConclusion,
         matched: bool,
         detail: str,
         observed: dict[str, float | None],
-    ) -> bool:
+    ) -> None:
         evaluations.append(
             RuleEvaluation(
                 rule_id=rule_id,
-                conclusion=conclusion,
+                finding=finding,
                 matched=matched,
                 detail=detail,
                 observed=observed,
             )
         )
-        return matched
 
-    def finish(rule_id: str, conclusion: DiagnosticConclusion) -> ConclusionOutcome:
-        return ConclusionOutcome(
-            conclusion=conclusion,
-            matched_rule_id=rule_id,
-            thresholds=thresholds,
-            evaluations=tuple(evaluations),
-        )
+    check = reproducibility or ReproducibilityCheck(
+        performed=False, agrees=False, detail="no comparison was supplied"
+    )
 
     missing = [
         name
-        for name, value in (
-            ("A", method_a),
-            ("B", method_b),
-            ("C", method_c),
-            ("D", method_d),
-        )
+        for name, value in (("A", method_a), ("B", method_b), ("C", method_c), ("D", method_d))
         if value is None
     ]
-    if record(
+    incomplete = operational_failure or bool(missing)
+    record(
         "R0",
-        DiagnosticConclusion.DIAGNOSTIC_OPERATIONAL_FAILURE,
-        operational_failure or bool(missing),
+        C.DIAGNOSTIC_OPERATIONAL_FAILURE,
+        incomplete,
         (
             "a method raised an operational failure"
             if operational_failure
@@ -161,20 +266,38 @@ def decide(
             else "every method completed"
         ),
         {"missing_methods": float(len(missing))},
-    ):
-        return finish("R0", DiagnosticConclusion.DIAGNOSTIC_OPERATIONAL_FAILURE)
+    )
+
+    if incomplete:
+        matched = {C.DIAGNOSTIC_OPERATIONAL_FAILURE}
+        return ConclusionOutcome(
+            primary_conclusion=C.DIAGNOSTIC_OPERATIONAL_FAILURE,
+            primary_rule_id="R0",
+            matched_findings=(C.DIAGNOSTIC_OPERATIONAL_FAILURE,),
+            evaluations=tuple(evaluations),
+            recommended_next_experiment=_recommend(matched, thresholds),
+            reproducibility=check,
+            thresholds=thresholds,
+        )
 
     assert method_a is not None and method_b is not None
     assert method_c is not None and method_d is not None
 
-    # R1 and R2 - the round trip. Materiality first, then the strict
-    # observation, so a nonzero-but-immaterial round trip is still reported as
-    # structurally invalid rather than described as clean.
+    # R0b - the two methods that share a seed must have produced the same path.
+    record(
+        "R0b",
+        C.REPRODUCIBILITY_FAILURE,
+        check.performed and not check.agrees,
+        "Method B against Method D rollout zero, which share a seed and settings",
+        {"performed": float(check.performed), "agrees": float(check.agrees)},
+    )
+
+    # --- round trip -------------------------------------------------------
     fraction = method_a.validity_all.invalid_candle_fraction
     invalid_count = method_a.validity_all.invalid_candle_count
-    if record(
+    record(
         "R1",
-        DiagnosticConclusion.ROUNDTRIP_MATERIAL_INVALIDITY,
+        C.ROUNDTRIP_MATERIAL_INVALIDITY,
         fraction > thresholds.roundtrip_material_invalid_fraction,
         "round-trip invalid candle fraction against the materiality threshold",
         {
@@ -182,81 +305,109 @@ def decide(
             "materiality_threshold": thresholds.roundtrip_material_invalid_fraction,
             "invalid_candle_count": float(invalid_count),
         },
-    ):
-        return finish("R1", DiagnosticConclusion.ROUNDTRIP_MATERIAL_INVALIDITY)
-
-    if record(
+    )
+    record(
         "R2",
-        DiagnosticConclusion.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED,
+        C.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED,
         invalid_count > 0,
-        "any invalid round-trip candle at all, regardless of materiality",
-        {
-            "invalid_candle_count": float(invalid_count),
-            "invalid_candle_fraction": fraction,
-        },
-    ):
-        return finish("R2", DiagnosticConclusion.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED)
+        "any invalid round-trip candle at all; a finding, never primary",
+        {"invalid_candle_count": float(invalid_count), "invalid_candle_fraction": fraction},
+    )
 
-    if record(
+    clip_fraction = method_a.clipping_all.row_clipped_fraction
+    unclipped_invalid = method_a.invalid_rows_with_unclipped_input
+    clipped_invalid = method_a.invalid_rows_with_clipped_input
+    record(
+        "R2a",
+        C.ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS,
+        unclipped_invalid > 0,
+        "invalid reconstructions whose input was never touched by the clip",
+        {
+            "invalid_rows_with_unclipped_input": float(unclipped_invalid),
+            "unclipped_input_rows": float(method_a.unclipped_input_rows),
+        },
+    )
+    record(
+        "R2b",
+        C.ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS,
+        invalid_count > 0 and unclipped_invalid == 0 and clipped_invalid > 0,
+        "every invalid reconstruction had a clipped input, so the clip is confounded",
+        {
+            "invalid_rows_with_clipped_input": float(clipped_invalid),
+            "invalid_rows_with_unclipped_input": float(unclipped_invalid),
+        },
+    )
+    record(
+        "R2c",
+        C.CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE,
+        clip_fraction > thresholds.material_clipping_row_fraction,
+        "clipped input rows against the materiality threshold",
+        {
+            "row_clipped_fraction": clip_fraction,
+            "threshold": thresholds.material_clipping_row_fraction,
+        },
+    )
+
+    # --- rollouts and filtering -------------------------------------------
+    record(
         "R3",
-        DiagnosticConclusion.NO_VALID_ROLLOUTS_OBSERVED,
+        C.NO_VALID_ROLLOUTS_OBSERVED,
         method_d.valid_rollout_count == 0,
         "valid rollout count among the seeded rollouts at this origin",
         {
             "valid_rollout_count": float(method_d.valid_rollout_count),
             "rollout_count": float(method_d.rollout_count),
         },
-    ):
-        return finish("R3", DiagnosticConclusion.NO_VALID_ROLLOUTS_OBSERVED)
+    )
 
-    # R4 - the valid-only ensemble against the manual seeded ensemble. Those
-    # two differ only in which paths are included, which is the comparison the
-    # threshold was written for.
+    controls = method_d.size_matched_controls
     valid_only = _primary(method_d.valid_only_ensemble_error)
-    manual = _primary(method_d.manual_seeded_ensemble_error)
+    control_mean = controls.mean_primary_error
+    # The de-confounded comparison: k valid paths against k paths drawn from
+    # all rollouts, so only the selection differs.
     meets = (
         valid_only is not None
-        and manual is not None
-        and valid_only <= manual * (1.0 - thresholds.minimum_relative_improvement)
+        and control_mean is not None
+        and not controls.degenerate
+        and valid_only <= control_mean * (1.0 - thresholds.minimum_relative_improvement)
     )
-    if record(
+    record(
         "R4",
-        DiagnosticConclusion.VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD,
+        C.VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD,
         meets,
-        "valid-only ensemble error against the manual seeded ensemble error",
+        "valid-only ensemble against size-matched controls of the same k",
         {
             "valid_only_primary_error": valid_only,
-            "manual_seeded_ensemble_primary_error": manual,
+            "control_mean_primary_error": control_mean,
+            "control_median_primary_error": controls.median_primary_error,
+            "valid_only_percentile_rank": controls.valid_only_percentile_rank,
+            "k": float(controls.k),
+            "degenerate": float(controls.degenerate),
             "minimum_relative_improvement": thresholds.minimum_relative_improvement,
         },
-    ):
-        return finish("R4", DiagnosticConclusion.VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD)
-
-    if record(
+    )
+    record(
         "R5",
-        DiagnosticConclusion.LOW_VALID_ROLLOUT_FRACTION,
-        method_d.valid_rollout_fraction < thresholds.valid_rollout_support_fraction_minimum,
+        C.LOW_VALID_ROLLOUT_FRACTION,
+        0 < method_d.valid_rollout_count
+        and method_d.valid_rollout_fraction < thresholds.valid_rollout_support_fraction_minimum,
         "valid rollout fraction against the support minimum, at this origin",
         {
             "valid_rollout_fraction": method_d.valid_rollout_fraction,
             "minimum": thresholds.valid_rollout_support_fraction_minimum,
         },
-    ):
-        return finish("R5", DiagnosticConclusion.LOW_VALID_ROLLOUT_FRACTION)
+    )
 
     before = _primary(method_c.forecast_error_before)
     after = _primary(method_c.forecast_error_after)
-    repair_without_improvement = (
+    record(
+        "R6",
+        C.PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT,
         method_b.validity.path_is_invalid
         and method_c.restores_validity
         and before is not None
         and after is not None
-        and after > before * (1.0 - thresholds.minimum_relative_improvement)
-    )
-    if record(
-        "R6",
-        DiagnosticConclusion.PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT,
-        repair_without_improvement,
+        and after > before * (1.0 - thresholds.minimum_relative_improvement),
         "projection restored validity without meeting the improvement threshold",
         {
             "method_b_path_is_invalid": float(method_b.validity.path_is_invalid),
@@ -264,38 +415,66 @@ def decide(
             "primary_error_before": before,
             "primary_error_after": after,
         },
-    ):
-        return finish(
-            "R6",
-            DiagnosticConclusion.PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT,
-        )
+    )
 
-    # R7 - the comparison R4 needs could not be evaluated, so no statement
-    # about it is available either way.
-    if record(
+    # --- baseline skill ----------------------------------------------------
+    skills = {
+        "method_b": _skill(method_b.persistence),
+        "method_c": _skill(method_c.persistence_after),
+        "manual_ensemble": _skill(method_d.manual_ensemble_persistence),
+        "valid_only_ensemble": _skill(method_d.valid_only_persistence),
+    }
+    measured = [value for value in skills.values() if value is not None]
+    best = max(measured) if measured else None
+    record(
         "R7",
-        DiagnosticConclusion.DIAGNOSTIC_INCONCLUSIVE,
-        valid_only is None or manual is None,
-        "the primary error required by R4 is undefined for at least one ensemble",
-        {
-            "valid_only_primary_error": valid_only,
-            "manual_seeded_ensemble_primary_error": manual,
-        },
-    ):
-        return finish("R7", DiagnosticConclusion.DIAGNOSTIC_INCONCLUSIVE)
-
-    # R8 - descriptive default. Not a causal claim, and not a claim that no
-    # effect exists: only that none of the preregistered effects was detected
-    # on this window.
+        C.SKILL_AGAINST_PERSISTENCE_OBSERVED,
+        best is not None and best > thresholds.minimum_persistence_skill,
+        "best close-return skill against the zero-return persistence baseline",
+        {**skills, "best_skill": best, "threshold": thresholds.minimum_persistence_skill},
+    )
     record(
         "R8",
-        DiagnosticConclusion.NO_PREREGISTERED_EFFECT_DETECTED,
-        True,
-        "no earlier rule matched on this window",
-        {
-            "valid_rollout_fraction": method_d.valid_rollout_fraction,
-            "valid_group_mean_primary_error": method_d.valid_group_mean_primary_error,
-            "invalid_group_mean_primary_error": method_d.invalid_group_mean_primary_error,
-        },
+        C.NO_SKILL_AGAINST_PERSISTENCE,
+        best is not None and best <= thresholds.minimum_persistence_skill,
+        "no candidate beat the persistence baseline by the threshold",
+        {"best_skill": best, "threshold": thresholds.minimum_persistence_skill},
     )
-    return finish("R8", DiagnosticConclusion.NO_PREREGISTERED_EFFECT_DETECTED)
+
+    # --- defaults ----------------------------------------------------------
+    record(
+        "R9",
+        C.DIAGNOSTIC_INCONCLUSIVE,
+        best is None or (valid_only is None and method_d.valid_rollout_count > 0),
+        "a quantity the decision rules require could not be computed",
+        {"best_skill": best, "valid_only_primary_error": valid_only},
+    )
+
+    matched_set = {entry.finding for entry in evaluations if entry.matched}
+    record(
+        "R10",
+        C.NO_PREREGISTERED_EFFECT_DETECTED,
+        not (matched_set - {C.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED}),
+        "no rule other than the bare round-trip observation matched",
+        {"matched_findings": float(len(matched_set))},
+    )
+
+    matched_set = {entry.finding for entry in evaluations if entry.matched}
+    ordered = tuple(entry.finding for entry in evaluations if entry.matched)
+    primary = next(
+        (finding for finding in PRIMARY_PRIORITY if finding in matched_set),
+        C.NO_PREREGISTERED_EFFECT_DETECTED,
+    )
+    primary_rule = next(
+        (entry.rule_id for entry in evaluations if entry.matched and entry.finding is primary),
+        "R10",
+    )
+    return ConclusionOutcome(
+        primary_conclusion=primary,
+        primary_rule_id=primary_rule,
+        matched_findings=ordered,
+        evaluations=tuple(evaluations),
+        recommended_next_experiment=_recommend(matched_set, thresholds),
+        reproducibility=check,
+        thresholds=thresholds,
+    )

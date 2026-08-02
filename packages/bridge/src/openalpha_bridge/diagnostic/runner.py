@@ -26,7 +26,13 @@ from .backends import (
     ResolvedDiagnosticAssets,
     TokenizerCodec,
 )
-from .conclusion import ConclusionOutcome, DiagnosticConclusion, decide
+from .conclusion import (
+    ConclusionOutcome,
+    DiagnosticConclusion,
+    NextExperiment,
+    ReproducibilityCheck,
+    decide,
+)
 from .methods import (
     MethodAResult,
     MethodBResult,
@@ -48,6 +54,7 @@ from .spec import (
     TOTAL_CANDLES,
     V1_SPECIFICATION_NAME,
     V2_SPECIFICATION_NAME,
+    V3_SPECIFICATION_NAME,
     WINDOW,
     ForecastModelSpec,
     InferenceSettings,
@@ -61,8 +68,8 @@ __all__ = [
     "run_frozen_inference_diagnostic",
 ]
 
-DIAGNOSTIC_SCHEMA_VERSION: Literal["openalpha.bridge.diagnostic.frozen_inference.v2"] = (
-    "openalpha.bridge.diagnostic.frozen_inference.v2"
+DIAGNOSTIC_SCHEMA_VERSION: Literal["openalpha.bridge.diagnostic.frozen_inference.v3"] = (
+    "openalpha.bridge.diagnostic.frozen_inference.v3"
 )
 
 
@@ -81,7 +88,7 @@ class DiagnosticArtifact(BaseModel):
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
-    schema_version: Literal["openalpha.bridge.diagnostic.frozen_inference.v2"] = (
+    schema_version: Literal["openalpha.bridge.diagnostic.frozen_inference.v3"] = (
         DIAGNOSTIC_SCHEMA_VERSION
     )
     claim_boundary: Literal["DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"] = (
@@ -92,7 +99,12 @@ class DiagnosticArtifact(BaseModel):
     evidence_class: Literal[EvidenceClass.DEVELOPMENT_COMPATIBILITY_CANARY] = (
         EvidenceClass.DEVELOPMENT_COMPATIBILITY_CANARY
     )
+    #: The primary conclusion. Several findings can hold at once, so the full
+    #: set is in decision.matched_findings and every rule is in
+    #: decision.evaluations.
     conclusion: DiagnosticConclusion
+    matched_findings: tuple[DiagnosticConclusion, ...]
+    recommended_next_experiment: NextExperiment
     decision: ConclusionOutcome
 
     run_id: str
@@ -102,6 +114,8 @@ class DiagnosticArtifact(BaseModel):
     specification_v1_sha256: str
     specification_v2_name: str
     specification_v2_sha256: str
+    specification_v3_name: str
+    specification_v3_sha256: str
     operative_specification: str
 
     symbol: str
@@ -151,6 +165,65 @@ class DiagnosticArtifact(BaseModel):
     authorizes_trading_claims: Literal[False] = False
     scientific_result_available: Literal[False] = False
     held_out_partition_opened: Literal[False] = False
+
+
+def _compare_b_to_rollout_zero(
+    method_b: MethodBResult, method_d: MethodDResult
+) -> ReproducibilityCheck:
+    """Method B and Method D rollout zero must agree exactly.
+
+    They are generated with the same seed and the same settings, so on a
+    deterministic path every recorded quantity must be identical. This costs
+    nothing and is the only reproducibility evidence the run produces.
+    """
+    if not method_d.rollouts:
+        return ReproducibilityCheck(
+            performed=False, agrees=False, detail="Method D produced no rollouts"
+        )
+    zero = method_d.rollouts[0]
+    if zero.seed != method_b.seed:
+        return ReproducibilityCheck(
+            performed=False,
+            agrees=False,
+            detail=(
+                f"Method B used seed {method_b.seed} and rollout zero used {zero.seed}, "
+                "so they are not comparable"
+            ),
+        )
+
+    coarse = method_b.coarse_token_ids == zero.coarse_token_ids
+    fine = method_b.fine_token_ids == zero.fine_token_ids
+    probabilities = method_b.total_path_sampling_log_probability == (
+        zero.total_path_sampling_log_probability
+    )
+    decoded = method_b.raw_decoded == zero.raw_decoded
+    validity = (not method_b.validity.path_is_invalid) == zero.valid
+    metrics = method_b.forecast_error == zero.forecast_error
+
+    agrees = all((coarse, fine, probabilities, decoded, validity, metrics))
+    disagreeing = [
+        name
+        for name, ok in (
+            ("coarse tokens", coarse),
+            ("fine tokens", fine),
+            ("sampling log probabilities", probabilities),
+            ("raw decoded suffix", decoded),
+            ("validity", validity),
+            ("forecast metrics", metrics),
+        )
+        if not ok
+    ]
+    return ReproducibilityCheck(
+        performed=True,
+        agrees=agrees,
+        coarse_tokens_agree=coarse,
+        fine_tokens_agree=fine,
+        sampling_log_probabilities_agree=probabilities,
+        raw_decoded_suffix_agrees=decoded,
+        validity_agrees=validity,
+        forecast_metrics_agree=metrics,
+        detail=("identical" if agrees else "disagreement in: " + ", ".join(disagreeing)),
+    )
 
 
 class _CountingProvider:
@@ -311,10 +384,23 @@ def run_frozen_inference_diagnostic(
             ),
         )
 
-    decision = decide(method_a=method_a, method_b=method_b, method_c=method_c, method_d=method_d)
+    # Method B and Method D rollout zero share a seed and settings, so a
+    # deterministic path must produce identical output. Disagreement means the
+    # run is not reproducible and no scientific reading of it is safe.
+    reproducibility = _compare_b_to_rollout_zero(method_b, method_d)
+
+    decision = decide(
+        method_a=method_a,
+        method_b=method_b,
+        method_c=method_c,
+        method_d=method_d,
+        reproducibility=reproducibility,
+    )
 
     return DiagnosticArtifact(
-        conclusion=decision.conclusion,
+        conclusion=decision.primary_conclusion,
+        matched_findings=decision.matched_findings,
+        recommended_next_experiment=decision.recommended_next_experiment,
         decision=decision,
         run_id=invocation.run_id,
         source_commit=invocation.source_commit,
@@ -323,7 +409,9 @@ def run_frozen_inference_diagnostic(
         specification_v1_sha256=specifications[V1_SPECIFICATION_NAME],
         specification_v2_name=V2_SPECIFICATION_NAME,
         specification_v2_sha256=specifications[V2_SPECIFICATION_NAME],
-        operative_specification=V2_SPECIFICATION_NAME,
+        specification_v3_name=V3_SPECIFICATION_NAME,
+        specification_v3_sha256=specifications[V3_SPECIFICATION_NAME],
+        operative_specification=V3_SPECIFICATION_NAME,
         symbol=official.symbol,
         frequency=official.frequency,
         calendar=official.calendar,
