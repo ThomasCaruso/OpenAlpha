@@ -149,6 +149,7 @@ def _stage_a_report(sequences: int = 1):
     return StageAReport(
         run_id="syn_orchestration",
         experiment_sha256="d" * 64,
+        amendment_sha256=("1" * 64, "2" * 64, "3" * 64),
         source_commit="a" * 40,
         evidence_class="synthetic_pipeline_validation",
         provider="deterministic_fake",
@@ -160,6 +161,17 @@ def _stage_a_report(sequences: int = 1):
         kronos_config_sha256=None,
         kronos_weights_sha256=None,
         frozen_parameter_sha256="c" * 64,
+        official_source_repository="https://github.com/shiyu-coder/Kronos",
+        official_source_revision="67b630e67f6a18c9e9be918d9b4337c960db1e9a",
+        official_source_file_sha256={
+            "model/kronos.py": (
+                "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a"
+            ),
+            "model/module.py": (
+                "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f"
+            ),
+        },
+        cache_schema_version="openalpha.bridge.phase2.cache.v2",
         representation_version="openalpha.bridge.financial.v1",
         prefix_length=448,
         suffix_length=64,

@@ -71,6 +71,7 @@ class StageAReport(BaseModel):
     )
     run_id: str
     experiment_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    amendment_sha256: tuple[str, ...]
     source_commit: str | None
     evidence_class: str
     provider: str
@@ -82,6 +83,10 @@ class StageAReport(BaseModel):
     kronos_config_sha256: str | None
     kronos_weights_sha256: str | None
     frozen_parameter_sha256: str | None
+    official_source_repository: str
+    official_source_revision: str
+    official_source_file_sha256: dict[str, str]
+    cache_schema_version: str
     representation_version: str
     prefix_length: int
     suffix_length: int
@@ -253,6 +258,7 @@ def run_stage_a(
     return StageAReport(
         run_id=run_id,
         experiment_sha256=experiment_sha256,
+        amendment_sha256=amendment_sha256,
         source_commit=source_commit,
         evidence_class=evidence_class,
         provider=series.provider,
@@ -264,6 +270,10 @@ def run_stage_a(
         kronos_config_sha256=assets.observed_config_sha256,
         kronos_weights_sha256=assets.observed_weights_sha256,
         frozen_parameter_sha256=assets.frozen_parameter_sha256,
+        official_source_repository=SOURCE_SPEC.repository,
+        official_source_revision=SOURCE_SPEC.revision,
+        official_source_file_sha256=dict(verified_source_file_sha256),
+        cache_schema_version=CACHE_SCHEMA_VERSION,
         representation_version="openalpha.bridge.financial.v1",
         prefix_length=CONTEXT_PREFIX_LENGTH,
         suffix_length=SCORED_SUFFIX_LENGTH,

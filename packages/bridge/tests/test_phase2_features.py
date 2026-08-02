@@ -32,11 +32,13 @@ from openalpha_bridge.phase2.kronos import (
     QUANTIZED_LATENT_DIMENSION,
     SCALE_FEATURE_COUNT,
     SCALE_FEATURE_ORDER,
+    SOURCE_SPEC,
     TOKENIZER_INPUT_DIMENSION,
     DeterministicFakeKronosBackend,
 )
 from openalpha_bridge.phase2.provider import Candle, MarketSeries, ProviderMode
 from openalpha_bridge.phase2.stage_a import run_stage_a
+from openalpha_bridge.phase2.stage_a_verify import verify_stage_a_report
 from openalpha_bridge.windowing import (
     CONTEXT_PREFIX_LENGTH,
     EXAMPLE_LENGTH,
@@ -674,3 +676,165 @@ def test_identity_partition_must_match_the_example(tmp_path: Path) -> None:
     with pytest.raises(BridgeTransformError) as excinfo:
         cache.write(example)
     assert excinfo.value.failures[0].code == "SHARD_IDENTITY_MISMATCH"
+
+
+# ------------------------------------------ Stage A report verification
+
+
+def _real_report(tmp_path: Path):
+    """A genuine Stage A report plus the cache it wrote, for verification."""
+    candles = _candles()
+    cache = FeatureCache(tmp_path / "cache")
+    report = run_stage_a(
+        run_id="syn_stage_a",
+        experiment_sha256="d" * 64,
+        source_commit="a" * 40,
+        evidence_class="development_compatibility_canary",
+        series=_series(candles),
+        specs=(_spec(candles),),
+        extractor=FeatureExtractor(DeterministicFakeKronosBackend()),
+        assets=_assets(),
+        cache=cache,
+        completed_at=datetime(2026, 8, 2, tzinfo=UTC),
+        amendment_sha256=("1" * 64, "2" * 64, "3" * 64),
+        verified_source_file_sha256=dict(SOURCE_SPEC.files),
+    )
+    return report, cache
+
+
+def _verify_kwargs(report, cache):
+    return {
+        "run_id": report.run_id,
+        "experiment_sha256": report.experiment_sha256,
+        "amendment_sha256": ("1" * 64, "2" * 64, "3" * 64),
+        "evidence_class": report.evidence_class,
+        "source_commit": report.source_commit,
+        "provider_identity": report.provider,
+        "assets": _assets(),
+        "expected_sequence_ids": frozenset({report.sequences[0].sequence_id}),
+        "cache": cache,
+    }
+
+
+def test_a_genuine_report_verifies(tmp_path: Path) -> None:
+    report, cache = _real_report(tmp_path)
+    assert verify_stage_a_report(report, **_verify_kwargs(report, cache)) is report
+
+
+def test_a_fabricated_object_does_not_pass(tmp_path: Path) -> None:
+    """passed=True, one sequence, and dimension 269 must not be enough."""
+
+    class Fake:
+        passed = True
+        sequences = ("anything",)
+        bridge_input_dimension = 269
+
+    report, cache = _real_report(tmp_path)
+    with pytest.raises(BridgeTransformError) as excinfo:
+        verify_stage_a_report(Fake(), **_verify_kwargs(report, cache))
+    assert excinfo.value.failures[0].code == "STAGE_A_REPORT_WRONG_TYPE"
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"run_id": "a_different_run"},
+        {"experiment_sha256": "e" * 64},
+        {"amendment_sha256": ("9" * 64,)},
+        {"evidence_class": "real_phase2"},
+        {"source_commit": "b" * 40},
+        {"provider_identity": "another_provider"},
+    ],
+    ids=["run", "experiment", "amendment", "evidence", "commit", "provider"],
+)
+def test_report_must_describe_the_active_run(tmp_path: Path, override: dict) -> None:
+    report, cache = _real_report(tmp_path)
+    kwargs = _verify_kwargs(report, cache)
+    kwargs.update(override)
+    with pytest.raises(BridgeTransformError) as excinfo:
+        verify_stage_a_report(report, **kwargs)
+    assert excinfo.value.failures[0].code == "STAGE_A_REPORT_IDENTITY_MISMATCH"
+
+
+def test_unexpected_sequence_set_is_rejected(tmp_path: Path) -> None:
+    report, cache = _real_report(tmp_path)
+    kwargs = _verify_kwargs(report, cache)
+    kwargs["expected_sequence_ids"] = frozenset({"0" * 16})
+    with pytest.raises(BridgeTransformError) as excinfo:
+        verify_stage_a_report(report, **kwargs)
+    assert excinfo.value.failures[0].code == "STAGE_A_UNEXPECTED_SEQUENCES"
+
+
+def test_a_missing_shard_is_detected(tmp_path: Path) -> None:
+    report, cache = _real_report(tmp_path)
+    (cache.root / report.sequences[0].shard_relative_path).unlink()
+    with pytest.raises(BridgeTransformError) as excinfo:
+        verify_stage_a_report(report, **_verify_kwargs(report, cache))
+    assert excinfo.value.failures[0].code == "MISSING_SHARD"
+
+
+def test_a_tampered_shard_is_detected(tmp_path: Path) -> None:
+    report, cache = _real_report(tmp_path)
+    path = cache.root / report.sequences[0].shard_relative_path
+    payload = bytearray(path.read_bytes())
+    payload[-3] ^= 0xFF
+    path.write_bytes(bytes(payload))
+    with pytest.raises(BridgeTransformError) as excinfo:
+        verify_stage_a_report(report, **_verify_kwargs(report, cache))
+    assert excinfo.value.failures[0].code == "SHARD_HASH_MISMATCH"
+
+
+def test_a_non_training_sequence_is_rejected(tmp_path: Path) -> None:
+    """Stage A may not touch validation, reconstruction-test, or external data."""
+    report, cache = _real_report(tmp_path)
+    tainted = report.model_copy(
+        update={
+            "sequences": (
+                report.sequences[0].model_copy(update={"partition": "reconstruction_test"}),
+            )
+        }
+    )
+    with pytest.raises(BridgeTransformError) as excinfo:
+        verify_stage_a_report(tainted, **_verify_kwargs(report, cache))
+    assert excinfo.value.failures[0].code == "STAGE_A_NON_TRAINING_SEQUENCE"
+
+
+def test_pipeline_rejects_a_non_report_object(tmp_path: Path) -> None:
+    from openalpha_bridge.phase2.kronos import KronosMode
+    from openalpha_bridge.phase2.pipeline import Phase2Config, Phase2Pipeline
+    from openalpha_bridge.phase2.provider import DeterministicFakeProvider
+    from openalpha_bridge.phase2.states import EvidenceClass, Phase2State
+    from openalpha_bridge.phase2.training import NumpyTrainingBackend
+
+    class Fake:
+        passed = True
+        sequences = ("x",)
+        bridge_input_dimension = 269
+
+    root = Path(__file__).resolve().parents[3]
+    pipeline = Phase2Pipeline(
+        config=Phase2Config(
+            run_directory=tmp_path / "run",
+            cache_directory=tmp_path / "cache2",
+            research_root=root / "research" / "bridge-v0",
+            repository_root=root,
+            evidence_class=EvidenceClass.SYNTHETIC_PIPELINE_VALIDATION,
+            provider_mode=ProviderMode.FAKE,
+            kronos_mode=KronosMode.FAKE,
+            dry_run=True,
+            require_accelerator=False,
+            training_symbols=("SPY",),
+            unseen_symbols=("IWM",),
+        ),
+        provider=DeterministicFakeProvider(),
+        kronos=DeterministicFakeKronosBackend(),
+        training_backend=NumpyTrainingBackend(),
+    )
+    for step in (
+        pipeline.preflight, pipeline.retrieve, pipeline.validate_data,
+        pipeline.build_windows, pipeline.coverage_audit, pipeline.resolve_assets,
+    ):
+        step()
+    result = pipeline.stage_a(Fake())  # type: ignore[arg-type]
+    assert result.state is Phase2State.BLOCKED
+    assert result.detail["blocker"] == "STAGE_A_REPORT_WRONG_TYPE"

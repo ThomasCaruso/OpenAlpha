@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..calendars import sessions_in_half_open_range
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
@@ -46,6 +47,9 @@ from .training import (
     run_training,
     select_checkpoint,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .stage_a import StageAReport
 
 __all__ = ["LOCKED_PERIODS", "Phase2Config", "Phase2Pipeline", "StageResult"]
 
@@ -299,27 +303,36 @@ class Phase2Pipeline:
         self._advance(Phase2State.ASSETS_RESOLVED)
         return StageResult(Phase2State.ASSETS_RESOLVED, {"assets": resolved.model_dump(mode="json")})
 
-    def stage_a(self, report: object | None = None) -> StageResult:
+    def stage_a(self, report: StageAReport | None = None) -> StageResult:
         """Advance only on validated feature-extraction evidence.
 
         Stage A previously advanced on a pure state transition, which let a run
-        reach training with no features ever produced. A report is now required
-        and must carry validated sequences.
+        reach training with no features ever produced. Evidence is now required
+        and must be a real StageAReport; an arbitrary object carrying the right
+        attribute names is rejected. Cross-run identity, shard existence, and
+        shard integrity are verified separately by
+        ``openalpha_bridge.phase2.stage_a_verify.verify_stage_a_report``, which
+        the cloud runner applies before calling this method.
         """
+        from .stage_a import StageAReport as _StageAReport
+
         self._require(Phase2State.ASSETS_RESOLVED)
 
-        passed = bool(getattr(report, "passed", False))
-        sequences = tuple(getattr(report, "sequences", ()) or ())
-        if report is None or not passed or not sequences:
-            reason = (
-                "STAGE_A_EXTRACTION_NOT_PERFORMED"
-                if report is None
-                else "STAGE_A_EXTRACTION_INCOMPLETE"
+        if report is None:
+            self._advance(Phase2State.BLOCKED, reason="STAGE_A_EXTRACTION_NOT_PERFORMED")
+            return StageResult(
+                Phase2State.BLOCKED, {"blocker": "STAGE_A_EXTRACTION_NOT_PERFORMED"}
             )
-            self._advance(Phase2State.BLOCKED, reason=reason)
-            return StageResult(Phase2State.BLOCKED, {"blocker": reason})
+        if not isinstance(report, _StageAReport):
+            self._advance(Phase2State.BLOCKED, reason="STAGE_A_REPORT_WRONG_TYPE")
+            return StageResult(Phase2State.BLOCKED, {"blocker": "STAGE_A_REPORT_WRONG_TYPE"})
+        if not report.passed or not report.sequences:
+            self._advance(Phase2State.BLOCKED, reason="STAGE_A_EXTRACTION_INCOMPLETE")
+            return StageResult(
+                Phase2State.BLOCKED, {"blocker": "STAGE_A_EXTRACTION_INCOMPLETE"}
+            )
 
-        dimension = getattr(report, "bridge_input_dimension", None)
+        dimension = report.bridge_input_dimension
         if dimension != 269:
             self._advance(Phase2State.BLOCKED, reason="STAGE_A_INVALID_FEATURE_DIMENSION")
             return StageResult(
@@ -331,7 +344,7 @@ class Phase2Pipeline:
             Phase2State.STAGE_A_PASSED,
             {
                 "symbols": list(self.config.stage_a_symbols),
-                "sequences": len(sequences),
+                "sequences": len(report.sequences),
                 "bridge_input_dimension": dimension,
             },
         )
