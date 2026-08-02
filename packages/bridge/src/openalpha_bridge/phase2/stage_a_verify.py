@@ -12,15 +12,14 @@ from __future__ import annotations
 
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from ..windowing import (
-    CONTEXT_PREFIX_LENGTH,
     EXAMPLE_LENGTH,
-    SCORED_SUFFIX_LENGTH,
     Partition,
     score_mask_sha256,
 )
 from .cache import CACHE_SCHEMA_VERSION, FeatureCache, ShardRef
-from .kronos import BRIDGE_INPUT_DIMENSION, SOURCE_SPEC, ResolvedAssets
+from .kronos import BRIDGE_INPUT_DIMENSION, SOURCE_SPEC
 from .stage_a import StageAReport
+from .stage_a_plan import StageAExecutionPlan
 
 __all__ = ["verify_stage_a_report"]
 
@@ -38,18 +37,24 @@ def _fail(code: str, message: str) -> BridgeTransformError:
 def verify_stage_a_report(
     report: object,
     *,
-    run_id: str,
-    experiment_sha256: str,
-    amendment_sha256: tuple[str, ...],
-    evidence_class: str,
-    source_commit: str | None,
-    provider_identity: str,
-    assets: ResolvedAssets,
-    expected_sequence_ids: frozenset[str],
+    plan: StageAExecutionPlan,
     cache: FeatureCache,
     expected_tensor_specification: dict[str, str] | None = None,
 ) -> StageAReport:
-    """Verify Stage A evidence against the active run, or fail closed."""
+    """Verify Stage A evidence against an independently derived plan, or fail closed.
+
+    Every expectation arrives in ``plan``. Nothing is derived from ``report``,
+    which is the object under audit; previously ``expected_sequence_ids`` was
+    read off the report itself, so that comparison could not fail.
+    """
+    run_id = plan.run_id
+    experiment_sha256 = plan.experiment_sha256
+    amendment_sha256 = plan.amendment_sha256
+    evidence_class = plan.evidence_class
+    source_commit = plan.source_commit
+    provider_identity = plan.provider_name
+    assets = plan.assets
+    expected_sequence_ids = plan.expected_sequence_ids
     if not isinstance(report, StageAReport):
         raise _fail(
             "STAGE_A_REPORT_WRONG_TYPE",
@@ -64,12 +69,18 @@ def verify_stage_a_report(
         ("amendment_sha256", tuple(report.amendment_sha256), tuple(amendment_sha256)),
         ("evidence_class", report.evidence_class, evidence_class),
         ("provider", report.provider, provider_identity),
-        ("score_mask_sha256", report.score_mask_sha256, score_mask_sha256()),
-        ("bridge_input_dimension", report.bridge_input_dimension, BRIDGE_INPUT_DIMENSION),
-        ("prefix_length", report.prefix_length, CONTEXT_PREFIX_LENGTH),
-        ("suffix_length", report.suffix_length, SCORED_SUFFIX_LENGTH),
-        ("cache_schema_version", report.cache_schema_version, CACHE_SCHEMA_VERSION),
-        ("official_source_revision", report.official_source_revision, SOURCE_SPEC.revision),
+        ("score_mask_sha256", report.score_mask_sha256, plan.score_mask_sha256),
+        ("bridge_input_dimension", report.bridge_input_dimension, plan.bridge_input_dimension),
+        ("prefix_length", report.prefix_length, plan.prefix_length),
+        ("suffix_length", report.suffix_length, plan.suffix_length),
+        ("cache_schema_version", report.cache_schema_version, plan.cache_schema_version),
+        ("representation_version", report.representation_version, plan.representation_version),
+        ("provider_client_version", report.provider_client_version, plan.provider_client_version),
+        (
+            "official_source_revision",
+            report.official_source_revision,
+            plan.official_source_revision,
+        ),
         ("kronos_repository", report.kronos_repository, assets.repository),
         ("kronos_revision", report.kronos_revision, assets.revision),
         ("kronos_config_sha256", report.kronos_config_sha256, assets.observed_config_sha256),
@@ -90,7 +101,7 @@ def verify_stage_a_report(
             f"Stage A report does not describe this run: {', '.join(mismatched)}",
         )
 
-    if report.official_source_file_sha256 != dict(SOURCE_SPEC.files):
+    if report.official_source_file_sha256 != plan.official_source_file_sha256:
         raise _fail(
             "STAGE_A_SOURCE_HASH_MISMATCH",
             "Stage A report does not carry the locked official source-file hashes",
@@ -157,7 +168,7 @@ def verify_stage_a_report(
             (
                 "provider_client_version",
                 identity.provider_client_version,
-                report.provider_client_version,
+                plan.provider_client_version,
             ),
             ("symbol", identity.symbol, record.symbol),
             ("interval", identity.interval, record.interval),

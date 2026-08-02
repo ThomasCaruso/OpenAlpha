@@ -144,7 +144,9 @@ class CloudRunner:
         )
 
     def _publish(self, category: str, name: str, payload: Any, schema_version: str) -> None:
-        key = f"{run_prefix(self._identity.run_id, self._identity.evidence_class)}/{category}/{name}"
+        key = (
+            f"{run_prefix(self._identity.run_id, self._identity.evidence_class)}/{category}/{name}"
+        )
         put_json(
             self._store,
             key,
@@ -225,15 +227,15 @@ class CloudRunner:
         )
 
         report = pipeline.preflight()
-        self._publish("stages", "preflight.json", report.model_dump(mode="json"),
-                      report.schema_version)
+        self._publish(
+            "stages", "preflight.json", report.model_dump(mode="json"), report.schema_version
+        )
         if not report.passed:
-            self._record(
-                Phase2State.BLOCKED, stage="preflight", reason=report.blocker_code
-            )
+            self._record(Phase2State.BLOCKED, stage="preflight", reason=report.blocker_code)
             table = evaluate_conclusion({}, blocked_reason=report.blocker_code)
-            self._publish("final", "gate_table.json", table.model_dump(mode="json"),
-                          table.schema_version)
+            self._publish(
+                "final", "gate_table.json", table.model_dump(mode="json"), table.schema_version
+            )
             return CloudRunResult(
                 run_id=self._identity.run_id,
                 final_state=Phase2State.BLOCKED,
@@ -258,27 +260,30 @@ class CloudRunner:
 
         coverage = pipeline.coverage_audit()
         if coverage.state is Phase2State.BLOCKED:
-            self._record(Phase2State.BLOCKED, stage="coverage",
-                         reason="REPRESENTATION_COVERAGE_BELOW_GATE")
+            self._record(
+                Phase2State.BLOCKED, stage="coverage", reason="REPRESENTATION_COVERAGE_BELOW_GATE"
+            )
             return self._blocked("REPRESENTATION_COVERAGE_BELOW_GATE")
         self._record(Phase2State.COVERAGE_PASSED, stage="coverage", progress=coverage.detail)
 
         assets = pipeline.resolve_assets()
-        self._publish("stages", "assets.json", assets.detail,
-                      "openalpha.bridge.phase2.assets.v1")
+        self._publish("stages", "assets.json", assets.detail, "openalpha.bridge.phase2.assets.v1")
         self._record(Phase2State.ASSETS_RESOLVED, stage="assets")
+        # The single resolution for this run. Resolving again for the audit
+        # would let the audit pass against assets the run never used.
+        resolved_assets = pipeline.resolved_assets()
 
-        # Stage A evidence is audited against the active run before it may
-        # advance anything. verify_stage_a_report is the production caller here;
-        # only its verified return value reaches the pipeline.
+        # Stage A evidence is audited against an independently derived plan
+        # before it may advance anything. verify_stage_a_report is the
+        # production caller here; only its verified return value reaches the
+        # pipeline.
         verified_report = None
         if self._stage_a_report is not None:
             from ..phase2.cache import FeatureCache
+            from ..phase2.stage_a_plan import build_stage_a_plan
             from ..phase2.stage_a_verify import verify_stage_a_report
 
-            resolved = self._kronos.resolve_assets()
-            verified_report = verify_stage_a_report(
-                self._stage_a_report,
+            plan = build_stage_a_plan(
                 run_id=self._identity.run_id,
                 experiment_sha256=self._identity.active_experiment_sha256,
                 amendment_sha256=(
@@ -288,11 +293,17 @@ class CloudRunner:
                 ),
                 evidence_class=self._identity.evidence_class.value,
                 source_commit=self._identity.source_commit,
-                provider_identity=self._provider.name,
-                assets=resolved,
-                expected_sequence_ids=frozenset(
-                    record.sequence_id for record in self._stage_a_report.sequences
-                ),
+                provider_name=self._provider.name,
+                provider_client_version=self._provider.client_version,
+                config=self._pipeline_config,
+                assets=resolved_assets,
+                # expected_sequence_ids is deliberately not passed. The plan
+                # derives it from the locked Stage A period, symbols and candle
+                # maximum, so the expectation cannot come from the report.
+            )
+            verified_report = verify_stage_a_report(
+                self._stage_a_report,
+                plan=plan,
                 cache=FeatureCache(
                     self._pipeline_config.cache_directory,
                     repository_root=self._pipeline_config.repository_root,
@@ -315,8 +326,9 @@ class CloudRunner:
 
         stage_b = pipeline.stage_b()
         if stage_b.state is Phase2State.BLOCKED:
-            self._record(Phase2State.BLOCKED, stage="stage_b",
-                         reason="STAGE_B_INSUFFICIENT_IMPROVEMENT")
+            self._record(
+                Phase2State.BLOCKED, stage="stage_b", reason="STAGE_B_INSUFFICIENT_IMPROVEMENT"
+            )
             return self._blocked("STAGE_B_INSUFFICIENT_IMPROVEMENT")
         self._record(Phase2State.STAGE_B_PASSED, stage="stage_b", progress=stage_b.detail)
 
@@ -330,8 +342,12 @@ class CloudRunner:
         if checkpoint is None:
             raise _fail("CHECKPOINT_NOT_FROZEN", "checkpoint selection produced no record")
         checkpoint.assert_locked_caps()
-        self._publish("checkpoint", "manifest.json", checkpoint.model_dump(mode="json"),
-                      checkpoint.schema_version)
+        self._publish(
+            "checkpoint",
+            "manifest.json",
+            checkpoint.model_dump(mode="json"),
+            checkpoint.schema_version,
+        )
         self._record(Phase2State.CHECKPOINT_FROZEN, stage="freeze", progress=frozen.detail)
 
         if not confirm_open_test_partition:
@@ -365,17 +381,24 @@ class CloudRunner:
             preconditions=preconditions,
             opened_at=self._clock(),
         )
-        self._publish("evaluation", "test_opening_receipt.json",
-                      {"opened": True, "record_run_id": record.run_id},
-                      "openalpha.bridge.phase2.receipt.v1")
+        self._publish(
+            "evaluation",
+            "test_opening_receipt.json",
+            {"opened": True, "record_run_id": record.run_id},
+            "openalpha.bridge.phase2.receipt.v1",
+        )
 
-        self._record(Phase2State.TEST_EVALUATED, stage="evaluate_test",
-                     progress={"measured": len(measurements)})
+        self._record(
+            Phase2State.TEST_EVALUATED,
+            stage="evaluate_test",
+            progress={"measured": len(measurements)},
+        )
         self._record(Phase2State.EXTERNAL_EVALUATED, stage="evaluate_external")
 
         table = evaluate_conclusion(measurements)
-        self._publish("final", "gate_table.json", table.model_dump(mode="json"),
-                      table.schema_version)
+        self._publish(
+            "final", "gate_table.json", table.model_dump(mode="json"), table.schema_version
+        )
         self._record(Phase2State.FINALIZED, stage="finalize", reason=table.conclusion.value)
 
         return CloudRunResult(
@@ -388,8 +411,9 @@ class CloudRunner:
 
     def _blocked(self, code: str) -> CloudRunResult:
         table = evaluate_conclusion({}, blocked_reason=code)
-        self._publish("final", "gate_table.json", table.model_dump(mode="json"),
-                      table.schema_version)
+        self._publish(
+            "final", "gate_table.json", table.model_dump(mode="json"), table.schema_version
+        )
         return CloudRunResult(
             run_id=self._identity.run_id,
             final_state=Phase2State.BLOCKED,

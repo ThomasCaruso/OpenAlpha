@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -110,9 +110,7 @@ def _service(store: InMemoryObjectStore, backend: FakeComputeBackend) -> Phase2C
         kronos_revision="26966d0035065a0cae0ebad7af8ece35bc1fb51c",
         provider_identity="yahoo_finance/yfinance==1.5.2",
     )
-    return Phase2ControlService(
-        store=store, backend=backend, config=config, clock=_Clock()
-    )
+    return Phase2ControlService(store=store, backend=backend, config=config, clock=_Clock())
 
 
 def _create(mode: ExecutionMode = ExecutionMode.SYNTHETIC, **overrides: Any) -> CreateRunRequest:
@@ -173,12 +171,8 @@ def _stage_a_report(sequences: int = 1):
         official_source_repository="https://github.com/shiyu-coder/Kronos",
         official_source_revision="67b630e67f6a18c9e9be918d9b4337c960db1e9a",
         official_source_file_sha256={
-            "model/kronos.py": (
-                "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a"
-            ),
-            "model/module.py": (
-                "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f"
-            ),
+            "model/kronos.py": ("638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a"),
+            "model/module.py": ("a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f"),
         },
         cache_schema_version="openalpha.bridge.phase2.cache.v2",
         representation_version="openalpha.bridge.financial.v1",
@@ -196,36 +190,44 @@ def _stage_a_report(sequences: int = 1):
 def _real_stage_a_for(runner_identity, cache_dir: Path, tmp_path: Path):
     """A genuinely extracted Stage A report bound to the runner's own identity.
 
-    The runner now audits Stage A evidence against the active run, so a
-    fabricated report is correctly rejected. Orchestration tests must therefore
-    supply real evidence written to the runner's own cache directory.
+    The runner audits Stage A evidence against a plan derived from the locks, so
+    the report must cover exactly the sequences those locks imply: SPY over the
+    intersection of the locked Stage A request period and the training period.
+    A single hand-built window no longer satisfies the audit, which is the point
+    of deriving the expectation independently.
     """
-    from datetime import date, timedelta
-
+    from openalpha_bridge.calendars import sessions_in_half_open_range
     from openalpha_bridge.phase2.cache import FeatureCache
     from openalpha_bridge.phase2.features import FeatureExtractor
     from openalpha_bridge.phase2.kronos import SOURCE_SPEC
+    from openalpha_bridge.phase2.pipeline import LOCKED_PERIODS
     from openalpha_bridge.phase2.provider import Candle, MarketSeries
     from openalpha_bridge.phase2.stage_a import run_stage_a
-    from openalpha_bridge.windowing import (
-        CONTEXT_PREFIX_LENGTH,
-        EXAMPLE_LENGTH,
-        SCORED_SUFFIX_LENGTH,
-        Partition,
-        SequenceSpec,
-        sequence_id,
+    from openalpha_bridge.phase2.stage_a_plan import (
+        STAGE_A_LOCKED_MAXIMUM_CANDLES,
+        STAGE_A_LOCKED_REQUEST_PERIOD,
     )
+    from openalpha_bridge.windowing import Partition, build_scored_sequences
 
-    start = date(2020, 1, 1)
+    requested_start = date.fromisoformat(STAGE_A_LOCKED_REQUEST_PERIOD[0])
+    requested_end = date.fromisoformat(STAGE_A_LOCKED_REQUEST_PERIOD[1])
+    training_start = date.fromisoformat(LOCKED_PERIODS[Partition.TRAIN][0])
+    training_end = date.fromisoformat(LOCKED_PERIODS[Partition.TRAIN][1])
+    sessions = sessions_in_half_open_range(
+        max(requested_start, training_start), min(requested_end, training_end)
+    )[:STAGE_A_LOCKED_MAXIMUM_CANDLES]
+
+    # One deterministic candle per real session, so sequence identities match
+    # the calendar the plan derives from.
     candles = []
     level = 100.0
-    for index in range(EXAMPLE_LENGTH):
+    for session in sessions:
         level = max(5.0, level * 1.0005)
         close = level * 1.0002
         volume = 1.0e6
         candles.append(
             Candle(
-                session=start + timedelta(days=index),
+                session=session,
                 open=level,
                 high=max(level, close) * 1.001,
                 low=min(level, close) / 1.001,
@@ -235,26 +237,13 @@ def _real_stage_a_for(runner_identity, cache_dir: Path, tmp_path: Path):
             )
         )
         level = close
-    candles = tuple(candles)
 
-    spec = SequenceSpec(
-        sequence_id=sequence_id(
-            symbol="SPY",
-            interval="1d",
-            partition=Partition.TRAIN,
-            target_start=candles[CONTEXT_PREFIX_LENGTH].session,
-            target_end=candles[-1].session,
-        ),
+    specs = build_scored_sequences(
         symbol="SPY",
         interval="1d",
         partition=Partition.TRAIN,
-        prefix_start=candles[0].session,
-        prefix_end=candles[CONTEXT_PREFIX_LENGTH - 1].session,
-        target_start=candles[CONTEXT_PREFIX_LENGTH].session,
-        target_end=candles[-1].session,
-        prefix_length=CONTEXT_PREFIX_LENGTH,
-        suffix_length=SCORED_SUFFIX_LENGTH,
-        target_overlaps_other_target=False,
+        partition_sessions=tuple(sessions),
+        history_sessions=(),
     )
     series = MarketSeries(
         symbol="SPY",
@@ -263,7 +252,7 @@ def _real_stage_a_for(runner_identity, cache_dir: Path, tmp_path: Path):
         provider_mode=ProviderMode.FAKE,
         client_version="fake-1",
         retrieval_timestamp=None,
-        candles=candles,
+        candles=tuple(candles),
     )
     backend = DeterministicFakeKronosBackend()
     return run_stage_a(
@@ -272,7 +261,7 @@ def _real_stage_a_for(runner_identity, cache_dir: Path, tmp_path: Path):
         source_commit=runner_identity.source_commit,
         evidence_class=runner_identity.evidence_class.value,
         series=series,
-        specs=(spec,),
+        specs=tuple(specs),
         extractor=FeatureExtractor(backend),
         assets=backend.resolve_assets(),
         cache=FeatureCache(cache_dir, repository_root=REPOSITORY_ROOT),
@@ -706,9 +695,7 @@ def test_create_run_returns_immediately_with_a_run_id() -> None:
 
 def test_real_run_requires_explicit_confirmation() -> None:
     store, backend = InMemoryObjectStore(), FakeComputeBackend()
-    request = _create(ExecutionMode.REAL).model_copy(
-        update={"confirm_real_evidence": False}
-    )
+    request = _create(ExecutionMode.REAL).model_copy(update={"confirm_real_evidence": False})
     with pytest.raises(BridgeTransformError) as excinfo:
         _service(store, backend).create_run(request)
     assert excinfo.value.failures[0].code == "REAL_EVIDENCE_NOT_CONFIRMED"
@@ -732,9 +719,7 @@ def test_unapproved_source_commit_is_rejected() -> None:
         provider_identity="yahoo_finance/yfinance==1.5.2",
         approved_source_commits=frozenset({"b" * 40}),
     )
-    service = Phase2ControlService(
-        store=store, backend=backend, config=config, clock=_Clock()
-    )
+    service = Phase2ControlService(store=store, backend=backend, config=config, clock=_Clock())
     with pytest.raises(BridgeTransformError) as excinfo:
         service.create_run(_create())
     assert excinfo.value.failures[0].code == "UNAPPROVED_SOURCE_COMMIT"
@@ -756,9 +741,7 @@ def test_idempotent_key_with_conflicting_inputs_fails() -> None:
     service = _service(store, backend)
     service.create_run(_create(idempotency_key="stable-key-0002"))
     with pytest.raises(BridgeTransformError) as excinfo:
-        service.create_run(
-            _create(idempotency_key="stable-key-0002", operator="someone-else")
-        )
+        service.create_run(_create(idempotency_key="stable-key-0002", operator="someone-else"))
     assert excinfo.value.failures[0].code == "IDEMPOTENCY_KEY_CONFLICT"
 
 
@@ -772,9 +755,7 @@ def test_run_creation_is_rate_limited() -> None:
         provider_identity="yahoo_finance/yfinance==1.5.2",
         rate_limit_per_hour=2,
     )
-    service = Phase2ControlService(
-        store=store, backend=backend, config=config, clock=_Clock()
-    )
+    service = Phase2ControlService(store=store, backend=backend, config=config, clock=_Clock())
     for index in range(2):
         service.create_run(_create(operator=f"op-{index}"))
     with pytest.raises(BridgeTransformError) as excinfo:
@@ -941,10 +922,7 @@ def test_synthetic_cloud_run_releases_its_lease(tmp_path: Path) -> None:
     )
     identity = _identity(EvidenceClass.SYNTHETIC_PIPELINE_VALIDATION)
     assert (
-        current_lease(
-            store, run_id=identity.run_id, evidence_class=identity.evidence_class
-        )
-        is None
+        current_lease(store, run_id=identity.run_id, evidence_class=identity.evidence_class) is None
     )
 
 
@@ -1088,9 +1066,7 @@ def test_the_canary_root_is_neither_real_nor_synthetic() -> None:
 
     canary = run_prefix("canary_0badc0de", EvidenceClass.DEVELOPMENT_COMPATIBILITY_CANARY)
     real = run_prefix("canary_0badc0de", EvidenceClass.REAL_PHASE2)
-    synthetic = run_prefix(
-        "canary_0badc0de", EvidenceClass.SYNTHETIC_PIPELINE_VALIDATION
-    )
+    synthetic = run_prefix("canary_0badc0de", EvidenceClass.SYNTHETIC_PIPELINE_VALIDATION)
     assert canary != real and canary != synthetic
     assert canary.startswith("openalpha-compatibility/")
 

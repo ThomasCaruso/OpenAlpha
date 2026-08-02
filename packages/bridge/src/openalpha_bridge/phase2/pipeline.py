@@ -24,7 +24,7 @@ from ..windowing import (
 )
 from .gates import GateTable, evaluate_conclusion
 from .identity import RunIdentity, canonical_json, verify_locked_hashes
-from .kronos import KronosBackend, KronosMode, assert_backend_matches_mode
+from .kronos import KronosBackend, KronosMode, ResolvedAssets, assert_backend_matches_mode
 from .preflight import PreflightReport, run_preflight
 from .provider import (
     LOCKED_TRAINING_SYMBOLS,
@@ -132,6 +132,7 @@ class Phase2Pipeline:
     journal: StateJournal = field(init=False)
     _series: dict[str, MarketSeries] = field(default_factory=dict, init=False)
     _sequences: dict[Partition, tuple] = field(default_factory=dict, init=False)
+    _resolved_assets: ResolvedAssets | None = field(default=None, init=False)
     _history: TrainingHistory | None = field(default=None, init=False)
     _checkpoint: CheckpointRecord | None = field(default=None, init=False)
     _test_record: TestOpeningRecord | None = field(default=None, init=False)
@@ -187,9 +188,7 @@ class Phase2Pipeline:
         return loaded
 
     def _persist_journal(self) -> None:
-        self._journal_path().write_text(
-            self.journal.model_dump_json(indent=2), encoding="utf-8"
-        )
+        self._journal_path().write_text(self.journal.model_dump_json(indent=2), encoding="utf-8")
 
     def _advance(self, state: Phase2State, *, reason: str | None = None) -> None:
         # A resumed run reloads a journal whose last timestamp may already be
@@ -250,9 +249,7 @@ class Phase2Pipeline:
         for series in self._series.values():
             validate_series(series)
         self._advance(Phase2State.DATA_VALIDATED)
-        return StageResult(
-            Phase2State.DATA_VALIDATED, {"series": len(self._series)}
-        )
+        return StageResult(Phase2State.DATA_VALIDATED, {"series": len(self._series)})
 
     def build_windows(self) -> StageResult:
         self._require(Phase2State.DATA_VALIDATED)
@@ -300,8 +297,25 @@ class Phase2Pipeline:
     def resolve_assets(self) -> StageResult:
         self._require(Phase2State.COVERAGE_PASSED)
         resolved = self.kronos.resolve_assets()
+        # Retained so the Stage A audit can use the resolution this run
+        # actually performed rather than resolving a second time.
+        self._resolved_assets = resolved
         self._advance(Phase2State.ASSETS_RESOLVED)
-        return StageResult(Phase2State.ASSETS_RESOLVED, {"assets": resolved.model_dump(mode="json")})
+        return StageResult(
+            Phase2State.ASSETS_RESOLVED, {"assets": resolved.model_dump(mode="json")}
+        )
+
+    def resolved_assets(self) -> ResolvedAssets:
+        """The assets this run resolved. Never resolves again."""
+        if self._resolved_assets is None:
+            raise BridgeTransformError(
+                BridgeFailure(
+                    category=FailureCategory.INVALID_CONFIGURATION,
+                    code="ASSETS_NOT_RESOLVED",
+                    message="resolve_assets has not run, so there is nothing to audit against",
+                )
+            )
+        return self._resolved_assets
 
     def stage_a(self, report: StageAReport | None = None) -> StageResult:
         """Advance only on validated feature-extraction evidence.
@@ -320,17 +334,13 @@ class Phase2Pipeline:
 
         if report is None:
             self._advance(Phase2State.BLOCKED, reason="STAGE_A_EXTRACTION_NOT_PERFORMED")
-            return StageResult(
-                Phase2State.BLOCKED, {"blocker": "STAGE_A_EXTRACTION_NOT_PERFORMED"}
-            )
+            return StageResult(Phase2State.BLOCKED, {"blocker": "STAGE_A_EXTRACTION_NOT_PERFORMED"})
         if not isinstance(report, _StageAReport):
             self._advance(Phase2State.BLOCKED, reason="STAGE_A_REPORT_WRONG_TYPE")
             return StageResult(Phase2State.BLOCKED, {"blocker": "STAGE_A_REPORT_WRONG_TYPE"})
         if not report.passed or not report.sequences:
             self._advance(Phase2State.BLOCKED, reason="STAGE_A_EXTRACTION_INCOMPLETE")
-            return StageResult(
-                Phase2State.BLOCKED, {"blocker": "STAGE_A_EXTRACTION_INCOMPLETE"}
-            )
+            return StageResult(Phase2State.BLOCKED, {"blocker": "STAGE_A_EXTRACTION_INCOMPLETE"})
 
         dimension = report.bridge_input_dimension
         if dimension != 269:
@@ -375,9 +385,7 @@ class Phase2Pipeline:
             fitted_partitions=frozenset({Partition.TRAIN}),
         )
         self._advance(Phase2State.STAGE_C_TRAINED)
-        return StageResult(
-            Phase2State.STAGE_C_TRAINED, {"epochs": len(self._history.epochs)}
-        )
+        return StageResult(Phase2State.STAGE_C_TRAINED, {"epochs": len(self._history.epochs)})
 
     def freeze_checkpoint(self) -> StageResult:
         self._require(Phase2State.STAGE_C_TRAINED)

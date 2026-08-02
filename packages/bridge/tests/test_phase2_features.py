@@ -38,6 +38,7 @@ from openalpha_bridge.phase2.kronos import (
 )
 from openalpha_bridge.phase2.provider import Candle, MarketSeries, ProviderMode
 from openalpha_bridge.phase2.stage_a import run_stage_a
+from openalpha_bridge.phase2.stage_a_plan import build_stage_a_plan
 from openalpha_bridge.phase2.stage_a_verify import verify_stage_a_report
 from openalpha_bridge.windowing import (
     CONTEXT_PREFIX_LENGTH,
@@ -246,12 +247,12 @@ def test_scale_feature_formulas_follow_the_locked_names() -> None:
     assert values[SCALE_FEATURE_ORDER.index("log_anchor_close")] == pytest.approx(
         math.log(anchor), rel=1e-6
     )
-    assert values[
-        SCALE_FEATURE_ORDER.index("open_mean_relative_to_anchor")
-    ] == pytest.approx(mean[0] / anchor, rel=1e-6)
-    assert values[
-        SCALE_FEATURE_ORDER.index("log1p_close_std_over_anchor")
-    ] == pytest.approx(math.log1p(std[3] / anchor), rel=1e-6)
+    assert values[SCALE_FEATURE_ORDER.index("open_mean_relative_to_anchor")] == pytest.approx(
+        mean[0] / anchor, rel=1e-6
+    )
+    assert values[SCALE_FEATURE_ORDER.index("log1p_close_std_over_anchor")] == pytest.approx(
+        math.log1p(std[3] / anchor), rel=1e-6
+    )
     assert values[SCALE_FEATURE_ORDER.index("log1p_volume_mean")] == pytest.approx(
         math.log1p(mean[4]), rel=1e-6
     )
@@ -290,9 +291,7 @@ def test_a_future_candle_cannot_alter_an_earlier_timestep_feature() -> None:
     perturbed = _extract(tuple(perturbed_list))
 
     # Every position strictly before the perturbed one is untouched.
-    assert np.array_equal(
-        baseline.frozen_hidden[:-1], perturbed.frozen_hidden[:-1]
-    )
+    assert np.array_equal(baseline.frozen_hidden[:-1], perturbed.frozen_hidden[:-1])
     assert np.array_equal(baseline.bridge_input[:-1], perturbed.bridge_input[:-1])
 
 
@@ -362,9 +361,7 @@ def test_window_must_match_the_specification_boundaries() -> None:
     """A specification describing different sessions must not silently bind."""
     candles = _candles()
     base = _spec(candles)
-    shifted = base.model_copy(
-        update={"prefix_start": base.prefix_start + timedelta(days=1)}
-    )
+    shifted = base.model_copy(update={"prefix_start": base.prefix_start + timedelta(days=1)})
     extractor = FeatureExtractor(DeterministicFakeKronosBackend())
     with pytest.raises(BridgeTransformError) as excinfo:
         extractor.extract(spec=shifted, candles=candles, source_data_sha256="0" * 64)
@@ -645,9 +642,7 @@ def test_identical_rewrite_is_accepted(tmp_path: Path) -> None:
     ],
     ids=["amendment", "source_revision", "provider", "experiment", "run", "commit"],
 )
-def test_differing_identity_at_the_same_path_is_a_collision(
-    tmp_path: Path, override: dict
-) -> None:
+def test_differing_identity_at_the_same_path_is_a_collision(tmp_path: Path, override: dict) -> None:
     """A stale shard must never be silently reused or overwritten."""
     cache = FeatureCache(tmp_path / "cache")
     cache.write(_example())
@@ -702,18 +697,49 @@ def _real_report(tmp_path: Path):
     return report, cache
 
 
-def _verify_kwargs(report, cache):
-    return {
+def _plan(report, **overrides):
+    """The audit expectation.
+
+    In production every field comes from locked configuration and the live run;
+    here the genuine report's own values stand in for that run so the tests can
+    perturb one field at a time. The verifier never reads the report for these.
+    """
+    fields = {
         "run_id": report.run_id,
         "experiment_sha256": report.experiment_sha256,
         "amendment_sha256": ("1" * 64, "2" * 64, "3" * 64),
         "evidence_class": report.evidence_class,
         "source_commit": report.source_commit,
-        "provider_identity": report.provider,
+        "provider_name": report.provider,
+        "provider_client_version": report.provider_client_version,
+        "config": _plan_config(),
         "assets": _assets(),
         "expected_sequence_ids": frozenset({report.sequences[0].sequence_id}),
-        "cache": cache,
     }
+    fields.update(overrides)
+    return build_stage_a_plan(**fields)
+
+
+def _plan_config():
+    from openalpha_bridge.phase2.kronos import KronosMode
+    from openalpha_bridge.phase2.pipeline import Phase2Config
+    from openalpha_bridge.phase2.provider import ProviderMode as _Mode
+    from openalpha_bridge.phase2.states import EvidenceClass
+
+    root = Path(".")
+    return Phase2Config(
+        run_directory=root,
+        cache_directory=root,
+        research_root=root,
+        repository_root=root,
+        evidence_class=EvidenceClass.SYNTHETIC_PIPELINE_VALIDATION,
+        provider_mode=_Mode.FAKE,
+        kronos_mode=KronosMode.FAKE,
+    )
+
+
+def _verify_kwargs(report, cache, **overrides):
+    return {"plan": _plan(report, **overrides), "cache": cache}
 
 
 def test_a_genuine_report_verifies(tmp_path: Path) -> None:
@@ -743,25 +769,23 @@ def test_a_fabricated_object_does_not_pass(tmp_path: Path) -> None:
         {"amendment_sha256": ("9" * 64,)},
         {"evidence_class": "real_phase2"},
         {"source_commit": "b" * 40},
-        {"provider_identity": "another_provider"},
+        {"provider_name": "another_provider"},
     ],
     ids=["run", "experiment", "amendment", "evidence", "commit", "provider"],
 )
 def test_report_must_describe_the_active_run(tmp_path: Path, override: dict) -> None:
     report, cache = _real_report(tmp_path)
-    kwargs = _verify_kwargs(report, cache)
-    kwargs.update(override)
     with pytest.raises(BridgeTransformError) as excinfo:
-        verify_stage_a_report(report, **kwargs)
+        verify_stage_a_report(report, **_verify_kwargs(report, cache, **override))
     assert excinfo.value.failures[0].code == "STAGE_A_REPORT_IDENTITY_MISMATCH"
 
 
 def test_unexpected_sequence_set_is_rejected(tmp_path: Path) -> None:
     report, cache = _real_report(tmp_path)
-    kwargs = _verify_kwargs(report, cache)
-    kwargs["expected_sequence_ids"] = frozenset({"0" * 16})
     with pytest.raises(BridgeTransformError) as excinfo:
-        verify_stage_a_report(report, **kwargs)
+        verify_stage_a_report(
+            report, **_verify_kwargs(report, cache, expected_sequence_ids=frozenset({"0" * 16}))
+        )
     assert excinfo.value.failures[0].code == "STAGE_A_UNEXPECTED_SEQUENCES"
 
 
@@ -831,8 +855,12 @@ def test_pipeline_rejects_a_non_report_object(tmp_path: Path) -> None:
         training_backend=NumpyTrainingBackend(),
     )
     for step in (
-        pipeline.preflight, pipeline.retrieve, pipeline.validate_data,
-        pipeline.build_windows, pipeline.coverage_audit, pipeline.resolve_assets,
+        pipeline.preflight,
+        pipeline.retrieve,
+        pipeline.validate_data,
+        pipeline.build_windows,
+        pipeline.coverage_audit,
+        pipeline.resolve_assets,
     ):
         step()
     result = pipeline.stage_a(Fake())  # type: ignore[arg-type]
@@ -855,9 +883,7 @@ def test_pipeline_rejects_a_non_report_object(tmp_path: Path) -> None:
         "tensor_specification",
     ],
 )
-def test_one_altered_shard_identity_field_blocks_stage_a(
-    tmp_path: Path, field: str
-) -> None:
+def test_one_altered_shard_identity_field_blocks_stage_a(tmp_path: Path, field: str) -> None:
     """A single drifted shard-bound field must stop Stage A advancing."""
     from openalpha_bridge.phase2.cache import CacheIdentity
 
@@ -967,14 +993,18 @@ def test_one_altered_shard_identity_field_blocks_stage_a(
     with pytest.raises(BridgeTransformError) as excinfo:
         verify_stage_a_report(
             report,
-            run_id="syn_stage_a",
-            experiment_sha256="d" * 64,
-            amendment_sha256=("1" * 64, "2" * 64, "3" * 64),
-            evidence_class="development_compatibility_canary",
-            source_commit="a" * 40,
-            provider_identity="deterministic_fake",
-            assets=assets,
-            expected_sequence_ids=frozenset({extracted.sequence_id}),
+            plan=build_stage_a_plan(
+                run_id="syn_stage_a",
+                experiment_sha256="d" * 64,
+                amendment_sha256=("1" * 64, "2" * 64, "3" * 64),
+                evidence_class="development_compatibility_canary",
+                source_commit="a" * 40,
+                provider_name="deterministic_fake",
+                provider_client_version="fake-1",
+                config=_plan_config(),
+                assets=assets,
+                expected_sequence_ids=frozenset({extracted.sequence_id}),
+            ),
             cache=cache,
             expected_tensor_specification={"bridge_input": "float32[512,269]"},
         )
