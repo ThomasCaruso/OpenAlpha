@@ -40,6 +40,8 @@ __all__ = [
     "V2_SPECIFICATION_SHA256",
     "V3_SPECIFICATION_NAME",
     "V3_SPECIFICATION_SHA256",
+    "V4_SPECIFICATION_NAME",
+    "V4_SPECIFICATION_SHA256",
     "WINDOW",
     "DiagnosticThresholds",
     "ForecastModelSpec",
@@ -58,12 +60,17 @@ V2_SPECIFICATION_SHA256: Final[str] = (
     "c39fff4541afcc948cd80fcc545398312897efe723deca26554143989e4a175e"
 )
 
-#: The operative document. v1 and v2 are preserved and still verified.
 V3_SPECIFICATION_NAME: Final[str] = "phase2-frozen-inference-diagnostic-v3.yaml"
 V3_SPECIFICATION_SHA256: Final[str] = (
     "f10076b6676a72552b1c9c96720d0087c009fc939e4667509bfcfccf7929bcb6"
 )
-OPERATIVE_SPECIFICATION_NAME: Final[str] = V3_SPECIFICATION_NAME
+
+#: The operative document. v1, v2 and v3 are preserved and still verified.
+V4_SPECIFICATION_NAME: Final[str] = "phase2-frozen-inference-diagnostic-v4.yaml"
+V4_SPECIFICATION_SHA256: Final[str] = (
+    "bd407722adfc3ebf92eb187828d42c2c9cfa57b2fdc0406121f27d39a5c44977"
+)
+OPERATIVE_SPECIFICATION_NAME: Final[str] = V4_SPECIFICATION_NAME
 
 CLAIM_BOUNDARY: Final[str] = "DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"
 
@@ -249,13 +256,15 @@ def _verify_one(research_root: Path, name: str, expected: str) -> str:
 def verify_diagnostic_specifications(research_root: Path | str) -> dict[str, str]:
     """Verify both documents, or fail closed.
 
-    v1 and v2 are checked even though both are superseded: they are preserved
-    evidence of what was specified before, and a superseded document that
-    drifted would make the supersession record meaningless. v3 is operative.
+    v1, v2 and v3 are checked even though all three are superseded: they are
+    preserved evidence of what was specified before, and a superseded document
+    that drifted would make the supersession record meaningless. v4 is
+    operative.
     """
     root = Path(research_root)
     return {
         V1_SPECIFICATION_NAME: _verify_one(root, V1_SPECIFICATION_NAME, V1_SPECIFICATION_SHA256),
         V2_SPECIFICATION_NAME: _verify_one(root, V2_SPECIFICATION_NAME, V2_SPECIFICATION_SHA256),
         V3_SPECIFICATION_NAME: _verify_one(root, V3_SPECIFICATION_NAME, V3_SPECIFICATION_SHA256),
+        V4_SPECIFICATION_NAME: _verify_one(root, V4_SPECIFICATION_NAME, V4_SPECIFICATION_SHA256),
     }

@@ -53,8 +53,12 @@ class DiagnosticConclusion(StrEnum):
     ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS = (
         "ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS"
     )
-    CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE = (
-        "CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE"
+    #: Descriptive only. Never primary, never controls the recommendation.
+    MATERIAL_CLIPPING_EXPOSURE_OBSERVED = "MATERIAL_CLIPPING_EXPOSURE_OBSERVED"
+    #: Only when every invalid reconstruction had a clipped input, so the clip
+    #: and the decoder genuinely cannot be told apart.
+    ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING = (
+        "ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING"
     )
 
     # Rollouts and filtering
@@ -88,13 +92,17 @@ class NextExperiment(StrEnum):
     NONE_DIAGNOSTIC_INCONCLUSIVE = "NONE_DIAGNOSTIC_INCONCLUSIVE"
 
 
-#: Priority for selecting the primary conclusion. R2's structural observation
-#: is deliberately absent: it is a finding, never primary, because on its own
-#: it does not select a branch.
+#: Priority for selecting the primary conclusion.
+#:
+#: Two labels are deliberately absent. R2's bare structural observation does
+#: not select a branch on its own. Material clipping exposure is an
+#: observation about the input, not about the reconstruction, and letting it
+#: become primary would let it displace a finding that actually explains
+#: something.
 PRIMARY_PRIORITY: tuple[DiagnosticConclusion, ...] = (
     DiagnosticConclusion.DIAGNOSTIC_OPERATIONAL_FAILURE,
     DiagnosticConclusion.REPRODUCIBILITY_FAILURE,
-    DiagnosticConclusion.CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE,
+    DiagnosticConclusion.ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING,
     DiagnosticConclusion.ROUNDTRIP_MATERIAL_INVALIDITY,
     DiagnosticConclusion.NO_VALID_ROLLOUTS_OBSERVED,
     DiagnosticConclusion.VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD,
@@ -194,8 +202,10 @@ def _recommend(
         return NextExperiment.NONE_DIAGNOSTIC_INCONCLUSIVE
     if C.REPRODUCIBILITY_FAILURE in matched:
         return NextExperiment.REPAIR_REPRODUCIBILITY
-    if C.CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE in matched:
+    if C.ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING in matched:
         return NextExperiment.INVESTIGATE_CLIPPING_EXPOSURE
+    # MATERIAL_CLIPPING_EXPOSURE_OBSERVED is never consulted here. Exposure on
+    # its own must not override a recommendation a substantive finding made.
     # No skill anywhere makes the structural direction moot regardless of what
     # the validity findings say: repairing geometry cannot create signal.
     if C.NO_SKILL_AGAINST_PERSISTENCE in matched:
@@ -337,14 +347,31 @@ def decide(
             "invalid_rows_with_unclipped_input": float(unclipped_invalid),
         },
     )
+    material_clipping = clip_fraction > thresholds.material_clipping_row_fraction
     record(
         "R2c",
-        C.CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE,
-        clip_fraction > thresholds.material_clipping_row_fraction,
-        "clipped input rows against the materiality threshold",
+        C.MATERIAL_CLIPPING_EXPOSURE_OBSERVED,
+        material_clipping,
+        "clipped input rows against the materiality threshold; descriptive only",
         {
             "row_clipped_fraction": clip_fraction,
             "threshold": thresholds.material_clipping_row_fraction,
+        },
+    )
+    # The clip only confounds the reading when it could have caused every
+    # invalid reconstruction. One invalid row on an entirely unclipped input is
+    # direct evidence that it could not have, and that evidence stands however
+    # much clipping happened elsewhere in the sequence.
+    record(
+        "R2d",
+        C.ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING,
+        invalid_count > 0 and material_clipping and clipped_invalid > 0 and unclipped_invalid == 0,
+        "every invalid reconstruction had a clipped input, under material exposure",
+        {
+            "invalid_candle_count": float(invalid_count),
+            "row_clipped_fraction": clip_fraction,
+            "invalid_rows_with_clipped_input": float(clipped_invalid),
+            "invalid_rows_with_unclipped_input": float(unclipped_invalid),
         },
     )
 
@@ -454,8 +481,14 @@ def decide(
     record(
         "R10",
         C.NO_PREREGISTERED_EFFECT_DETECTED,
-        not (matched_set - {C.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED}),
-        "no rule other than the bare round-trip observation matched",
+        not (
+            matched_set
+            - {
+                C.ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED,
+                C.MATERIAL_CLIPPING_EXPOSURE_OBSERVED,
+            }
+        ),
+        "no rule other than the bare round-trip observation and clipping exposure matched",
         {"matched_findings": float(len(matched_set))},
     )
 

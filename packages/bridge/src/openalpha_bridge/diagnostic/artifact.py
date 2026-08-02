@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
@@ -25,7 +25,17 @@ from ..phase2.invocation import WorkerInvocation
 from ..phase2.states import EvidenceClass
 from .conclusion import DiagnosticConclusion
 from .runner import DIAGNOSTIC_SCHEMA_VERSION, DiagnosticArtifact
-from .spec import CLAIM_BOUNDARY, V2_SPECIFICATION_SHA256
+from .spec import (
+    CLAIM_BOUNDARY,
+    V1_SPECIFICATION_NAME,
+    V1_SPECIFICATION_SHA256,
+    V2_SPECIFICATION_NAME,
+    V2_SPECIFICATION_SHA256,
+    V3_SPECIFICATION_NAME,
+    V3_SPECIFICATION_SHA256,
+    V4_SPECIFICATION_NAME,
+    V4_SPECIFICATION_SHA256,
+)
 
 __all__ = [
     "DIAGNOSTIC_ARTIFACT_NAME",
@@ -54,13 +64,68 @@ OPERATIONAL_FAILURE_MESSAGE: Final[str] = (
     "provider responses, or local paths"
 )
 
-FAILURE_SCHEMA_VERSION: Final[str] = "openalpha.bridge.diagnostic.frozen_inference_failure.v1"
+#: The original failure schema. Retained so an artifact written before v4 can
+#: still be parsed, and never written again: it carried no record of which
+#: specification produced it, which is the defect v4 exists to fix.
+LEGACY_FAILURE_SCHEMA_VERSION: Final[str] = (
+    "openalpha.bridge.diagnostic.frozen_inference_failure.v1"
+)
 
+#: What every v4 execution writes for a failure.
+FAILURE_SCHEMA_VERSION: Final[str] = "openalpha.bridge.diagnostic.frozen_inference_failure.v2"
+
+#: Outcome to the schema a v4 run must have written. The legacy failure schema
+#: is deliberately absent: a v4 terminal artifact carrying it is not a v4
+#: artifact, and verification rejects it rather than accepting a run whose
+#: governing specification is unknown.
 _SCHEMA_FOR_OUTCOME: Final[dict[str, str]] = {
     DIAGNOSTIC_SUCCESS_CODE: DIAGNOSTIC_SCHEMA_VERSION,
     DIAGNOSTIC_FAILURE_CODE: FAILURE_SCHEMA_VERSION,
     DIAGNOSTIC_OPERATIONAL_FAILURE_CODE: FAILURE_SCHEMA_VERSION,
 }
+
+#: The complete chain every terminal artifact must carry, and the document
+#: that governed the run.
+EXPECTED_SPECIFICATIONS: Final[dict[str, tuple[str, str]]] = {
+    "specification_v1": (V1_SPECIFICATION_NAME, V1_SPECIFICATION_SHA256),
+    "specification_v2": (V2_SPECIFICATION_NAME, V2_SPECIFICATION_SHA256),
+    "specification_v3": (V3_SPECIFICATION_NAME, V3_SPECIFICATION_SHA256),
+    "specification_v4": (V4_SPECIFICATION_NAME, V4_SPECIFICATION_SHA256),
+}
+
+
+class SpecificationIdentity(TypedDict):
+    """The chain fields every terminal artifact records.
+
+    A TypedDict rather than a plain mapping so that unpacking it into a model
+    keeps its keys visible to a type checker; a bare dict[str, str] would let
+    any field be silently supplied.
+    """
+
+    specification_v1_name: str
+    specification_v1_sha256: str
+    specification_v2_name: str
+    specification_v2_sha256: str
+    specification_v3_name: str
+    specification_v3_sha256: str
+    specification_v4_name: str
+    specification_v4_sha256: str
+    operative_specification: str
+
+
+def specification_identity() -> SpecificationIdentity:
+    """The chain fields every terminal artifact records."""
+    return SpecificationIdentity(
+        specification_v1_name=V1_SPECIFICATION_NAME,
+        specification_v1_sha256=V1_SPECIFICATION_SHA256,
+        specification_v2_name=V2_SPECIFICATION_NAME,
+        specification_v2_sha256=V2_SPECIFICATION_SHA256,
+        specification_v3_name=V3_SPECIFICATION_NAME,
+        specification_v3_sha256=V3_SPECIFICATION_SHA256,
+        specification_v4_name=V4_SPECIFICATION_NAME,
+        specification_v4_sha256=V4_SPECIFICATION_SHA256,
+        operative_specification=V4_SPECIFICATION_NAME,
+    )
 
 
 def diagnostic_artifact_key(run_id: str) -> str:
@@ -69,8 +134,12 @@ def diagnostic_artifact_key(run_id: str) -> str:
     return f"{prefix}/{DIAGNOSTIC_SUBTREE}/{DIAGNOSTIC_ARTIFACT_NAME}"
 
 
-class DiagnosticFailure(BaseModel):
-    """A diagnostic that did not reach a conclusion, preserved."""
+class LegacyDiagnosticFailure(BaseModel):
+    """The pre-v4 failure payload. Kept for parsing, never written again.
+
+    It recorded a single specification digest, so a failure produced under one
+    set of rules could be read as though another had governed it.
+    """
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
@@ -93,6 +162,58 @@ class DiagnosticFailure(BaseModel):
     deployed_commit: str
     experiment_sha256: str
     specification_v2_sha256: str
+    failure_stage: str
+    failure_code: str
+    exception_class: str | None = None
+    message: str
+    completed_at: datetime
+    authorizes_training: Literal[False] = False
+    authorizes_stage_b: Literal[False] = False
+    authorizes_stage_c: Literal[False] = False
+    authorizes_test_opening: Literal[False] = False
+    authorizes_production_inference: Literal[False] = False
+    authorizes_trading_claims: Literal[False] = False
+    scientific_result_available: Literal[False] = False
+
+
+class DiagnosticFailure(BaseModel):
+    """A diagnostic that did not reach a conclusion, bound to v4.
+
+    Carries the whole specification chain and names the operative document, so
+    a failure can always be attributed to the rules that produced it. A typed
+    failure and an operational failure are bound identically; neither may be
+    representable as a failure under an earlier specification.
+    """
+
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
+
+    schema_version: Literal["openalpha.bridge.diagnostic.frozen_inference_failure.v2"] = (
+        "openalpha.bridge.diagnostic.frozen_inference_failure.v2"
+    )
+    claim_boundary: Literal["DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"] = (
+        "DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"
+    )
+    outcome: Literal[
+        "FROZEN_INFERENCE_DIAGNOSTIC_FAILED",
+        "FROZEN_INFERENCE_DIAGNOSTIC_OPERATIONAL_FAILURE",
+    ]
+    conclusion: DiagnosticConclusion | None = None
+    evidence_class: EvidenceClass = EvidenceClass.DEVELOPMENT_COMPATIBILITY_CANARY
+    run_id: str
+    source_commit: str
+    deployed_commit: str
+    experiment_sha256: str
+
+    specification_v1_name: str
+    specification_v1_sha256: str
+    specification_v2_name: str
+    specification_v2_sha256: str
+    specification_v3_name: str
+    specification_v3_sha256: str
+    specification_v4_name: str
+    specification_v4_sha256: str
+    operative_specification: str
+
     failure_stage: str
     failure_code: str
     exception_class: str | None = None
@@ -201,11 +322,27 @@ def verify_existing_artifact(
             key,
             "was produced under a different experiment",
         )
-    if existing.get("specification_v2_sha256") != V2_SPECIFICATION_SHA256:
+    for prefix, (name, digest) in EXPECTED_SPECIFICATIONS.items():
+        if existing.get(f"{prefix}_name") != name:
+            raise _mismatch(
+                "DIAGNOSTIC_TERMINAL_ARTIFACT_SPECIFICATION_MISMATCH",
+                key,
+                f"records {existing.get(f'{prefix}_name')!r} for {prefix}, expected {name!r}",
+            )
+        if existing.get(f"{prefix}_sha256") != digest:
+            raise _mismatch(
+                "DIAGNOSTIC_TERMINAL_ARTIFACT_SPECIFICATION_MISMATCH",
+                key,
+                f"records a different digest for {prefix}",
+            )
+    if existing.get("operative_specification") != V4_SPECIFICATION_NAME:
         raise _mismatch(
             "DIAGNOSTIC_TERMINAL_ARTIFACT_SPECIFICATION_MISMATCH",
             key,
-            "was produced under a different diagnostic specification",
+            (
+                f"names {existing.get('operative_specification')!r} as operative, "
+                f"expected {V4_SPECIFICATION_NAME!r}"
+            ),
         )
     if existing.get("source_commit") != invocation.source_commit:
         raise _mismatch(
@@ -300,7 +437,7 @@ def publish_diagnostic_artifact(
             source_commit=invocation.source_commit,
             deployed_commit=invocation.deployed_commit,
             experiment_sha256=EXPERIMENT_SHA256,
-            specification_v2_sha256=V2_SPECIFICATION_SHA256,
+            **specification_identity(),
             failure_stage="frozen_inference_diagnostic",
             failure_code=first.code,
             exception_class=type(error).__name__,
@@ -315,7 +452,7 @@ def publish_diagnostic_artifact(
             source_commit=invocation.source_commit,
             deployed_commit=invocation.deployed_commit,
             experiment_sha256=EXPERIMENT_SHA256,
-            specification_v2_sha256=V2_SPECIFICATION_SHA256,
+            **specification_identity(),
             failure_stage="frozen_inference_diagnostic",
             failure_code="DIAGNOSTIC_OPERATIONAL_FAILURE",
             # The class, and nothing else. No str(error), no traceback, no

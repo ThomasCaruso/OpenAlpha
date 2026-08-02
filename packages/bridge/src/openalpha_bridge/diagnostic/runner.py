@@ -55,6 +55,7 @@ from .spec import (
     V1_SPECIFICATION_NAME,
     V2_SPECIFICATION_NAME,
     V3_SPECIFICATION_NAME,
+    V4_SPECIFICATION_NAME,
     WINDOW,
     ForecastModelSpec,
     InferenceSettings,
@@ -68,8 +69,8 @@ __all__ = [
     "run_frozen_inference_diagnostic",
 ]
 
-DIAGNOSTIC_SCHEMA_VERSION: Literal["openalpha.bridge.diagnostic.frozen_inference.v3"] = (
-    "openalpha.bridge.diagnostic.frozen_inference.v3"
+DIAGNOSTIC_SCHEMA_VERSION: Literal["openalpha.bridge.diagnostic.frozen_inference.v4"] = (
+    "openalpha.bridge.diagnostic.frozen_inference.v4"
 )
 
 
@@ -88,7 +89,7 @@ class DiagnosticArtifact(BaseModel):
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
-    schema_version: Literal["openalpha.bridge.diagnostic.frozen_inference.v3"] = (
+    schema_version: Literal["openalpha.bridge.diagnostic.frozen_inference.v4"] = (
         DIAGNOSTIC_SCHEMA_VERSION
     )
     claim_boundary: Literal["DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE"] = (
@@ -116,6 +117,8 @@ class DiagnosticArtifact(BaseModel):
     specification_v2_sha256: str
     specification_v3_name: str
     specification_v3_sha256: str
+    specification_v4_name: str
+    specification_v4_sha256: str
     operative_specification: str
 
     symbol: str
@@ -411,7 +414,9 @@ def run_frozen_inference_diagnostic(
         specification_v2_sha256=specifications[V2_SPECIFICATION_NAME],
         specification_v3_name=V3_SPECIFICATION_NAME,
         specification_v3_sha256=specifications[V3_SPECIFICATION_NAME],
-        operative_specification=V3_SPECIFICATION_NAME,
+        specification_v4_name=V4_SPECIFICATION_NAME,
+        specification_v4_sha256=specifications[V4_SPECIFICATION_NAME],
+        operative_specification=V4_SPECIFICATION_NAME,
         symbol=official.symbol,
         frequency=official.frequency,
         calendar=official.calendar,

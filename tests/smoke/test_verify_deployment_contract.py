@@ -27,6 +27,8 @@ from openalpha_bridge.diagnostic.spec import (
     V2_SPECIFICATION_SHA256,
     V3_SPECIFICATION_NAME,
     V3_SPECIFICATION_SHA256,
+    V4_SPECIFICATION_NAME,
+    V4_SPECIFICATION_SHA256,
     verify_diagnostic_specifications,
 )
 from openalpha_bridge.errors import BridgeTransformError
@@ -52,6 +54,7 @@ DIAGNOSTIC = {
     V1_SPECIFICATION_NAME: V1_SPECIFICATION_SHA256,
     V2_SPECIFICATION_NAME: V2_SPECIFICATION_SHA256,
     V3_SPECIFICATION_NAME: V3_SPECIFICATION_SHA256,
+    V4_SPECIFICATION_NAME: V4_SPECIFICATION_SHA256,
 }
 
 
@@ -153,8 +156,9 @@ def test_both_diagnostic_specifications_are_returned(research_copy: Path) -> Non
         "phase2-frozen-inference-diagnostic.yaml",
         "phase2-frozen-inference-diagnostic-v2.yaml",
         "phase2-frozen-inference-diagnostic-v3.yaml",
+        "phase2-frozen-inference-diagnostic-v4.yaml",
     }
-    assert len(observed) == 3
+    assert len(observed) == 4
 
 
 def test_the_diagnostic_values_match_the_locked_constants(research_copy: Path) -> None:
@@ -168,6 +172,9 @@ def test_the_diagnostic_values_match_the_locked_constants(research_copy: Path) -
     )
     assert payload["diagnostic_specification_hashes"][V3_SPECIFICATION_NAME] == (
         "f10076b6676a72552b1c9c96720d0087c009fc939e4667509bfcfccf7929bcb6"
+    )
+    assert payload["diagnostic_specification_hashes"][V4_SPECIFICATION_NAME] == (
+        "bd407722adfc3ebf92eb187828d42c2c9cfa57b2fdc0406121f27d39a5c44977"
     )
 
 

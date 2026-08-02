@@ -46,6 +46,7 @@ from openalpha_bridge.diagnostic.spec import (
     V1_SPECIFICATION_SHA256,
     V2_SPECIFICATION_SHA256,
     V3_SPECIFICATION_SHA256,
+    V4_SPECIFICATION_SHA256,
     WINDOW,
 )
 from openalpha_bridge.errors import BridgeTransformError
@@ -372,7 +373,7 @@ def test_retired_causal_labels_cannot_be_produced(retired: str) -> None:
     assert RETIRED_LABELS[retired]
 
 
-def test_the_vocabulary_is_exactly_the_v3_labels() -> None:
+def test_the_vocabulary_is_exactly_the_v4_labels() -> None:
     assert {c.value for c in DiagnosticConclusion} == {
         "DIAGNOSTIC_OPERATIONAL_FAILURE",
         "REPRODUCIBILITY_FAILURE",
@@ -380,7 +381,8 @@ def test_the_vocabulary_is_exactly_the_v3_labels() -> None:
         "ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED",
         "ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS",
         "ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS",
-        "CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE",
+        "MATERIAL_CLIPPING_EXPOSURE_OBSERVED",
+        "ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING",
         "NO_VALID_ROLLOUTS_OBSERVED",
         "LOW_VALID_ROLLOUT_FRACTION",
         "VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD",
@@ -471,6 +473,7 @@ def test_every_rule_is_recorded_even_when_it_did_not_match() -> None:
         "R2a",
         "R2b",
         "R2c",
+        "R2d",
         "R3",
         "R4",
         "R5",
@@ -708,13 +711,14 @@ def test_the_artifact_authorizes_nothing_by_type() -> None:
         assert getattr(artifact, field) is False
 
 
-def test_all_three_specifications_are_verified_and_v3_is_operative() -> None:
+def test_all_four_specifications_are_verified_and_v4_is_operative() -> None:
     artifact, _, _, _ = _run(lambda seed, ctx: _shift(TRUE_TARGET, 1.01))
     assert artifact.specification_v1_sha256 == V1_SPECIFICATION_SHA256
     assert artifact.specification_v2_sha256 == V2_SPECIFICATION_SHA256
     assert artifact.specification_v3_sha256 == V3_SPECIFICATION_SHA256
-    assert artifact.operative_specification == "phase2-frozen-inference-diagnostic-v3.yaml"
-    assert artifact.schema_version == "openalpha.bridge.diagnostic.frozen_inference.v3"
+    assert artifact.specification_v4_sha256 == V4_SPECIFICATION_SHA256
+    assert artifact.operative_specification == "phase2-frozen-inference-diagnostic-v4.yaml"
+    assert artifact.schema_version == "openalpha.bridge.diagnostic.frozen_inference.v4"
 
 
 def test_a_tampered_specification_fails_closed(tmp_path: Path) -> None:
@@ -724,6 +728,7 @@ def test_a_tampered_specification_fails_closed(tmp_path: Path) -> None:
         "phase2-frozen-inference-diagnostic.yaml",
         "phase2-frozen-inference-diagnostic-v2.yaml",
         "phase2-frozen-inference-diagnostic-v3.yaml",
+        "phase2-frozen-inference-diagnostic-v4.yaml",
     ):
         (fake_root / name).write_text("schema: tampered\n", encoding="utf-8")
     codec = FakeCodec()

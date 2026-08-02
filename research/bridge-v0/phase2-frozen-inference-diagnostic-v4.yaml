@@ -1,0 +1,310 @@
+schema: openalpha.research.phase2.frozen_inference_diagnostic.v4
+title: Frozen inference diagnostic for constrained Kronos decoding, revision 4
+status: development_only_diagnostic_specification
+claim_boundary: DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE
+
+supersedes:
+  document: phase2-frozen-inference-diagnostic-v3.yaml
+  sha256: f10076b6676a72552b1c9c96720d0087c009fc939e4667509bfcfccf7929bcb6
+  chain:
+    - document: phase2-frozen-inference-diagnostic.yaml
+      sha256: c909e156a61ac5b5323de9e794aad20521839c0f43f491fb356c1968f730101b
+    - document: phase2-frozen-inference-diagnostic-v2.yaml
+      sha256: c39fff4541afcc948cd80fcc545398312897efe723deca26554143989e4a175e
+  status_of_superseded_documents: >
+    v1, v2 and v3 are preserved byte-identical and remain verified. None was
+    ever executed, so nothing was concluded under any of them.
+  reason: >
+    Two pre-execution defects remained after v3.
+
+    The terminal artifact writer still bound itself to the v2 specification
+    digest alone, so a run executed under v3 rules would have been stored, and
+    later verified, as though v2 had governed it. A failure artifact in
+    particular carried no record of which rules produced it.
+
+    The clipping rule was too broad. v3 made the round-trip interpretation
+    inconclusive whenever overall clipped-row exposure exceeded its threshold,
+    even when invalid reconstructions had occurred on inputs the clip never
+    touched. That let clipping become the primary conclusion in the presence of
+    direct evidence that clipping was not necessary for the structural failure.
+
+inherits_unchanged_from_v3:
+  - prohibitions
+  - data window, symbol, frequency, calendar and partition
+  - full official six-channel input identity and timestamp derivation
+  - context-only float32 normalization, fitted once from the 448 context rows
+  - pinned tokenizer, forecasting model and official source identities
+  - inference settings derived from KronosPredictor.predict defaults
+  - sampling and probability definitions
+  - the official complete-window decode order
+  - structural validity definition
+  - Methods B, C and D numerical calculations
+  - rollout seeds
+  - size-matched control seed and repetition count
+  - persistence baseline and skill definitions
+  - directional accuracy definition and tie handling
+  - clipping measurements
+  - reproducibility check between Method B and Method D rollout zero
+  - evaluate-every-rule decision semantics
+  - single forecast origin, and the refusal to generalize from it
+
+terminal_artifact_identity:
+  requirement: >
+    Every terminal artifact, success or failure, records the complete
+    specification chain and names which document was operative. An artifact
+    that cannot say which rules produced it is not attributable evidence.
+  recorded_fields:
+    - specification_v1_name
+    - specification_v1_sha256
+    - specification_v2_name
+    - specification_v2_sha256
+    - specification_v3_name
+    - specification_v3_sha256
+    - specification_v4_name
+    - specification_v4_sha256
+    - operative_specification
+  operative_specification: phase2-frozen-inference-diagnostic-v4.yaml
+  failure_schema:
+    new_version: openalpha.bridge.diagnostic.frozen_inference_failure.v2
+    reason: >
+      The failure payload gains fields, so it gains a schema version rather
+      than changing meaning under the old one. The previous failure schema is
+      retained for historical parsing and no v4 execution may write it.
+  success_schema: openalpha.bridge.diagnostic.frozen_inference.v4
+  binding_rule: >
+    Typed failures and operational failures are bound to v4 exactly as
+    successes are. A diagnostic that failed under v4 must never be
+    representable as a v2 failure.
+
+existing_artifact_verification:
+  purpose: >
+    A duplicate invocation returns the stored artifact instead of repeating the
+    work, so what it returns must be verified before it is treated as this
+    run's result.
+  verified:
+    - content hash, recomputed from the stored bytes
+    - schema version, and that it pairs with the recorded outcome
+    - outcome, and that it belongs to the vocabulary this worker can produce
+    - experiment identity
+    - every diagnostic specification hash, v1 through v4
+    - operative specification name
+    - run id, in the payload and in the object metadata
+    - source commit
+    - deployed commit
+    - evidence class, in the payload and in the object metadata
+    - claim boundary
+  rejection_rule: >
+    A missing, altered or mismatched identity of any kind rejects the stored
+    artifact before it is returned. Nothing is repaired and nothing is
+    overwritten.
+
+clipping_findings:
+  measurements_unchanged_from_v3: true
+  material_clipping_exposure_observed:
+    finding: MATERIAL_CLIPPING_EXPOSURE_OBSERVED
+    predicate: row_clipped_fraction > material_clipping_row_fraction
+    nature: descriptive observation only
+    may_be_primary: false
+    may_control_recommendation: false
+    rationale: >
+      That some rows clipped is worth recording, but on its own it explains
+      nothing about the reconstruction and must not displace a finding that
+      does.
+  roundtrip_interpretation_confounded_by_clipping:
+    finding: ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING
+    predicate_all_must_hold:
+      - method_a_invalid_candle_count > 0
+      - row_clipped_fraction > material_clipping_row_fraction
+      - invalid_rows_with_clipped_input > 0
+      - invalid_rows_with_unclipped_input == 0
+    may_be_primary: true
+    recommends: INVESTIGATE_CLIPPING_EXPOSURE
+    rationale: >
+      Only when every invalid reconstruction had a clipped input is the clip
+      genuinely inseparable from the decoder. One invalid reconstruction on an
+      entirely unclipped input is direct evidence that clipping was not
+      required for the failure, and in that case the tokenizer reading stands
+      regardless of how much clipping occurred elsewhere in the sequence.
+  retired_finding:
+    CLIPPING_EXPOSURE_MAKES_ROUNDTRIP_INCONCLUSIVE: >
+      Too broad. It fired on exposure alone and could make clipping primary
+      while ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS also held, which is a
+      contradiction.
+
+conclusion_vocabulary:
+  - DIAGNOSTIC_OPERATIONAL_FAILURE
+  - REPRODUCIBILITY_FAILURE
+  - ROUNDTRIP_MATERIAL_INVALIDITY
+  - ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED
+  - ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS
+  - ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS
+  - MATERIAL_CLIPPING_EXPOSURE_OBSERVED
+  - ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING
+  - NO_VALID_ROLLOUTS_OBSERVED
+  - LOW_VALID_ROLLOUT_FRACTION
+  - VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+  - PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT
+  - NO_SKILL_AGAINST_PERSISTENCE
+  - SKILL_AGAINST_PERSISTENCE_OBSERVED
+  - NO_PREREGISTERED_EFFECT_DETECTED
+  - DIAGNOSTIC_INCONCLUSIVE
+
+primary_priority:
+  - DIAGNOSTIC_OPERATIONAL_FAILURE
+  - REPRODUCIBILITY_FAILURE
+  - ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING
+  - ROUNDTRIP_MATERIAL_INVALIDITY
+  - NO_VALID_ROLLOUTS_OBSERVED
+  - VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+  - LOW_VALID_ROLLOUT_FRACTION
+  - PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT
+  - NO_SKILL_AGAINST_PERSISTENCE
+  - DIAGNOSTIC_INCONCLUSIVE
+  - NO_PREREGISTERED_EFFECT_DETECTED
+never_primary:
+  - ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED
+  - MATERIAL_CLIPPING_EXPOSURE_OBSERVED
+  - ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS
+  - ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS
+  - SKILL_AGAINST_PERSISTENCE_OBSERVED
+
+recommendation_precedence:
+  evaluated_in_order:
+    - condition: DIAGNOSTIC_OPERATIONAL_FAILURE matched
+      recommend: NONE_DIAGNOSTIC_INCONCLUSIVE
+    - condition: REPRODUCIBILITY_FAILURE matched
+      recommend: REPAIR_REPRODUCIBILITY
+    - condition: ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING matched
+      recommend: INVESTIGATE_CLIPPING_EXPOSURE
+    - condition: NO_SKILL_AGAINST_PERSISTENCE matched
+      recommend: ABANDON_STRUCTURAL_VALIDITY_DIRECTION
+      rationale: >
+        Repairing geometry cannot create signal, so an absence of skill makes
+        the structural direction non-priority whatever the validity findings
+        say.
+    - condition: ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS matched
+      recommend: CONSTRAINED_OUTPUT_DECODER
+      note: reached only when no no-skill finding matched
+    - condition: NO_VALID_ROLLOUTS_OBSERVED matched
+      recommend: CONSTRAINED_TOKEN_SEARCH
+    - condition: VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD matched
+      recommend: REJECTION_SAMPLING_STUDY
+    - condition: LOW_VALID_ROLLOUT_FRACTION matched
+      recommend: CONSTRAINED_TOKEN_SEARCH
+    - condition: DIAGNOSTIC_INCONCLUSIVE matched
+      recommend: NONE_DIAGNOSTIC_INCONCLUSIVE
+    - condition: otherwise
+      recommend: ABANDON_STRUCTURAL_VALIDITY_DIRECTION
+  excluded_from_selection:
+    - MATERIAL_CLIPPING_EXPOSURE_OBSERVED
+  excluded_rationale: >
+    Mere exposure must never override a recommendation that a substantive
+    finding produced.
+
+recommended_next_experiment_vocabulary:
+  - REPAIR_REPRODUCIBILITY
+  - INVESTIGATE_CLIPPING_EXPOSURE
+  - CONSTRAINED_OUTPUT_DECODER
+  - CONSTRAINED_TOKEN_SEARCH
+  - REJECTION_SAMPLING_STUDY
+  - ABANDON_STRUCTURAL_VALIDITY_DIRECTION
+  - NONE_DIAGNOSTIC_INCONCLUSIVE
+
+thresholds:
+  roundtrip_material_invalid_fraction: 0.01
+  minimum_relative_improvement: 0.05
+  valid_rollout_support_fraction_minimum: 0.25
+  material_clipping_row_fraction: 0.01
+  minimum_persistence_skill: 0.0
+
+ordered_rules:
+  - id: R0
+    finding: DIAGNOSTIC_OPERATIONAL_FAILURE
+    condition: a method raised an operational failure or did not complete
+    terminal: true
+  - id: R0b
+    finding: REPRODUCIBILITY_FAILURE
+    condition: Method B and Method D rollout zero were compared and disagree
+  - id: R1
+    finding: ROUNDTRIP_MATERIAL_INVALIDITY
+    condition: method_a_invalid_candle_fraction > roundtrip_material_invalid_fraction
+  - id: R2
+    finding: ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED
+    condition: method_a_invalid_candle_count > 0
+    never_primary: true
+  - id: R2a
+    finding: ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS
+    condition: invalid_rows_with_unclipped_input > 0
+  - id: R2b
+    finding: ROUNDTRIP_INVALIDITY_CONFINED_TO_CLIPPED_INPUTS
+    condition: >
+      method_a_invalid_candle_count > 0 and invalid_rows_with_unclipped_input == 0
+      and invalid_rows_with_clipped_input > 0
+  - id: R2c
+    finding: MATERIAL_CLIPPING_EXPOSURE_OBSERVED
+    condition: row_clipped_fraction > material_clipping_row_fraction
+    never_primary: true
+    never_controls_recommendation: true
+  - id: R2d
+    finding: ROUNDTRIP_INTERPRETATION_CONFOUNDED_BY_CLIPPING
+    condition: >
+      method_a_invalid_candle_count > 0 and row_clipped_fraction >
+      material_clipping_row_fraction and invalid_rows_with_clipped_input > 0
+      and invalid_rows_with_unclipped_input == 0
+  - id: R3
+    finding: NO_VALID_ROLLOUTS_OBSERVED
+    condition: valid_rollout_count == 0
+  - id: R4
+    finding: VALID_ONLY_ENSEMBLE_MEETS_IMPROVEMENT_THRESHOLD
+    condition: >
+      controls are non-degenerate and valid_only_primary_error <=
+      control_mean_primary_error * (1 - minimum_relative_improvement)
+  - id: R5
+    finding: LOW_VALID_ROLLOUT_FRACTION
+    condition: >
+      valid_rollout_count > 0 and valid_rollout_fraction <
+      valid_rollout_support_fraction_minimum
+  - id: R6
+    finding: PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT
+    condition: >
+      method_b_path_is_invalid and method_c_projection_restores_validity and
+      method_c_primary_error > method_b_primary_error *
+      (1 - minimum_relative_improvement)
+  - id: R7
+    finding: SKILL_AGAINST_PERSISTENCE_OBSERVED
+    condition: best close-return skill across candidates > minimum_persistence_skill
+  - id: R8
+    finding: NO_SKILL_AGAINST_PERSISTENCE
+    condition: best close-return skill across candidates <= minimum_persistence_skill
+  - id: R9
+    finding: DIAGNOSTIC_INCONCLUSIVE
+    condition: a quantity the decision rules require could not be computed
+  - id: R10
+    finding: NO_PREREGISTERED_EFFECT_DETECTED
+    condition: >
+      no rule other than the bare round-trip observation and material clipping
+      exposure matched
+
+artifact:
+  count: 1
+  immutable: true
+  evidence_class: development_compatibility_canary
+  storage_root: diagnostic_only
+  authorizes_training: false
+  authorizes_stage_b: false
+  authorizes_stage_c: false
+  authorizes_test_opening: false
+  authorizes_production_inference: false
+  authorizes_trading_claims: false
+  scientific_result_available: false
+
+contingent_next_experiment:
+  name: constraint_aware_coarse_fine_token_beam_search
+  status: not_implemented_and_not_authorized
+  implement_only_if_recommended_next_experiment_is_either:
+    - CONSTRAINED_TOKEN_SEARCH
+    - REJECTION_SAMPLING_STUDY
+
+stop_condition: >
+  Execution stops after the diagnostic artifact is written. No stage advances,
+  no partition is opened, and no outcome authorizes further computation.

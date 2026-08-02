@@ -81,6 +81,7 @@ def test_every_rule_is_evaluated_despite_an_earlier_primary_finding() -> None:
         "R2a",
         "R2b",
         "R2c",
+        "R2d",
         "R3",
         "R4",
         "R5",
