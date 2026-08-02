@@ -21,9 +21,9 @@ from ..windowing import (
     SequenceSpec,
     score_mask_sha256,
 )
-from .cache import FeatureCache, ShardRef
+from .cache import CACHE_SCHEMA_VERSION, CacheIdentity, FeatureCache, ShardRef
 from .features import ExtractedSequence, FeatureExtractor
-from .kronos import BRIDGE_INPUT_DIMENSION, ResolvedAssets
+from .kronos import BRIDGE_INPUT_DIMENSION, SOURCE_SPEC, ResolvedAssets
 from .provider import Candle, MarketSeries
 
 __all__ = ["StageAReport", "StageASequenceRecord", "run_stage_a"]
@@ -133,6 +133,8 @@ def run_stage_a(
     assets: ResolvedAssets,
     cache: FeatureCache,
     completed_at: datetime,
+    amendment_sha256: tuple[str, ...],
+    verified_source_file_sha256: dict[str, str],
     verify_determinism: bool = True,
 ) -> StageAReport:
     """Extract, validate, cache, and record. Any deviation raises.
@@ -177,7 +179,44 @@ def run_stage_a(
                     f"{spec.sequence_id} did not reproduce byte-identical features",
                 )
 
-        shard: ShardRef = cache.write(extracted.to_cached_example())
+        identity = CacheIdentity(
+            run_id=run_id,
+            experiment_sha256=experiment_sha256,
+            amendment_sha256=amendment_sha256,
+            score_mask_sha256=score_mask_sha256(),
+            source_commit=source_commit or "unknown",
+            evidence_class=evidence_class,
+            provider=series.provider,
+            provider_client_version=series.client_version,
+            symbol=spec.symbol,
+            interval=spec.interval,
+            partition=spec.partition,
+            prefix_start=spec.prefix_start.isoformat(),
+            prefix_end=spec.prefix_end.isoformat(),
+            target_start=spec.target_start.isoformat(),
+            target_end=spec.target_end.isoformat(),
+            candle_data_sha256=source_sha,
+            official_source_repository=SOURCE_SPEC.repository,
+            official_source_revision=SOURCE_SPEC.revision,
+            official_source_file_sha256=dict(verified_source_file_sha256),
+            tokenizer_repository=assets.repository,
+            tokenizer_revision=assets.revision,
+            tokenizer_config_sha256=assets.observed_config_sha256,
+            tokenizer_weights_sha256=assets.observed_weights_sha256,
+            frozen_parameter_sha256=assets.frozen_parameter_sha256,
+            feature_schema_version=CACHE_SCHEMA_VERSION,
+            representation_version="openalpha.bridge.financial.v1",
+            tensor_specification={
+                "coarse_ids": "int64[512]",
+                "fine_ids": "int64[512]",
+                "bipolar_latent": "float32[512,20]",
+                "frozen_hidden": "float32[512,256]",
+                "causal_features": "float32[512,13]",
+                "constrained_targets": "float32[64,5]",
+                "bridge_input": "float32[512,269]",
+            },
+        )
+        shard: ShardRef = cache.write(extracted.to_cached_example(identity))
         # Read back through the cache so integrity is proven, not assumed.
         restored = cache.read(shard)
         if restored.sequence_id != extracted.sequence_id:

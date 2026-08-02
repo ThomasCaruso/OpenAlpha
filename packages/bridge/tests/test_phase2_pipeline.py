@@ -356,8 +356,44 @@ def test_invalid_series_fails_closed() -> None:
 # ---------------------------------------------------------------- feature cache
 
 
+def _cache_identity(partition: Partition):
+    """Full v2 cache identity for the orchestration-level cache tests."""
+    from openalpha_bridge.phase2.cache import CACHE_SCHEMA_VERSION, CacheIdentity
+
+    return CacheIdentity(
+        run_id="syn_orchestration",
+        experiment_sha256="d" * 64,
+        amendment_sha256=("1" * 64, "2" * 64, "3" * 64),
+        score_mask_sha256=score_mask_sha256(),
+        source_commit="a" * 40,
+        evidence_class="synthetic_pipeline_validation",
+        provider="deterministic_fake",
+        provider_client_version="fake-1",
+        symbol="SPY",
+        interval="1d",
+        partition=partition,
+        prefix_start="2015-05-07",
+        prefix_end="2017-02-14",
+        target_start="2017-02-15",
+        target_end="2017-05-17",
+        candle_data_sha256="0" * 64,
+        official_source_repository="https://github.com/shiyu-coder/Kronos",
+        official_source_revision="6" * 40,
+        official_source_file_sha256={"model/kronos.py": "e" * 64},
+        tokenizer_repository="NeoQuasar/Kronos-Tokenizer-2k",
+        tokenizer_revision="2" * 40,
+        tokenizer_config_sha256=None,
+        tokenizer_weights_sha256=None,
+        frozen_parameter_sha256="f" * 64,
+        feature_schema_version=CACHE_SCHEMA_VERSION,
+        representation_version="openalpha.bridge.financial.v1",
+        tensor_specification={"bridge_input": "float32[512,269]"},
+    )
+
+
 def _example(partition: Partition, sequence_id: str = "a" * 16) -> CachedExample:
     return CachedExample(
+        identity=_cache_identity(partition),
         sequence_id=sequence_id,
         symbol="SPY",
         interval="1d",
@@ -387,11 +423,13 @@ def test_cache_round_trip_and_partition_separation(tmp_path: Path) -> None:
 
 def test_test_shards_cannot_load_before_the_gate(tmp_path: Path) -> None:
     cache = FeatureCache(tmp_path / "cache")
-    ref = cache.write(_example(Partition.RECONSTRUCTION_TEST, "b" * 16))
+    example = _example(Partition.RECONSTRUCTION_TEST, "b" * 16)
+    # Writing test features is itself an access of the partition.
     with pytest.raises(BridgeTransformError) as excinfo:
-        cache.read(ref)
-    assert excinfo.value.failures[0].code == "TEST_SHARD_LOAD_BEFORE_GATE"
+        cache.write(example)
+    assert excinfo.value.failures[0].code == "TEST_SHARD_WRITE_BEFORE_GATE"
     cache.open_test_gate()
+    ref = cache.write(example)
     assert cache.read(ref).partition is Partition.RECONSTRUCTION_TEST
 
 

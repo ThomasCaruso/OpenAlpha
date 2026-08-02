@@ -40,7 +40,7 @@ from ..windowing import (
     score_mask,
     score_mask_sha256,
 )
-from .cache import CachedExample
+from .cache import CachedExample, CacheIdentity
 from .kronos import (
     BRIDGE_INPUT_DIMENSION,
     DECODER_HIDDEN_DIMENSION,
@@ -313,10 +313,11 @@ class ExtractedSequence:
             digest.update(np.ascontiguousarray(array).tobytes())
         return digest.hexdigest()
 
-    def to_cached_example(self) -> CachedExample:
+    def to_cached_example(self, identity: CacheIdentity) -> CachedExample:
         from ..windowing import Partition
 
         example = CachedExample(
+            identity=identity,
             sequence_id=self.sequence_id,
             symbol=self.symbol,
             interval=self.interval,

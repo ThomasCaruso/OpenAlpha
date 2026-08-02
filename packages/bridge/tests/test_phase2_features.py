@@ -43,6 +43,7 @@ from openalpha_bridge.windowing import (
     SCORED_SUFFIX_LENGTH,
     Partition,
     SequenceSpec,
+    score_mask_sha256,
     sequence_id,
 )
 
@@ -105,6 +106,43 @@ def _extract(candles: tuple[Candle, ...], **kwargs: object) -> ExtractedSequence
     return extractor.extract(
         spec=_spec(candles), candles=candles, source_data_sha256="0" * 64, **kwargs
     )
+
+
+def _identity(partition: Partition = Partition.TRAIN, **overrides):
+    """A complete cache identity for tests."""
+    from openalpha_bridge.phase2.cache import CACHE_SCHEMA_VERSION, CacheIdentity
+
+    payload = {
+        "run_id": "syn_stage_a",
+        "experiment_sha256": "d" * 64,
+        "amendment_sha256": ("1" * 64, "2" * 64, "3" * 64),
+        "score_mask_sha256": score_mask_sha256(),
+        "source_commit": "a" * 40,
+        "evidence_class": "development_compatibility_canary",
+        "provider": "deterministic_fake",
+        "provider_client_version": "fake-1",
+        "symbol": "SPY",
+        "interval": "1d",
+        "partition": partition,
+        "prefix_start": "2015-05-07",
+        "prefix_end": "2017-02-14",
+        "target_start": "2017-02-15",
+        "target_end": "2017-05-17",
+        "candle_data_sha256": "0" * 64,
+        "official_source_repository": "https://github.com/shiyu-coder/Kronos",
+        "official_source_revision": "6" * 40,
+        "official_source_file_sha256": {"model/kronos.py": "e" * 64},
+        "tokenizer_repository": "NeoQuasar/Kronos-Tokenizer-2k",
+        "tokenizer_revision": "2" * 40,
+        "tokenizer_config_sha256": None,
+        "tokenizer_weights_sha256": None,
+        "frozen_parameter_sha256": "f" * 64,
+        "feature_schema_version": CACHE_SCHEMA_VERSION,
+        "representation_version": "openalpha.bridge.financial.v1",
+        "tensor_specification": {"bridge_input": "float32[512,269]"},
+    }
+    payload.update(overrides)
+    return CacheIdentity(**payload)
 
 
 # ------------------------------------------------------------- dimensionality
@@ -282,7 +320,7 @@ def test_prefix_rows_are_unaffected_by_any_suffix_change() -> None:
 
 def test_score_mask_selects_only_the_scored_suffix() -> None:
     extracted = _extract(_candles())
-    example = extracted.to_cached_example()
+    example = extracted.to_cached_example(_identity())
     mask = example.score_mask
     assert mask.sum() == SCORED_SUFFIX_LENGTH
     assert not mask[:CONTEXT_PREFIX_LENGTH].any()
@@ -398,6 +436,8 @@ def test_stage_a_produces_validated_cached_artifacts(tmp_path: Path) -> None:
         assets=_assets(),
         cache=cache,
         completed_at=datetime(2026, 8, 2, tzinfo=UTC),
+        amendment_sha256=("1" * 64, "2" * 64, "3" * 64),
+        verified_source_file_sha256={"model/kronos.py": "e" * 64},
     )
 
     assert report.passed
@@ -424,6 +464,8 @@ def test_stage_a_report_carries_no_raw_candles(tmp_path: Path) -> None:
         assets=_assets(),
         cache=FeatureCache(tmp_path / "cache"),
         completed_at=datetime(2026, 8, 2, tzinfo=UTC),
+        amendment_sha256=("1" * 64, "2" * 64, "3" * 64),
+        verified_source_file_sha256={"model/kronos.py": "e" * 64},
     )
     payload = report.model_dump_json()
     for candle in candles[:5]:
@@ -443,6 +485,8 @@ def test_stage_a_requires_at_least_one_sequence(tmp_path: Path) -> None:
             assets=_assets(),
             cache=FeatureCache(tmp_path / "cache"),
             completed_at=datetime(2026, 8, 2, tzinfo=UTC),
+            amendment_sha256=("1" * 64, "2" * 64, "3" * 64),
+            verified_source_file_sha256={"model/kronos.py": "e" * 64},
         )
     assert excinfo.value.failures[0].code == "STAGE_A_NO_SEQUENCES"
 
@@ -454,20 +498,40 @@ def test_test_partition_shards_stay_blocked_before_the_gate(tmp_path: Path) -> N
     extracted = FeatureExtractor(DeterministicFakeKronosBackend()).extract(
         spec=spec, candles=candles, source_data_sha256="0" * 64
     )
-    ref = cache.write(extracted.to_cached_example())
+    example = extracted.to_cached_example(_identity(Partition.RECONSTRUCTION_TEST))
 
+    # Materializing test features is itself an access, so the write is blocked.
     with pytest.raises(BridgeTransformError) as excinfo:
-        cache.read(ref)
-    assert excinfo.value.failures[0].code == "TEST_SHARD_LOAD_BEFORE_GATE"
+        cache.write(example)
+    assert excinfo.value.failures[0].code == "TEST_SHARD_WRITE_BEFORE_GATE"
 
+    # After the gate opens, write and read both succeed.
     cache.open_test_gate()
+    ref = cache.write(example)
     assert cache.read(ref).partition is Partition.RECONSTRUCTION_TEST
+
+
+def test_test_partition_reads_are_blocked_before_the_gate(tmp_path: Path) -> None:
+    """A shard written under an open gate is unreadable by a fresh, closed cache."""
+    candles = _candles()
+    root = tmp_path / "cache"
+    spec = _spec(candles, partition=Partition.RECONSTRUCTION_TEST)
+    extracted = FeatureExtractor(DeterministicFakeKronosBackend()).extract(
+        spec=spec, candles=candles, source_data_sha256="0" * 64
+    )
+    opened = FeatureCache(root, test_gate_open=True)
+    ref = opened.write(extracted.to_cached_example(_identity(Partition.RECONSTRUCTION_TEST)))
+
+    closed = FeatureCache(root)
+    with pytest.raises(BridgeTransformError) as excinfo:
+        closed.read(ref)
+    assert excinfo.value.failures[0].code == "TEST_SHARD_LOAD_BEFORE_GATE"
 
 
 def test_cache_corruption_is_detected(tmp_path: Path) -> None:
     candles = _candles()
     cache = FeatureCache(tmp_path / "cache")
-    ref = cache.write(_extract(candles).to_cached_example())
+    ref = cache.write(_extract(candles).to_cached_example(_identity()))
     path = cache.root / ref.relative_path
     payload = bytearray(path.read_bytes())
     payload[-2] ^= 0xFF
@@ -480,7 +544,7 @@ def test_cache_corruption_is_detected(tmp_path: Path) -> None:
 def test_cache_round_trip_preserves_every_tensor(tmp_path: Path) -> None:
     cache = FeatureCache(tmp_path / "cache")
     extracted = _extract(_candles())
-    restored = cache.read(cache.write(extracted.to_cached_example()))
+    restored = cache.read(cache.write(extracted.to_cached_example(_identity())))
     assert np.array_equal(restored.frozen_hidden, extracted.frozen_hidden)
     assert np.array_equal(restored.causal_features, extracted.causal_features)
     assert np.array_equal(restored.constrained_targets, extracted.constrained_targets)
@@ -533,3 +597,80 @@ def test_stage_a_blocks_without_extraction_evidence(tmp_path: Path) -> None:
     with pytest.raises(BridgeTransformError) as excinfo:
         pipeline.stage_b()
     assert excinfo.value.failures[0].code in {"STAGE_SKIPPED", "TERMINAL_STATE_TRANSITION"}
+
+
+# ------------------------------------------- cache identity binding (v2)
+
+
+def _example(partition: Partition = Partition.TRAIN, **identity_overrides):
+    extracted = _extract(_candles())
+    return extracted.to_cached_example(_identity(partition, **identity_overrides))
+
+
+def test_cache_schema_is_v2_and_binds_full_identity(tmp_path: Path) -> None:
+    from openalpha_bridge.phase2.cache import CACHE_SCHEMA_VERSION
+
+    assert CACHE_SCHEMA_VERSION == "openalpha.bridge.phase2.cache.v2"
+    cache = FeatureCache(tmp_path / "cache")
+    restored = cache.read(cache.write(_example()))
+    identity = restored.identity
+    assert identity.experiment_sha256 == "d" * 64
+    assert identity.amendment_sha256 == ("1" * 64, "2" * 64, "3" * 64)
+    assert identity.score_mask_sha256 == score_mask_sha256()
+    assert identity.official_source_revision == "6" * 40
+    assert identity.provider_client_version == "fake-1"
+    assert identity.tensor_specification["bridge_input"] == "float32[512,269]"
+    assert len(identity.identity_sha256) == 64
+
+
+def test_identical_rewrite_is_accepted(tmp_path: Path) -> None:
+    cache = FeatureCache(tmp_path / "cache")
+    example = _example()
+    first = cache.write(example)
+    second = cache.write(example)
+    assert first.content_sha256 == second.content_sha256
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"amendment_sha256": ("9" * 64,)},
+        {"official_source_revision": "0" * 40},
+        {"provider": "some_other_provider"},
+        {"experiment_sha256": "e" * 64},
+        {"run_id": "a_different_run"},
+        {"source_commit": "b" * 40},
+    ],
+    ids=["amendment", "source_revision", "provider", "experiment", "run", "commit"],
+)
+def test_differing_identity_at_the_same_path_is_a_collision(
+    tmp_path: Path, override: dict
+) -> None:
+    """A stale shard must never be silently reused or overwritten."""
+    cache = FeatureCache(tmp_path / "cache")
+    cache.write(_example())
+    with pytest.raises(BridgeTransformError) as excinfo:
+        cache.write(_example(**override))
+    assert excinfo.value.failures[0].code == "SHARD_IDENTITY_COLLISION"
+
+
+@pytest.mark.parametrize(
+    "override",
+    [{"symbol": "QQQ"}, {"interval": "1h"}, {"candle_data_sha256": "9" * 64}],
+    ids=["symbol", "interval", "candle_digest"],
+)
+def test_identity_must_describe_the_example(tmp_path: Path, override: dict) -> None:
+    cache = FeatureCache(tmp_path / "cache")
+    with pytest.raises(BridgeTransformError) as excinfo:
+        cache.write(_example(**override))
+    assert excinfo.value.failures[0].code == "SHARD_IDENTITY_MISMATCH"
+
+
+def test_identity_partition_must_match_the_example(tmp_path: Path) -> None:
+    """A train example carrying a test identity is rejected before any write."""
+    cache = FeatureCache(tmp_path / "cache")
+    extracted = _extract(_candles())
+    example = extracted.to_cached_example(_identity(Partition.VALIDATION))
+    with pytest.raises(BridgeTransformError) as excinfo:
+        cache.write(example)
+    assert excinfo.value.failures[0].code == "SHARD_IDENTITY_MISMATCH"
