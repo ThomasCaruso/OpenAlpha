@@ -1,0 +1,356 @@
+schema: openalpha.research.phase2.frozen_inference_diagnostic.v1
+title: Frozen inference diagnostic for constrained Kronos decoding
+status: development_only_diagnostic_specification
+claim_boundary: DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE
+
+purpose: >
+  The Stage A official compatibility canary proves only that real candles pass
+  through the official tokenizer and the frozen decoder trunk. It never executes
+  future-token generation and never exercises the official continuous decode
+  pathway, so it cannot say why forecast candles are structurally invalid. This
+  diagnostic executes the official forecasting path on one already-retrieved
+  development window and attributes the invalidity to a stage.
+
+relationship_to_sealed_specifications: >
+  This file is separately hashed and amends nothing. It does not modify, extend,
+  reinterpret or supersede experiment.yaml or amendments 1, 2 or 3, whose bytes
+  and digests are unchanged. It defines a development diagnostic only.
+
+prohibitions:
+  training: prohibited
+  fine_tuning: prohibited
+  parameter_update_of_any_kind: prohibited
+  optimizer_construction: prohibited
+  gradient_computation: prohibited
+  checkpoint_creation: prohibited
+  checkpoint_selection: prohibited
+  bridge_head_execution: prohibited
+  stage_b: prohibited
+  stage_c: prohibited
+  gate_evaluation: prohibited
+  test_partition_opening: prohibited
+  validation_partition_access: prohibited
+  reconstruction_test_partition_access: prohibited
+  external_partition_access: prohibited
+  sentinel_holdout_access: prohibited
+  constraint_aware_beam_search: deferred_to_a_contingent_later_experiment
+  trading_or_production_inference_claims: prohibited
+
+data:
+  provider_retrievals_permitted: 1
+  symbol: SPY
+  interval: 1d
+  partition: train
+  retrieval_start_inclusive: '2015-05-07'
+  retrieval_end_exclusive: '2017-05-18'
+  required_complete_candles: 512
+  observed_context_candles: 448
+  known_development_target_candles: 64
+  target_use: >
+    The final 64 candles are the known development target. They are scored
+    against, never shown to the model, and never used to select or tune
+    anything. They are training-partition candles, not holdout.
+  reuse_of_the_stage_a_canary_window: >
+    Deliberately the same window the Stage A canary already retrieves, so the
+    diagnostic introduces no new data access of any kind.
+
+pinned_assets:
+  tokenizer:
+    repository: NeoQuasar/Kronos-Tokenizer-2k
+    revision: 26966d0035065a0cae0ebad7af8ece35bc1fb51c
+    config_sha256: 0b30a443affb03e05a876a083857de9164f899feb7b4d261da02c485c9a3e3b6
+    weights_sha256: b97ec46b3b72160509e289183eaf7bdf5f0dac5bb9b49522f6d46638a99a8717
+  forecasting_model:
+    name: Kronos-mini
+    repository: NeoQuasar/Kronos-mini
+    revision: f4e68697d9d5aed55cef5c96aabc3376bcad9f81
+    config_sha256: 70daca2cb11e3a979dd6b8ac12ee08e2aace877acf28f5b8dfb4fe5609736201
+    config_size_bytes: 225
+    weights_file: model.safetensors
+    weights_sha256: a7d5f37e2e9fbd9891f7d7d4f72574512dd1f704fee14223e0a8cd0fbf54197c
+    weights_size_bytes: 16440776
+    declared_architecture:
+      d_model: 256
+      ff_dim: 512
+      n_heads: 4
+      n_layers: 4
+      s1_bits: 10
+      s2_bits: 10
+      coarse_vocabulary: 1024
+      fine_vocabulary: 1024
+  official_source:
+    repository: https://github.com/shiyu-coder/Kronos
+    revision: 67b630e67f6a18c9e9be918d9b4337c960db1e9a
+  asset_resolution_requirement: >
+    Every hash above is verified against the resolved artifact before any token
+    is generated. A mismatch is a typed failure, never a warning.
+
+inference_settings:
+  provenance: >
+    The official Kronos prediction defaults, recorded here so that any deviation
+    at execution time is visible in the artifact rather than absorbed silently.
+  temperature: 1.0
+  top_k: 0
+  top_p: 0.9
+  sample_count_per_rollout: 1
+  prediction_length: 64
+  maximum_context: 512
+  context_length_used: 448
+  clip_to_model_context: true
+  parameters_frozen: true
+  gradient_mode: inference_only
+
+methods:
+  method_a_tokenizer_round_trip:
+    purpose: >
+      Determine whether the tokenizer decoder itself produces invalid candles
+      from in-distribution encoder tokens.
+    procedure: >
+      Encode the known real 512-candle sequence with the official tokenizer and
+      decode the resulting tokens with the official tokenizer. No generation.
+    records:
+      - coarse_token_ids
+      - fine_token_ids
+      - reconstruction_output
+      - invalid_candle_fraction
+      - invalid_path_indicator
+      - ohlc_reconstruction_error
+      - close_return_reconstruction_error
+      - tokenizer_repository_and_revision
+      - tokenizer_config_sha256
+      - tokenizer_weights_sha256
+  method_b_official_frozen_forecast:
+    purpose: >
+      Determine whether invalidity enters primarily through generated
+      future-token combinations.
+    procedure: >
+      Give the pinned Kronos-mini the first 448 candles and generate a 64-step
+      future token sequence under the pinned inference settings. Decode with the
+      official tokenizer. Apply no correction of any kind.
+    records:
+      - coarse_token_ids
+      - fine_token_ids
+      - per_step_selected_token_log_probabilities
+      - sampling_settings
+      - raw_decoded_candles
+      - invalid_candle_fraction
+      - invalid_path_indicator
+      - forecast_errors_against_known_target
+      - deterministic_seed
+      - provenance_hashes
+  method_c_deterministic_terminal_projection:
+    purpose: >
+      Determine whether repairing geometry alone helps prediction quality.
+    procedure: >
+      Apply only the existing explicit terminal projection baseline to the raw
+      Method B output. Tokens are not modified and nothing is regenerated.
+    projection_rules:
+      - preserve_open
+      - preserve_close
+      - high_equals_max_of_raw_high_open_close
+      - low_equals_min_of_raw_low_open_close
+      - volume_clamped_to_nonnegative
+    records:
+      - projected_output
+      - intervention_magnitude
+      - structural_validity_after_projection
+      - forecast_metrics
+      - difference_from_raw_official_output
+  method_d_valid_rollout_filtering:
+    purpose: >
+      Determine whether conditioning the original model on validity improves
+      forecasting without training.
+    rollouts: 64
+    seed_rule: >
+      seed(i) = base_seed + i for i in 0..63, enumerated below so the set is
+      fixed by this document rather than derived at execution time.
+    base_seed: 20150507
+    seeds:
+      - 20150507
+      - 20150508
+      - 20150509
+      - 20150510
+      - 20150511
+      - 20150512
+      - 20150513
+      - 20150514
+      - 20150515
+      - 20150516
+      - 20150517
+      - 20150518
+      - 20150519
+      - 20150520
+      - 20150521
+      - 20150522
+      - 20150523
+      - 20150524
+      - 20150525
+      - 20150526
+      - 20150527
+      - 20150528
+      - 20150529
+      - 20150530
+      - 20150531
+      - 20150532
+      - 20150533
+      - 20150534
+      - 20150535
+      - 20150536
+      - 20150537
+      - 20150538
+      - 20150539
+      - 20150540
+      - 20150541
+      - 20150542
+      - 20150543
+      - 20150544
+      - 20150545
+      - 20150546
+      - 20150547
+      - 20150548
+      - 20150549
+      - 20150550
+      - 20150551
+      - 20150552
+      - 20150553
+      - 20150554
+      - 20150555
+      - 20150556
+      - 20150557
+      - 20150558
+      - 20150559
+      - 20150560
+      - 20150561
+      - 20150562
+      - 20150563
+      - 20150564
+      - 20150565
+      - 20150566
+      - 20150567
+      - 20150568
+      - 20150569
+      - 20150570
+    per_rollout_preserved:
+      - generated_token_sequence
+      - token_log_probability
+      - raw_decoded_output
+      - validity_status
+      - forecast_metrics
+    aggregation:
+      when_at_least_one_valid_path_exists:
+        average_only_valid_paths: required
+        averaging_invalid_paths_into_the_final_result: prohibited
+      when_no_valid_path_exists:
+        emit_typed_result: NO_VALID_ROLLOUTS
+        silent_projection_or_substitution: prohibited
+    records:
+      - valid_rollout_count
+      - valid_rollout_fraction
+      - accuracy_of_valid_group
+      - accuracy_of_invalid_group
+      - valid_only_ensemble_output
+      - official_all_rollout_ensemble_output
+      - diversity_metrics
+      - repeated_path_metrics
+      - compute_and_latency_measurements
+
+structural_validity_definition:
+  candle_is_valid_when_all_hold:
+    - every_price_is_finite
+    - every_price_is_strictly_positive
+    - high_greater_than_or_equal_to_open
+    - high_greater_than_or_equal_to_close
+    - high_greater_than_or_equal_to_low
+    - low_less_than_or_equal_to_open
+    - low_less_than_or_equal_to_close
+    - volume_is_finite_and_nonnegative
+  path_is_valid_when: every_candle_in_the_path_is_valid
+
+forecast_metrics:
+  primary_metric: close_return_mae
+  primary_metric_definition: >
+    Mean absolute error of one-step log close-to-close returns over the 64
+    scored steps, with the first step measured against the final observed
+    context close. Scale free, so it is comparable across methods.
+  secondary_metrics:
+    - close_mae
+    - full_ohlc_mae
+  lower_is_better: true
+
+conclusion_rules:
+  binding: >
+    The conclusion is computed by evaluating these rules in order and taking the
+    first that matches. It is never selected by inspection after the numbers are
+    known. Every threshold below is fixed by this document.
+  thresholds:
+    roundtrip_invalid_fraction_maximum: 0.01
+    minimum_relative_improvement: 0.05
+    valid_rollout_support_fraction_minimum: 0.25
+    accuracy_equivalence_margin: 0.05
+  ordered_rules:
+    - id: R0
+      condition: any_method_raised_an_operational_failure
+      conclusion: DIAGNOSTIC_OPERATIONAL_FAILURE
+    - id: R1
+      condition: method_a_invalid_candle_fraction > roundtrip_invalid_fraction_maximum
+      conclusion: TOKENIZER_DECODER_DEFECT
+      rationale: >
+        The decoder produces invalid candles from in-distribution encoder
+        tokens, which is upstream of generation and confounds everything below.
+    - id: R2
+      condition: method_d_valid_rollout_count == 0
+      conclusion: NO_VALID_ROLLOUTS
+    - id: R3
+      condition: >
+        method_d_valid_only_primary_error <= method_d_all_rollout_primary_error *
+        (1 - minimum_relative_improvement)
+      conclusion: VALIDITY_FILTER_IMPROVES_FORECAST
+    - id: R4
+      condition: method_d_valid_rollout_fraction < valid_rollout_support_fraction_minimum
+      conclusion: GENERATED_TOKEN_SUPPORT_DEFECT
+      rationale: >
+        Round trip is clean but most generated token combinations decode
+        outside the valid region, so invalidity enters through generation.
+    - id: R5
+      condition: >
+        method_b_path_is_invalid and method_c_projection_restores_validity and
+        method_c_primary_error > method_b_primary_error *
+        (1 - minimum_relative_improvement)
+      conclusion: VALIDITY_REPAIR_ONLY
+      rationale: >
+        Geometry is repairable and repair does restore validity, but it buys no
+        accuracy.
+    - id: R6
+      condition: otherwise
+      conclusion: INVALIDITY_NOT_CAUSAL_TO_FORECAST_ERROR
+      rationale: >
+        Forecasts are structurally acceptable, or their validity is unrelated to
+        their error, so invalidity is not what is driving forecast quality.
+
+artifact:
+  count: 1
+  immutable: true
+  evidence_class: development_compatibility_canary
+  authorizes_training: false
+  authorizes_stage_b: false
+  authorizes_stage_c: false
+  authorizes_test_opening: false
+  authorizes_production_inference: false
+  authorizes_trading_claims: false
+  scientific_result_available: false
+
+contingent_next_experiment:
+  name: constraint_aware_coarse_fine_token_beam_search
+  status: not_implemented_and_not_authorized
+  implement_only_if_either:
+    - VALIDITY_FILTER_IMPROVES_FORECAST
+    - NO_VALID_ROLLOUTS
+  reason: >
+    Beam search is only worth its complexity if validity filtering is shown to
+    help, or if too few valid paths exist for rejection sampling to be usable.
+    Building it before the diagnostic answers that would be speculative.
+
+stop_condition: >
+  Execution stops after the diagnostic artifact is written. No stage advances,
+  no partition is opened, and no further computation is authorized by any
+  outcome.
