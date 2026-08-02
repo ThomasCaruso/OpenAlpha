@@ -78,6 +78,12 @@ def run_diagnostic_worker(
        the context that imported them is still open, which is the lifetime the
        runtime probe exercises too.
 
+    4. The whole publication is covered by safe logging, not only the
+       computation. Publication can fail on its own -- an unreachable store, an
+       undecodable existing artifact, a payload that will not serialise -- and
+       in that state no durable artifact can be written at all. The sanitised
+       log is then the only evidence there is, so it has to exist.
+
     ``resolve_runtime`` is a zero-argument callable returning a context manager
     that yields an object with ``codec``, ``model``, ``assets`` and
     ``parameter_digest``.
@@ -126,10 +132,30 @@ def run_diagnostic_worker(
             )
             raise
 
-    stage.enter("verify_existing_artifact")
-    artifact: DiagnosticTerminalArtifact = publish_diagnostic_artifact(
-        store, invocation=invocation, execute=execute_and_log, now=now
-    )
+    try:
+        artifact: DiagnosticTerminalArtifact = publish_diagnostic_artifact(
+            store, invocation=invocation, execute=execute_and_log, now=now, stage=stage
+        )
+    except BridgeTransformError:
+        # A typed failure that escapes publication is a rejection this code
+        # wrote, not an unexpected fault. It needs no sanitising.
+        raise
+    except Exception as error:
+        # Publication itself failed: the object store was unreachable, an
+        # existing artifact could not be decoded, a payload would not
+        # serialise. Nothing durable can be written in that state, so the
+        # sanitised log is the only evidence that will survive. An execution
+        # failure that publication already converted into a terminal artifact
+        # never reaches here, so it is not logged twice.
+        log_operational_failure(
+            error,
+            run_id=invocation.run_id,
+            deployed_commit=invocation.deployed_commit,
+            stage=stage.stage,
+            logger=logger,
+        )
+        raise
+
     return DiagnosticWorkerResult(
         artifact_key=artifact.key,
         content_sha256=artifact.content_sha256,

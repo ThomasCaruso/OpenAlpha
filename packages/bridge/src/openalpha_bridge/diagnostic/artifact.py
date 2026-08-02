@@ -25,6 +25,7 @@ from ..phase2.invocation import WorkerInvocation
 from ..phase2.states import EvidenceClass
 from .conclusion import DiagnosticConclusion
 from .runner import DIAGNOSTIC_SCHEMA_VERSION, DiagnosticArtifact
+from .safe_logging import StageTracker
 from .spec import (
     CLAIM_BOUNDARY,
     V1_SPECIFICATION_NAME,
@@ -382,8 +383,11 @@ def _write(
     schema_version: str,
     outcome: str,
     conclusion: str | None,
+    stage: StageTracker | None = None,
 ) -> DiagnosticTerminalArtifact:
+    tracker = stage or StageTracker()
     key = diagnostic_artifact_key(invocation.run_id)
+    tracker.enter("write_artifact")
     try:
         metadata = put_json(
             store,
@@ -398,6 +402,11 @@ def _write(
     except BridgeTransformError as error:
         if error.failures[0].code != "OBJECT_ALREADY_EXISTS":
             raise
+        # The object appeared between the existence check and this write. What
+        # happens next is a verification, not a write, so the stage says so:
+        # an operator reading a sanitised log needs to know which operation
+        # failed, and "write_artifact" would name the wrong one.
+        tracker.enter("verify_existing_artifact")
         return verify_existing_artifact(store, invocation=invocation)
     return DiagnosticTerminalArtifact(
         key=key,
@@ -415,12 +424,23 @@ def publish_diagnostic_artifact(
     invocation: WorkerInvocation,
     execute: Any,
     now: datetime | None = None,
+    stage: StageTracker | None = None,
 ) -> DiagnosticTerminalArtifact:
     """Return the existing artifact, or run the diagnostic and write one.
 
     The existence check comes first, so a duplicate invocation issues no
     provider request and loads no model.
+
+    ``stage`` records which publication operation is in progress, so that an
+    unexpected exception escaping this function can be logged with an accurate
+    location without reproducing any of its text. It is write-only from this
+    function's point of view: nothing here reads it, so it cannot influence a
+    payload, a digest, a conclusion, or which branch runs. When none is
+    supplied a private tracker is used and discarded.
     """
+    tracker = stage or StageTracker()
+
+    tracker.enter("verify_existing_artifact")
     already = find_existing_artifact(store, invocation=invocation)
     if already is not None:
         return already
@@ -429,6 +449,7 @@ def publish_diagnostic_artifact(
     try:
         result: DiagnosticArtifact = execute()
     except BridgeTransformError as error:
+        tracker.enter("serialize_artifact")
         first = error.failures[0]
         failure = DiagnosticFailure(
             outcome=DIAGNOSTIC_FAILURE_CODE,
@@ -445,6 +466,7 @@ def publish_diagnostic_artifact(
             completed_at=stamped,
         )
     except Exception as error:  # noqa: BLE001 - nothing may escape unrecorded
+        tracker.enter("serialize_artifact")
         failure = DiagnosticFailure(
             outcome=DIAGNOSTIC_OPERATIONAL_FAILURE_CODE,
             conclusion=DiagnosticConclusion.DIAGNOSTIC_OPERATIONAL_FAILURE,
@@ -462,23 +484,32 @@ def publish_diagnostic_artifact(
             completed_at=stamped,
         )
     else:
+        tracker.enter("serialize_artifact")
         payload = result.model_dump(mode="json")
         payload["outcome"] = DIAGNOSTIC_SUCCESS_CODE
         payload["experiment_sha256"] = EXPERIMENT_SHA256
+        success_schema = result.schema_version
+        success_conclusion = result.conclusion.value
         return _write(
             store,
             invocation=invocation,
             payload=payload,
-            schema_version=result.schema_version,
+            schema_version=success_schema,
             outcome=DIAGNOSTIC_SUCCESS_CODE,
-            conclusion=result.conclusion.value,
+            conclusion=success_conclusion,
+            stage=tracker,
         )
 
+    tracker.enter("serialize_artifact")
+    failure_payload = failure.model_dump(mode="json")
+    failure_schema = failure.schema_version
+    failure_conclusion = failure.conclusion.value if failure.conclusion else None
     return _write(
         store,
         invocation=invocation,
-        payload=failure.model_dump(mode="json"),
-        schema_version=failure.schema_version,
+        payload=failure_payload,
+        schema_version=failure_schema,
         outcome=failure.outcome,
-        conclusion=failure.conclusion.value if failure.conclusion else None,
+        conclusion=failure_conclusion,
+        stage=tracker,
     )
