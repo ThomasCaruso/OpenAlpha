@@ -1078,64 +1078,26 @@ def inventory_base_remote_cache() -> dict[str, Any]:
     taken deliberately, with the artifacts and revisions it depends on proved
     first -- not something an ordinary endpoint can be talked into.
 
+    ``base_cache_volume.reload`` is handed to the builder and called there
+    exactly once, before anything touches the mount. A Modal volume mounted in
+    a warm container keeps the view it had at mount time, so without that
+    refresh this function reported an empty cache immediately after the base
+    runtime probe had downloaded and committed roughly 425 MB into it. Nothing
+    was wrong with the storage: the reader was describing a stale view as fact.
+
+    A reload failure propagates. An inventory that could not refresh has no
+    observation to report, and an empty result would be indistinguishable from
+    a genuinely empty volume.
+
     Invoke with:
         modal run cloud/modal/bridge_phase2_app.py::inventory_base_remote_cache
     """
-    from pathlib import Path
+    from openalpha_bridge.base_study.cache_inventory import build_base_cache_inventory
 
-    root = Path(BASE_CACHE_ROOT) / "huggingface"
-    repositories: list[dict[str, Any]] = []
-    total = 0
-
-    if root.is_dir():
-        for repo_dir in sorted(p for p in root.iterdir() if p.is_dir()):
-            if not repo_dir.name.startswith("models--"):
-                continue
-            snapshots_root = repo_dir / "snapshots"
-            snapshots: list[dict[str, Any]] = []
-            repo_bytes = 0
-            for item in repo_dir.rglob("*"):
-                if item.is_file() and not item.is_symlink():
-                    repo_bytes += item.stat().st_size
-            if snapshots_root.is_dir():
-                for snapshot in sorted(p for p in snapshots_root.iterdir() if p.is_dir()):
-                    resolved_bytes = 0
-                    files: list[str] = []
-                    for item in sorted(snapshot.rglob("*")):
-                        if item.is_file() or item.is_symlink():
-                            files.append(item.relative_to(snapshot).as_posix())
-                            try:
-                                resolved_bytes += item.resolve().stat().st_size
-                            except OSError:
-                                pass
-                    snapshots.append(
-                        {
-                            "revision": snapshot.name,
-                            "path": str(snapshot),
-                            "files": files,
-                            "resolved_bytes": resolved_bytes,
-                        }
-                    )
-            total += repo_bytes
-            repositories.append(
-                {
-                    "cache_directory": repo_dir.name,
-                    "repository": repo_dir.name.removeprefix("models--").replace("--", "/", 1),
-                    "path": str(repo_dir),
-                    "bytes_on_volume": repo_bytes,
-                    "snapshots": snapshots,
-                }
-            )
-
-    return {
-        "volume": "openalpha-kronos-base-cache",
-        "mount": BASE_CACHE_ROOT,
-        "root": str(root),
-        "exists": root.is_dir(),
-        "repositories": repositories,
-        "total_bytes": total,
-        "read_only": True,
-        "deletion_supported": False,
-        "deployed_commit": _require_deployed_commit(),
-        "inspected_at": _now().isoformat(),
-    }
+    return build_base_cache_inventory(
+        reload=base_cache_volume.reload,
+        mount=BASE_CACHE_ROOT,
+        volume_name="openalpha-kronos-base-cache",
+        deployed_commit=_require_deployed_commit(),
+        inspected_at=_now(),
+    )

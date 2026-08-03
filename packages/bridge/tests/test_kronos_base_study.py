@@ -784,8 +784,25 @@ def test_the_cache_inventory_is_read_only_and_not_on_the_control_api() -> None:
     body = ast.get_source_segment(app_source, node) or ""
     for destructive in ("rmtree", "unlink(", "os.remove", "shutil.rm", ".delete("):
         assert destructive not in body, f"the inventory can {destructive}"
-    assert '"read_only": True' in body
-    assert '"deletion_supported": False' in body
+
+    # The report is built by an importable module now, so the read-only
+    # guarantees are asserted on what it actually returns rather than on the
+    # Modal shell's source text. test_base_cache_inventory covers the rest.
+    from datetime import UTC, datetime
+
+    from openalpha_bridge.base_study.cache_inventory import build_base_cache_inventory
+
+    payload = build_base_cache_inventory(
+        reload=lambda: None,
+        mount=str(REPO / "does-not-exist"),
+        volume_name="openalpha-kronos-base-cache",
+        deployed_commit="f" * 40,
+        inspected_at=datetime(2026, 8, 3, tzinfo=UTC),
+    )
+    assert payload["read_only"] is True
+    assert payload["deletion_supported"] is False
+    assert payload["reloaded_before_inspection"] is True
+    assert "build_base_cache_inventory(" in body
     # Not exposed through the ASGI control plane.
     control = ast.get_source_segment(
         app_source,
