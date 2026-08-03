@@ -52,14 +52,21 @@ from openalpha_bridge.zero_shot import aggregation as aggregation_module
 from openalpha_bridge.zero_shot import baselines as baselines_module
 from openalpha_bridge.zero_shot.aggregation import (
     BOOTSTRAP_ASSETS_PER_CLUSTER,
+    BOOTSTRAP_AVAILABLE_BLOCK_STARTS,
+    BOOTSTRAP_BASE_RESAMPLING_UNIT,
+    BOOTSTRAP_BLOCK_LENGTH,
+    BOOTSTRAP_BLOCKS_PER_RESAMPLE,
     BOOTSTRAP_CLUSTER_COUNT,
+    BOOTSTRAP_METHOD,
     BOOTSTRAP_OBSERVATION_COUNT,
-    ClusterBootstrapInterval,
+    BOOTSTRAP_TEMPORAL_RESAMPLING_UNIT,
+    MovingBlockBootstrapInterval,
     OriginCluster,
+    block_starts,
     extended_metrics,
-    paired_cluster_bootstrap,
+    paired_origin_moving_block_bootstrap,
     summarize,
-    undefined_cluster_bootstrap,
+    undefined_moving_block_bootstrap,
 )
 from openalpha_bridge.zero_shot.aggregation import (
     ExtendedForecastMetrics as ExtendedForecastMetricsModel,
@@ -460,6 +467,25 @@ def test_the_new_specification_verifies_and_is_not_a_historical_one() -> None:
     historical = set(verify_diagnostic_specifications(RESEARCH)) | {BASE_SPECIFICATION_NAME}
     assert ZERO_SHOT_SPECIFICATION_NAME not in historical
     assert ZERO_SHOT_SPECIFICATION_SHA256 != BASE_SPECIFICATION_SHA256
+
+    # The document states the corrected design explicitly, not just by hash.
+    document = path.read_text(encoding="utf-8")
+    for declaration in (
+        "method: paired_percentile_moving_block_bootstrap_over_origin_clusters",
+        "temporal_resampling_unit: four_consecutive_origin_clusters",
+        "block_length: 4",
+        "available_block_starts: 22",
+        "blocks_drawn_per_resample: 7",
+        "origins_resampled_independently: false",
+        "wraparound: false",
+        "computation: ceil(40 / 12) = 4",
+        "selected_before_execution: true",
+        "estimated_or_tuned_from_results: false",
+        "interval_used: moving_block_bootstrap_only",
+        "cross_asset_dependence_preserved: true",
+        "temporal_dependence_preserved: true",
+    ):
+        assert declaration in document, declaration
 
 
 # ====== 2: both completed artifact identities remain recorded ========
@@ -1183,11 +1209,15 @@ def _evidence(
             )
             for index, asset in enumerate(ASSET_PANEL)
         ),
-        bootstrap=ClusterBootstrapInterval(
+        bootstrap=MovingBlockBootstrapInterval(
             defined=True,
             cluster_count=BOOTSTRAP_CLUSTER_COUNT,
             assets_per_cluster=BOOTSTRAP_ASSETS_PER_CLUSTER,
             observation_count=BOOTSTRAP_OBSERVATION_COUNT,
+            block_length=BOOTSTRAP_BLOCK_LENGTH,
+            available_block_starts=BOOTSTRAP_AVAILABLE_BLOCK_STARTS,
+            blocks_drawn_per_resample=BOOTSTRAP_BLOCKS_PER_RESAMPLE,
+            clusters_retained_per_resample=BOOTSTRAP_CLUSTER_COUNT,
             resamples=BOOTSTRAP_RESAMPLES,
             confidence_level=0.95,
             seed=BOOTSTRAP_SEED,
@@ -1325,14 +1355,8 @@ def test_the_four_predeclared_outcomes_are_exactly_these() -> None:
 # ====== C1-C2: the resampling unit is the ordinal, and it is indivisible ====
 
 
-def test_the_bootstrap_resamples_ordinals_not_individual_asset_origin_rows() -> None:
-    """Observe the draws directly rather than inferring them from the output.
-
-    One ordinal is made hugely different from the rest. If assets were drawn
-    individually there would be 100 units and the giant ordinal's four rows
-    could be split across a resample; because the ordinal is indivisible, every
-    resampled mean is a multiple of 1/25 of whole-cluster totals.
-    """
+def _record_draws(clusters: tuple[OriginCluster, ...], *, resamples: int) -> list[int]:
+    """Capture the population size of every randrange draw the bootstrap makes."""
     calls: list[int] = []
     real_randrange = random.Random.randrange
 
@@ -1341,24 +1365,140 @@ def test_the_bootstrap_resamples_ordinals_not_individual_asset_origin_rows() -> 
         calls.append(args[0] if args else -1)
         return drawn
 
-    clusters = _uniform_clusters()
     with mock.patch.object(random.Random, "randrange", recording):
-        interval = paired_cluster_bootstrap(
-            clusters, seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
+        paired_origin_moving_block_bootstrap(
+            clusters, seed=BOOTSTRAP_SEED, resamples=resamples, confidence_level=0.95
         )
+    return calls
 
-    # Every draw is over 25 clusters, never over 100 rows.
-    assert set(calls) == {BOOTSTRAP_CLUSTER_COUNT}
-    assert len(calls) == 10 * BOOTSTRAP_CLUSTER_COUNT
-    assert interval.cluster_count == BOOTSTRAP_CLUSTER_COUNT
+
+def test_the_bootstrap_draws_block_starts_not_rows_and_not_single_ordinals() -> None:
+    """Observe the draws directly rather than inferring them from the output.
+
+    A flat design would draw from 100 rows; the superseded cluster design drew
+    25 times from 25 ordinals. This draws 7 times from 22 block starts, which is
+    a signature neither of the other two can produce.
+    """
+    calls = _record_draws(_uniform_clusters(), resamples=10)
+
+    assert set(calls) == {BOOTSTRAP_AVAILABLE_BLOCK_STARTS}
+    assert BOOTSTRAP_AVAILABLE_BLOCK_STARTS == 22
+    assert len(calls) == 10 * BOOTSTRAP_BLOCKS_PER_RESAMPLE
+    # Explicitly not the two superseded signatures.
+    assert BOOTSTRAP_OBSERVATION_COUNT not in set(calls)
+    assert BOOTSTRAP_CLUSTER_COUNT not in set(calls)
+
+
+def test_origins_are_not_sampled_independently() -> None:
+    """Seven draws per resample, not twenty-five."""
+    calls = _record_draws(_uniform_clusters(), resamples=100)
+    assert len(calls) == 100 * BOOTSTRAP_BLOCKS_PER_RESAMPLE == 700
+    assert len(calls) != 100 * BOOTSTRAP_CLUSTER_COUNT
+
+    interval = paired_origin_moving_block_bootstrap(
+        _uniform_clusters(), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
+    )
+    assert interval.origins_resampled_independently is False
     assert interval.assets_resampled_within_cluster is False
+
+
+def test_every_block_is_four_consecutive_ordinals_without_wraparound() -> None:
+    starts = block_starts()
+    assert starts == tuple(range(22))
+    assert min(starts) == 0
+    assert max(starts) == 21
+
+    for start in starts:
+        block = tuple(range(start, start + BOOTSTRAP_BLOCK_LENGTH))
+        assert len(block) == 4
+        assert list(block) == sorted(block), "origins keep chronological order"
+        assert block[-1] - block[0] == 3, "the four ordinals are consecutive"
+        # No wraparound: the last ordinal of any block never precedes its first.
+        assert block[-1] <= BOOTSTRAP_CLUSTER_COUNT - 1
+        assert 0 not in block[1:], "ordinal 24 never wraps round to ordinal 0"
+
+    # A start of 22 would need ordinals 22..25, which do not exist.
+    assert 22 not in starts
+    assert BOOTSTRAP_CLUSTER_COUNT - 1 + 1 not in starts
+
+
+def test_seven_blocks_are_drawn_and_twenty_five_positions_are_retained() -> None:
+    assert BOOTSTRAP_BLOCKS_PER_RESAMPLE == 7
+    assert BOOTSTRAP_BLOCKS_PER_RESAMPLE * BOOTSTRAP_BLOCK_LENGTH == 28
+    assert BOOTSTRAP_CLUSTER_COUNT == 25
+
+    interval = paired_origin_moving_block_bootstrap(
+        _uniform_clusters(), seed=BOOTSTRAP_SEED, resamples=50, confidence_level=0.95
+    )
+    assert interval.blocks_drawn_per_resample == 7
+    assert interval.clusters_retained_per_resample == 25
+    assert interval.observation_count == 100
+
+    calls = _record_draws(_uniform_clusters(), resamples=50)
+    assert len(calls) == 50 * 7
+
+
+def test_the_denominator_is_exactly_one_hundred_observations() -> None:
+    """A constant panel must reproduce its own mean exactly.
+
+    If the denominator or the retained-cluster count were wrong, a constant
+    would not come back unchanged.
+    """
+    for value in (0.001, -0.0025, 0.0):
+        interval = paired_origin_moving_block_bootstrap(
+            _uniform_clusters(value), seed=BOOTSTRAP_SEED, resamples=200, confidence_level=0.95
+        )
+        assert interval.observation_count == 100
+        assert interval.point_estimate == pytest.approx(value)
+        assert interval.lower == pytest.approx(value)
+        assert interval.upper == pytest.approx(value)
+
+
+def test_the_point_estimate_equals_the_mean_of_the_twenty_five_cluster_means() -> None:
+    rows = [
+        (0.001 * index, 0.002 * index, -0.001 * index, 0.0005 * index)
+        for index in range(BOOTSTRAP_CLUSTER_COUNT)
+    ]
+    clusters = _clusters(rows)
+    interval = paired_origin_moving_block_bootstrap(
+        clusters, seed=BOOTSTRAP_SEED, resamples=100, confidence_level=0.95
+    )
+    flat_mean = sum(v for row in rows for v in row) / BOOTSTRAP_OBSERVATION_COUNT
+    cluster_means = [sum(row) / len(row) for row in rows]
+    assert interval.point_estimate == pytest.approx(flat_mean)
+    assert interval.point_estimate == pytest.approx(sum(cluster_means) / len(cluster_means))
+
+
+@pytest.mark.parametrize("length", [1, 2, 3, 5, 6, 12, 25])
+def test_any_block_length_other_than_four_is_rejected(length: int) -> None:
+    with pytest.raises(BridgeTransformError) as excinfo:
+        paired_origin_moving_block_bootstrap(
+            _uniform_clusters(),
+            block_length=length,
+            seed=BOOTSTRAP_SEED,
+            resamples=10,
+            confidence_level=0.95,
+        )
+    assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_BLOCK_LENGTH_INVALID"
+    assert "may not be estimated or tuned" in excinfo.value.failures[0].message
+
+
+def test_the_block_length_is_derived_from_the_benchmark_geometry() -> None:
+    from openalpha_bridge.zero_shot.origins import ORIGIN_STRIDE
+
+    assert BOOTSTRAP_BLOCK_LENGTH == math.ceil(CONTEXT_CANDLES / ORIGIN_STRIDE) == 4
+    # The overlap structure the block length exists to span.
+    assert CONTEXT_CANDLES - 1 * ORIGIN_STRIDE == 28  # adjacent origins share 28
+    assert CONTEXT_CANDLES - 2 * ORIGIN_STRIDE == 16  # two strides apart share 16
+    assert CONTEXT_CANDLES - 3 * ORIGIN_STRIDE == 4   # three strides apart share 4
+    assert CONTEXT_CANDLES - 4 * ORIGIN_STRIDE < 0    # four strides apart share none
 
 
 def test_selecting_one_ordinal_always_selects_all_four_asset_differences() -> None:
     """A lone non-zero cluster can only ever contribute all four of its values."""
     rows = [(0.0, 0.0, 0.0, 0.0) for _ in range(BOOTSTRAP_CLUSTER_COUNT)]
     rows[7] = (1.0, 2.0, 3.0, 4.0)  # sums to 10.0
-    interval = paired_cluster_bootstrap(
+    interval = paired_origin_moving_block_bootstrap(
         _clusters(rows), seed=BOOTSTRAP_SEED, resamples=500, confidence_level=0.95
     )
     assert interval.defined is True
@@ -1382,7 +1522,7 @@ def test_exactly_twenty_five_clusters_are_required() -> None:
     for count in (24, 26, 0):
         rows = [(0.001, 0.001, 0.001, 0.001) for _ in range(count)]
         with pytest.raises(BridgeTransformError) as excinfo:
-            paired_cluster_bootstrap(
+            paired_origin_moving_block_bootstrap(
                 _clusters(rows), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
             )
         assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_CLUSTER_COUNT_INVALID"
@@ -1395,7 +1535,7 @@ def test_every_cluster_must_carry_exactly_four_assets() -> None:
         ordinal=3, assets=("SPY", "QQQ", "IWM"), paired_differences=(0.1, 0.1, 0.1)
     )
     with pytest.raises(BridgeTransformError) as excinfo:
-        paired_cluster_bootstrap(
+        paired_origin_moving_block_bootstrap(
             tuple(clusters), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
         )
     assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_CLUSTER_ASSET_COUNT_INVALID"
@@ -1409,7 +1549,7 @@ def test_the_cluster_asset_identities_must_be_the_preregistered_panel() -> None:
         ordinal=0, assets=("SPY", "QQQ", "IWM", "VOO"), paired_differences=(0.1, 0.1, 0.1, 0.1)
     )
     with pytest.raises(BridgeTransformError) as excinfo:
-        paired_cluster_bootstrap(
+        paired_origin_moving_block_bootstrap(
             tuple(clusters), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
         )
     assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_ASSET_PANEL_MISMATCH"
@@ -1421,7 +1561,7 @@ def test_a_duplicated_asset_in_a_cluster_is_rejected() -> None:
         ordinal=5, assets=("SPY", "SPY", "IWM", "DIA"), paired_differences=(0.1, 0.1, 0.1, 0.1)
     )
     with pytest.raises(BridgeTransformError) as excinfo:
-        paired_cluster_bootstrap(
+        paired_origin_moving_block_bootstrap(
             tuple(clusters), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
         )
     assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_DUPLICATE_ASSET"
@@ -1433,7 +1573,7 @@ def test_a_missing_paired_difference_is_rejected() -> None:
         ordinal=2, assets=ASSET_PANEL, paired_differences=(0.1, 0.1, 0.1)
     )
     with pytest.raises(BridgeTransformError) as excinfo:
-        paired_cluster_bootstrap(
+        paired_origin_moving_block_bootstrap(
             tuple(clusters), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
         )
     assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_MISSING_DIFFERENCE"
@@ -1458,7 +1598,7 @@ def test_a_non_finite_difference_is_also_caught_if_the_model_is_bypassed(bad: fl
         ordinal=9, assets=ASSET_PANEL, paired_differences=(0.001, bad, 0.001, 0.001)
     )
     with pytest.raises(BridgeTransformError) as excinfo:
-        paired_cluster_bootstrap(
+        paired_origin_moving_block_bootstrap(
             tuple(clusters), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
         )
     assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_NON_FINITE_DIFFERENCE"
@@ -1471,7 +1611,7 @@ def test_the_ordinals_must_be_exactly_zero_through_twenty_four() -> None:
         [*range(BOOTSTRAP_CLUSTER_COUNT - 1), 0],  # duplicated / unsorted
     ):
         with pytest.raises(BridgeTransformError) as excinfo:
-            paired_cluster_bootstrap(
+            paired_origin_moving_block_bootstrap(
                 _clusters(rows, ordinals=ordinals),
                 seed=BOOTSTRAP_SEED,
                 resamples=10,
@@ -1482,7 +1622,7 @@ def test_the_ordinals_must_be_exactly_zero_through_twenty_four() -> None:
 
 def test_an_undefined_difference_never_shrinks_the_bootstrap_sample() -> None:
     """The undefined path reports absence; it does not resample a smaller panel."""
-    interval = undefined_cluster_bootstrap(
+    interval = undefined_moving_block_bootstrap(
         seed=BOOTSTRAP_SEED,
         resamples=BOOTSTRAP_RESAMPLES,
         confidence_level=0.95,
@@ -1509,13 +1649,13 @@ def test_the_cluster_bootstrap_is_deterministic_under_the_preregistered_seed() -
         )
         for index in range(BOOTSTRAP_CLUSTER_COUNT)
     ]
-    first = paired_cluster_bootstrap(
+    first = paired_origin_moving_block_bootstrap(
         _clusters(rows),
         seed=BOOTSTRAP_SEED,
         resamples=BOOTSTRAP_RESAMPLES,
         confidence_level=0.95,
     )
-    second = paired_cluster_bootstrap(
+    second = paired_origin_moving_block_bootstrap(
         _clusters(rows),
         seed=BOOTSTRAP_SEED,
         resamples=BOOTSTRAP_RESAMPLES,
@@ -1527,31 +1667,43 @@ def test_the_cluster_bootstrap_is_deterministic_under_the_preregistered_seed() -
     assert first.lower is not None and first.upper is not None
     assert first.lower <= first.upper
 
-    different = paired_cluster_bootstrap(
+    different = paired_origin_moving_block_bootstrap(
         _clusters(rows), seed=BOOTSTRAP_SEED + 1, resamples=200, confidence_level=0.95
     )
     assert different.seed != first.seed
 
 
 def test_the_interval_metadata_reports_the_corrected_design() -> None:
-    interval = paired_cluster_bootstrap(
+    interval = paired_origin_moving_block_bootstrap(
         _uniform_clusters(), seed=BOOTSTRAP_SEED, resamples=200, confidence_level=0.95
     )
-    assert interval.method == "paired_percentile_cluster_bootstrap_over_origin_ordinals"
-    assert interval.unit_of_resampling == "origin_ordinal_cluster_all_assets"
+    assert interval.method == "paired_percentile_moving_block_bootstrap_over_origin_clusters"
+    assert interval.method == BOOTSTRAP_METHOD
+    assert interval.base_resampling_unit == "origin_ordinal_cluster_all_assets"
+    assert interval.base_resampling_unit == BOOTSTRAP_BASE_RESAMPLING_UNIT
+    assert interval.temporal_resampling_unit == "four_consecutive_origin_clusters"
+    assert interval.temporal_resampling_unit == BOOTSTRAP_TEMPORAL_RESAMPLING_UNIT
     assert interval.cluster_count == 25
     assert interval.assets_per_cluster == 4
     assert interval.observation_count == 100
+    assert interval.block_length == 4
+    assert interval.available_block_starts == 22
+    assert interval.blocks_drawn_per_resample == 7
+    assert interval.clusters_retained_per_resample == 25
     assert interval.resamples == 200
     assert interval.confidence_level == 0.95
-    assert interval.seed == BOOTSTRAP_SEED
+    assert interval.seed == 20260803
     assert interval.assets_resampled_within_cluster is False
+    assert interval.origins_resampled_independently is False
+    assert interval.wraparound is False
+    assert interval.block_length_selected_before_execution is True
+    assert interval.block_length_tuned_from_results is False
 
-    favorable = paired_cluster_bootstrap(
+    favorable = paired_origin_moving_block_bootstrap(
         _uniform_clusters(0.01), seed=BOOTSTRAP_SEED, resamples=200, confidence_level=0.95
     )
     assert favorable.excludes_zero_favorably is True
-    unfavorable = paired_cluster_bootstrap(
+    unfavorable = paired_origin_moving_block_bootstrap(
         _uniform_clusters(-0.01), seed=BOOTSTRAP_SEED, resamples=200, confidence_level=0.95
     )
     assert unfavorable.excludes_zero is True
@@ -1577,6 +1729,90 @@ def _independent_row_interval(
     return means[math.floor(tail * (resamples - 1))], means[math.ceil((1.0 - tail) * (resamples - 1))]
 
 
+def _independent_cluster_interval(
+    clusters: tuple[OriginCluster, ...], *, seed: int, resamples: int, confidence_level: float
+) -> tuple[float, float]:
+    """The superseded independent-cluster design, reimplemented HERE only.
+
+    It lives in the test rather than the library for the same reason the flat
+    design does: the library must not contain a function that could produce a
+    decision-bearing interval weaker than the moving-block one.
+    """
+    totals = [sum(cluster.paired_differences) for cluster in clusters]
+    count = len(totals)
+    observations = count * BOOTSTRAP_ASSETS_PER_CLUSTER
+    generator = random.Random(seed)
+    means: list[float] = []
+    for _ in range(resamples):
+        means.append(
+            sum(totals[generator.randrange(count)] for _ in range(count)) / observations
+        )
+    means.sort()
+    tail = (1.0 - confidence_level) / 2.0
+    return (
+        means[math.floor(tail * (resamples - 1))],
+        means[math.ceil((1.0 - tail) * (resamples - 1))],
+    )
+
+
+def _serially_correlated_clusters(
+    mean: float = 0.005, sd: float = 0.01
+) -> tuple[OriginCluster, ...]:
+    """Value held constant within each block of four consecutive origins.
+
+    A deliberately clean stand-in for the real overlap structure: origins inside
+    one block share information, origins in different blocks do not.
+    """
+    pattern = (-1.3, -0.8, -0.2, 0.2, 0.8, 1.3, 0.0)
+    return _clusters(
+        [
+            (v, v, v, v)
+            for v in (
+                mean + sd * pattern[index // BOOTSTRAP_BLOCK_LENGTH]
+                for index in range(BOOTSTRAP_CLUSTER_COUNT)
+            )
+        ]
+    )
+
+
+def test_serially_correlated_origins_give_a_wider_interval_than_independent_clusters() -> None:
+    """The point of this correction, demonstrated numerically.
+
+    When consecutive origins carry the same information -- which is what a
+    40-session context on a 12-session stride guarantees -- sampling the 25
+    clusters independently shrinks the interval by nearly half. The moving-block
+    design refuses that free precision.
+    """
+    clusters = _serially_correlated_clusters()
+    block = paired_origin_moving_block_bootstrap(
+        clusters, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
+    )
+    indep_lower, indep_upper = _independent_cluster_interval(
+        clusters, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
+    )
+
+    assert block.lower is not None and block.upper is not None
+    block_width = block.upper - block.lower
+    indep_width = indep_upper - indep_lower
+    assert block_width >= indep_width
+    assert block_width > indep_width * 1.5
+
+
+def test_independent_clusters_would_have_falsely_satisfied_z1_here() -> None:
+    """A case where the superseded design claims skill and this one refuses."""
+    clusters = _serially_correlated_clusters(mean=0.005, sd=0.01)
+    block = paired_origin_moving_block_bootstrap(
+        clusters, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
+    )
+    indep_lower, _ = _independent_cluster_interval(
+        clusters, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
+    )
+
+    assert block.point_estimate is not None and block.point_estimate > 0.0
+    assert indep_lower > 0.0, "the independent-cluster design would have claimed skill"
+    assert block.excludes_zero_favorably is False, "the moving-block design must not"
+
+
 def test_perfectly_correlated_assets_give_a_wider_interval_than_row_resampling() -> None:
     """The whole point of the correction, demonstrated numerically.
 
@@ -1590,7 +1826,7 @@ def test_perfectly_correlated_assets_give_a_wider_interval_than_row_resampling()
     ]
     clusters = _clusters(rows)
 
-    clustered = paired_cluster_bootstrap(
+    clustered = paired_origin_moving_block_bootstrap(
         clusters, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
     )
     flat_lower, flat_upper = _independent_row_interval(
@@ -1606,23 +1842,13 @@ def test_perfectly_correlated_assets_give_a_wider_interval_than_row_resampling()
     assert clustered_width > flat_width * 1.5
 
 
-def test_a_too_narrow_flat_interval_could_have_falsely_satisfied_z1() -> None:
+def test_flat_row_resampling_would_have_falsely_satisfied_z1() -> None:
     """Why this matters: the corrected interval refuses a claim the flat one allows."""
-    # Mean 0.003 with a per-origin standard deviation of 0.01, four perfectly
-    # correlated assets. Flat resampling sees a standard error of sd/sqrt(100)
-    # and excludes zero; clustering sees sd/sqrt(25), twice as wide, and does
-    # not. The effect is favorable on average but not distinguishable from zero
-    # once cross-asset dependence is respected.
-    pattern = (-1.4142135623730951, -0.7071067811865476, 0.0, 0.7071067811865476, 1.4142135623730951)
-    rows = [
-        (v, v, v, v)
-        for v in (
-            0.003 + 0.01 * pattern[index % len(pattern)]
-            for index in range(BOOTSTRAP_CLUSTER_COUNT)
-        )
-    ]
-    clusters = _clusters(rows)
-    clustered = paired_cluster_bootstrap(
+    # The real dependence structure: four correlated assets AND serially
+    # correlated origins. Flat row resampling ignores both and excludes zero;
+    # the moving-block design respects both and does not.
+    clusters = _serially_correlated_clusters()
+    clustered = paired_origin_moving_block_bootstrap(
         clusters, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
     )
     flat_lower, _ = _independent_row_interval(
@@ -1638,7 +1864,7 @@ def test_a_too_narrow_flat_interval_could_have_falsely_satisfied_z1() -> None:
 # ====== C13-C14: only the clustered interval reaches the decision layer ====
 
 
-def test_z1_reads_only_the_clustered_interval() -> None:
+def test_z1_reads_only_the_moving_block_interval() -> None:
     from openalpha_bridge.zero_shot.spec import ZERO_SHOT_THRESHOLDS
 
     evidence = _evidence(
@@ -1646,21 +1872,36 @@ def test_z1_reads_only_the_clustered_interval() -> None:
         lower=0.001, upper=0.01,
     )
     conditions = evidence.z1_conditions(ZERO_SHOT_THRESHOLDS)
-    assert "cluster_bootstrap_excludes_zero_favorably" in conditions
-    assert conditions["cluster_bootstrap_excludes_zero_favorably"] is True
+    assert "moving_block_bootstrap_excludes_zero_favorably" in conditions
+    assert conditions["moving_block_bootstrap_excludes_zero_favorably"] is True
     assert not [key for key in conditions if key.startswith("bootstrap_")]
-    assert evidence.bootstrap.unit_of_resampling == "origin_ordinal_cluster_all_assets"
+    assert "cluster_bootstrap_excludes_zero_favorably" not in conditions
+    assert evidence.bootstrap.base_resampling_unit == "origin_ordinal_cluster_all_assets"
+    assert evidence.bootstrap.temporal_resampling_unit == "four_consecutive_origin_clusters"
+    assert evidence.bootstrap.block_length == 4
 
 
-def test_no_flat_asset_origin_interval_can_reach_the_decision_layer() -> None:
-    """Structural, not conventional: the flat function does not exist."""
-    assert not hasattr(aggregation_module, "paired_bootstrap")
-    assert not hasattr(aggregation_module, "BootstrapInterval")
-    assert "paired_bootstrap" not in ZERO_SHOT_NAMES
+def test_no_weaker_interval_can_reach_the_decision_layer() -> None:
+    """Structural, not conventional: neither superseded function exists.
 
-    # ConfigurationEvidence accepts one interval type, and it is the clustered one.
+    Both discredited designs -- the flat asset-origin bootstrap and the
+    independent origin-cluster bootstrap -- are absent from the library, so
+    "the decision layer cannot read one" is not something a reviewer has to
+    take on trust.
+    """
+    for removed in (
+        "paired_bootstrap",
+        "BootstrapInterval",
+        "paired_cluster_bootstrap",
+        "ClusterBootstrapInterval",
+        "undefined_cluster_bootstrap",
+    ):
+        assert not hasattr(aggregation_module, removed), removed
+        assert removed not in ZERO_SHOT_NAMES, removed
+
+    # ConfigurationEvidence accepts one interval type, and it is the moving-block one.
     annotation = ConfigurationEvidence.model_fields["bootstrap"].annotation
-    assert annotation is ClusterBootstrapInterval
+    assert annotation is MovingBlockBootstrapInterval
 
     with pytest.raises(ValidationError):
         ConfigurationEvidence(
@@ -1674,27 +1915,36 @@ def test_no_flat_asset_origin_interval_can_reach_the_decision_layer() -> None:
         )
 
 
-def test_the_run_carries_the_clustered_interval_into_the_decision() -> None:
+def test_the_run_carries_the_moving_block_interval_into_the_decision() -> None:
     result, _, _, _ = _run()
     payload = result.payload
     assert payload["bootstrap_method"] == (
-        "paired_percentile_cluster_bootstrap_over_origin_ordinals"
+        "paired_percentile_moving_block_bootstrap_over_origin_clusters"
     )
-    assert payload["bootstrap_unit_of_resampling"] == "origin_ordinal_cluster_all_assets"
+    assert payload["bootstrap_base_resampling_unit"] == "origin_ordinal_cluster_all_assets"
+    assert payload["bootstrap_temporal_resampling_unit"] == "four_consecutive_origin_clusters"
     assert payload["bootstrap_cluster_count"] == 25
     assert payload["bootstrap_assets_per_cluster"] == 4
     assert payload["bootstrap_observation_count"] == 100
+    assert payload["bootstrap_block_length"] == 4
+    assert payload["bootstrap_available_block_starts"] == 22
+    assert payload["bootstrap_blocks_per_resample"] == 7
     assert payload["bootstrap_seed"] == 20260803
     assert payload["bootstrap_resamples"] == 2000
 
     for aggregate in payload["aggregates"]:
         assert "bootstrap" not in aggregate
-        interval = aggregate["cluster_bootstrap"]
+        assert "cluster_bootstrap" not in aggregate
+        interval = aggregate["moving_block_bootstrap"]
         assert interval["defined"] is True
         assert interval["cluster_count"] == 25
         assert interval["assets_per_cluster"] == 4
         assert interval["observation_count"] == 100
         assert interval["assets_resampled_within_cluster"] is False
+        assert interval["origins_resampled_independently"] is False
+        assert interval["wraparound"] is False
+        assert interval["block_length"] == 4
+        assert interval["blocks_drawn_per_resample"] == 7
         assert len(aggregate["origin_clusters"]) == 25
         for cluster in aggregate["origin_clusters"]:
             assert cluster["assets"] == list(ASSET_PANEL)
@@ -1702,10 +1952,14 @@ def test_the_run_carries_the_clustered_interval_into_the_decision() -> None:
         assert [c["ordinal"] for c in aggregate["origin_clusters"]] == list(range(25))
 
     for configuration in payload["decision"]["configurations"]:
-        assert configuration["bootstrap"]["unit_of_resampling"] == (
+        assert configuration["bootstrap"]["base_resampling_unit"] == (
             "origin_ordinal_cluster_all_assets"
         )
+        assert configuration["bootstrap"]["temporal_resampling_unit"] == (
+            "four_consecutive_origin_clusters"
+        )
         assert configuration["bootstrap"]["cluster_count"] == 25
+        assert configuration["bootstrap"]["block_length"] == 4
 
 
 def test_the_recorded_clusters_reproduce_the_recorded_interval() -> None:
@@ -1720,16 +1974,16 @@ def test_the_recorded_clusters_reproduce_the_recorded_interval() -> None:
             )
             for entry in aggregate["origin_clusters"]
         )
-        recomputed = paired_cluster_bootstrap(
+        recomputed = paired_origin_moving_block_bootstrap(
             clusters,
             seed=BOOTSTRAP_SEED,
             resamples=BOOTSTRAP_RESAMPLES,
             confidence_level=0.95,
         )
-        assert recomputed.lower == pytest.approx(aggregate["cluster_bootstrap"]["lower"])
-        assert recomputed.upper == pytest.approx(aggregate["cluster_bootstrap"]["upper"])
+        assert recomputed.lower == pytest.approx(aggregate["moving_block_bootstrap"]["lower"])
+        assert recomputed.upper == pytest.approx(aggregate["moving_block_bootstrap"]["upper"])
         assert recomputed.point_estimate == pytest.approx(
-            aggregate["cluster_bootstrap"]["point_estimate"]
+            aggregate["moving_block_bootstrap"]["point_estimate"]
         )
 
 
@@ -1849,7 +2103,7 @@ def test_misalignment_publishes_a_typed_failure_and_no_interval() -> None:
     assert result.outcome == ZERO_SHOT_FAILURE_CODE
     assert result.payload["failure_code"] == "ZERO_SHOT_CROSS_ASSET_ORIGIN_MISALIGNED"
     assert store.list_keys("") == (zero_shot_artifact_key(RUN_ID),)
-    assert "cluster_bootstrap" not in result.payload
+    assert "moving_block_bootstrap" not in result.payload
     assert result.payload["scientific_result_available"] is False
 
 
@@ -1875,8 +2129,8 @@ def test_every_declared_aggregation_level_is_present() -> None:
             for statistic in ("mean", "median", "standard_deviation"):
                 assert summary[statistic] is not None
         assert aggregate["fraction_beating_persistence"] is not None
-        assert aggregate["cluster_bootstrap"]["seed"] == BOOTSTRAP_SEED
-        assert aggregate["cluster_bootstrap"]["resamples"] == BOOTSTRAP_RESAMPLES
+        assert aggregate["moving_block_bootstrap"]["seed"] == BOOTSTRAP_SEED
+        assert aggregate["moving_block_bootstrap"]["resamples"] == BOOTSTRAP_RESAMPLES
     assert result.payload["primary_metric"] == PRIMARY_METRIC == "close_return_mae"
 
 

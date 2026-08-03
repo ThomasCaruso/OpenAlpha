@@ -1,21 +1,35 @@
-"""Metrics, aggregation and the deterministic paired cluster bootstrap.
+"""Metrics, aggregation and the deterministic paired moving-block bootstrap.
 
 Pooled error is reported but never decides anything on its own: a handful of
 high-volatility windows can dominate a pooled mean, so every decision quantity
 here is either a median, a fraction of origins, or a paired interval.
 
-The bootstrap resamples **origin ordinals**, not individual asset-origin rows,
-and not forecast steps. SPY, QQQ, IWM and DIA are evaluated over the same
-chronological windows, so their errors within an origin are cross-sectionally
-dependent. Treating the four as four independent draws would manufacture
-confidence the data does not contain and could let a too-narrow interval satisfy
-Z1's favorable-exclusion requirement on its own. Each resample therefore draws
-whole origin clusters, carrying all four assets together.
+The decision-bearing interval has to respect two different dependencies at once.
 
-There is deliberately no flat asset-origin bootstrap in this module. Omitting it
-is what makes "the decision layer cannot read one" a structural fact rather than
-a convention: the function does not exist, and :class:`ClusterBootstrapInterval`
-is the only interval type the decision layer accepts.
+**Cross-sectional.** SPY, QQQ, IWM and DIA are evaluated over the same
+chronological windows, so their errors within an origin move together. The base
+resampling unit is therefore the whole origin cluster: all four assets enter or
+none do, and no asset is ever drawn, weighted or omitted on its own.
+
+**Temporal.** The origins are sequential and their information windows overlap.
+The context is 40 sessions and the stride is 12, so adjacent origins share 28
+context sessions, origins two strides apart share 16, and origins three strides
+apart share 4. Four strides apart they share none. On top of that, one origin's
+twelve target sessions become part of the next origins' context. Twenty-five
+origins are therefore nothing like twenty-five independent draws, and resampling
+them independently would understate uncertainty for the same reason resampling
+the four assets independently would.
+
+So the clusters are resampled in **consecutive four-origin blocks**. Four is
+``ceil(context_length / origin_stride) = ceil(40 / 12)``, the smallest block that
+spans every directly overlapping context relationship. It is fixed by geometry,
+declared before execution, and never estimated or tuned from results.
+
+There is deliberately no flat asset-origin bootstrap and no independent
+origin-cluster bootstrap in this module. Omitting them is what makes "the
+decision layer cannot read one" a structural fact rather than a convention:
+neither function exists, and :class:`MovingBlockBootstrapInterval` is the only
+interval type the decision layer accepts.
 """
 
 from __future__ import annotations
@@ -30,32 +44,55 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..diagnostic.metrics import DirectionalAccuracy, directional_accuracy
 from ..diagnostic.official_input import OfficialRow
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
-from .spec import ASSET_PANEL, ORIGINS_PER_ASSET
+from .spec import ASSET_PANEL, CONTEXT_CANDLES, ORIGIN_STRIDE, ORIGINS_PER_ASSET
 
 __all__ = [
     "BOOTSTRAP_ASSETS_PER_CLUSTER",
+    "BOOTSTRAP_AVAILABLE_BLOCK_STARTS",
+    "BOOTSTRAP_BASE_RESAMPLING_UNIT",
+    "BOOTSTRAP_BLOCKS_PER_RESAMPLE",
+    "BOOTSTRAP_BLOCK_LENGTH",
     "BOOTSTRAP_CLUSTER_COUNT",
     "BOOTSTRAP_METHOD",
     "BOOTSTRAP_OBSERVATION_COUNT",
-    "BOOTSTRAP_UNIT_OF_RESAMPLING",
-    "ClusterBootstrapInterval",
+    "BOOTSTRAP_TEMPORAL_RESAMPLING_UNIT",
     "DistributionSummary",
     "ExtendedForecastMetrics",
+    "MovingBlockBootstrapInterval",
     "OriginCluster",
     "StepSummary",
+    "block_starts",
     "extended_metrics",
-    "paired_cluster_bootstrap",
+    "paired_origin_moving_block_bootstrap",
     "relative_skill",
     "step_summaries",
     "summarize",
-    "undefined_cluster_bootstrap",
+    "undefined_moving_block_bootstrap",
 ]
 
-BOOTSTRAP_METHOD: Final[str] = "paired_percentile_cluster_bootstrap_over_origin_ordinals"
-BOOTSTRAP_UNIT_OF_RESAMPLING: Final[str] = "origin_ordinal_cluster_all_assets"
+BOOTSTRAP_METHOD: Final[str] = (
+    "paired_percentile_moving_block_bootstrap_over_origin_clusters"
+)
+BOOTSTRAP_BASE_RESAMPLING_UNIT: Final[str] = "origin_ordinal_cluster_all_assets"
+BOOTSTRAP_TEMPORAL_RESAMPLING_UNIT: Final[str] = "four_consecutive_origin_clusters"
+
 BOOTSTRAP_CLUSTER_COUNT: Final[int] = ORIGINS_PER_ASSET
 BOOTSTRAP_ASSETS_PER_CLUSTER: Final[int] = len(ASSET_PANEL)
 BOOTSTRAP_OBSERVATION_COUNT: Final[int] = BOOTSTRAP_CLUSTER_COUNT * BOOTSTRAP_ASSETS_PER_CLUSTER
+
+#: ceil(40 / 12) = 4. The smallest block spanning every pair of origins whose
+#: contexts overlap. Derived from the geometry, not fitted to any result.
+BOOTSTRAP_BLOCK_LENGTH: Final[int] = -(-CONTEXT_CANDLES // ORIGIN_STRIDE)
+
+#: Contiguous starts with no wraparound: 25 - 4 + 1 = 22, i.e. 0..21.
+BOOTSTRAP_AVAILABLE_BLOCK_STARTS: Final[int] = (
+    BOOTSTRAP_CLUSTER_COUNT - BOOTSTRAP_BLOCK_LENGTH + 1
+)
+
+#: ceil(25 / 4) = 7 blocks, giving 28 positions, truncated back to 25.
+BOOTSTRAP_BLOCKS_PER_RESAMPLE: Final[int] = -(
+    -BOOTSTRAP_CLUSTER_COUNT // BOOTSTRAP_BLOCK_LENGTH
+)
 
 
 def _fail(code: str, message: str, *, field: str | None = None) -> BridgeTransformError:
@@ -197,22 +234,27 @@ class OriginCluster(BaseModel):
     paired_differences: tuple[float, ...]
 
 
-class ClusterBootstrapInterval(BaseModel):
-    """A deterministic paired percentile cluster bootstrap over origin ordinals.
+class MovingBlockBootstrapInterval(BaseModel):
+    """A deterministic paired percentile moving-block bootstrap.
 
-    The only interval type the decision layer accepts. Its metadata states the
-    resampling unit explicitly so a reader never has to infer whether
-    cross-asset dependence was preserved.
+    The only interval type the decision layer accepts. Its metadata states both
+    resampling units explicitly, so a reader never has to infer whether
+    cross-sectional or temporal dependence was preserved.
     """
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
     defined: bool
     method: str = BOOTSTRAP_METHOD
-    unit_of_resampling: str = BOOTSTRAP_UNIT_OF_RESAMPLING
+    base_resampling_unit: str = BOOTSTRAP_BASE_RESAMPLING_UNIT
+    temporal_resampling_unit: str = BOOTSTRAP_TEMPORAL_RESAMPLING_UNIT
     cluster_count: int = Field(ge=0)
     assets_per_cluster: int = Field(ge=0)
     observation_count: int = Field(ge=0)
+    block_length: int = Field(ge=0)
+    available_block_starts: int = Field(ge=0)
+    blocks_drawn_per_resample: int = Field(ge=0)
+    clusters_retained_per_resample: int = Field(ge=0)
     resamples: int = Field(ge=0)
     confidence_level: float
     seed: int
@@ -221,9 +263,12 @@ class ClusterBootstrapInterval(BaseModel):
     upper: float | None = None
     excludes_zero: bool = False
     excludes_zero_favorably: bool = False
-    #: Stated so no reader has to check the code to know assets were not
-    #: resampled independently inside an ordinal.
+    #: Stated so no reader has to read the code to know what was held together.
     assets_resampled_within_cluster: Literal[False] = False
+    origins_resampled_independently: Literal[False] = False
+    wraparound: Literal[False] = False
+    block_length_selected_before_execution: Literal[True] = True
+    block_length_tuned_from_results: Literal[False] = False
     undefined_reason: str | None = None
 
 
@@ -299,31 +344,57 @@ def _validate_clusters(clusters: tuple[OriginCluster, ...]) -> None:
                 )
 
 
-def paired_cluster_bootstrap(
+def block_starts(
+    clusters: int = BOOTSTRAP_CLUSTER_COUNT, length: int = BOOTSTRAP_BLOCK_LENGTH
+) -> tuple[int, ...]:
+    """Every valid contiguous block start. No wraparound, so 0..21."""
+    return tuple(range(clusters - length + 1))
+
+
+def paired_origin_moving_block_bootstrap(
     clusters: tuple[OriginCluster, ...],
     *,
+    block_length: int = BOOTSTRAP_BLOCK_LENGTH,
     seed: int,
     resamples: int,
     confidence_level: float,
-) -> ClusterBootstrapInterval:
-    """Percentile bootstrap of the mean paired difference, clustered by ordinal.
+) -> MovingBlockBootstrapInterval:
+    """Percentile moving-block bootstrap of the mean paired difference.
 
     The algorithm, exactly:
 
-    1. Validate the cluster structure. Anything malformed is a typed failure.
-    2. For each of ``resamples`` iterations, draw ``cluster_count`` ordinals with
-       replacement from a generator seeded once from the specification.
-    3. When an ordinal is drawn, take **all four** of its asset paired
-       differences. Assets are never drawn, weighted or omitted individually,
-       and never selected on their result.
-    4. Average the resulting ``cluster_count * assets_per_cluster``
-       observations to get one resampled mean.
+    1. Validate the cluster structure and the block length. Anything malformed
+       is a typed failure, never a quietly different computation.
+    2. Enumerate every valid contiguous block start: ``0..21`` for 25 clusters
+       and a block of 4. There is no wraparound, so ordinal 24 never joins
+       ordinal 0 -- those two windows are two years apart and adjoining them
+       would invent a transition the data never contained.
+    3. Seed one generator once from the specification.
+    4. For each of ``resamples`` iterations:
+       a. Draw 7 block starts with replacement from ``0..21``.
+       b. Expand each start into its 4 consecutive origin clusters, in
+          chronological order.
+       c. Concatenate to 28 cluster positions and keep the first 25.
+       d. Every retained cluster contributes all four of its assets, so the
+          denominator is exactly 100 paired differences.
+       e. Average those 100 observations into one resampled mean.
     5. Take the percentile interval from the sorted resampled means.
 
-    The point estimate is the mean over all observations as actually measured,
-    not a resampled quantity. Only the uncertainty comes from the 25 clusters.
+    The point estimate is the mean over all 100 measured observations, not a
+    resampled quantity -- equivalently, the mean of the 25 four-asset cluster
+    means. Only the uncertainty comes from the block resampling.
     """
     _validate_clusters(clusters)
+    if block_length != BOOTSTRAP_BLOCK_LENGTH:
+        raise _fail(
+            "ZERO_SHOT_BOOTSTRAP_BLOCK_LENGTH_INVALID",
+            (
+                f"the block length is fixed at {BOOTSTRAP_BLOCK_LENGTH} by the benchmark "
+                f"geometry, ceil({CONTEXT_CANDLES} / {ORIGIN_STRIDE}); got {block_length}. "
+                "It is predeclared and may not be estimated or tuned from results"
+            ),
+            field="block_length",
+        )
     if resamples <= 0:
         raise _fail(
             "ZERO_SHOT_BOOTSTRAP_RESAMPLES_INVALID",
@@ -341,15 +412,35 @@ def paired_cluster_bootstrap(
     per_cluster_totals = [sum(cluster.paired_differences) for cluster in clusters]
     observations = cluster_count * BOOTSTRAP_ASSETS_PER_CLUSTER
 
+    starts = block_starts(cluster_count, block_length)
+    start_count = len(starts)
+    blocks_per_resample = -(-cluster_count // block_length)
+
+    # Precompute each block's total once. A block is 4 consecutive ordinals in
+    # chronological order; summing it here does not reorder anything, it just
+    # avoids re-walking the same four clusters 2000 times.
+    block_totals = [
+        sum(per_cluster_totals[start : start + block_length]) for start in starts
+    ]
+    # The truncated tail: the 7th block contributes only its first
+    # (25 - 6*4) = 1 cluster, so its partial total is precomputed too.
+    retained_in_last = cluster_count - block_length * (blocks_per_resample - 1)
+    partial_totals = [
+        sum(per_cluster_totals[start : start + retained_in_last]) for start in starts
+    ]
+
     generator = random.Random(seed)
     means: list[float] = []
     for _ in range(resamples):
         total = 0.0
-        for _ in range(cluster_count):
-            # One draw selects an ordinal, and an ordinal is indivisible: its
-            # four asset differences enter together, which is what preserves the
-            # cross-sectional dependence between the four ETFs.
-            total += per_cluster_totals[generator.randrange(cluster_count)]
+        for block in range(blocks_per_resample):
+            drawn = generator.randrange(start_count)
+            # Whole blocks except the last, which is truncated so exactly 25
+            # cluster positions are retained.
+            if block < blocks_per_resample - 1:
+                total += block_totals[drawn]
+            else:
+                total += partial_totals[drawn]
         means.append(total / observations)
     means.sort()
 
@@ -358,11 +449,15 @@ def paired_cluster_bootstrap(
     upper = means[math.ceil((1.0 - tail) * (resamples - 1))]
     point = sum(per_cluster_totals) / observations
     excludes = (lower > 0.0 and upper > 0.0) or (lower < 0.0 and upper < 0.0)
-    return ClusterBootstrapInterval(
+    return MovingBlockBootstrapInterval(
         defined=True,
         cluster_count=cluster_count,
         assets_per_cluster=BOOTSTRAP_ASSETS_PER_CLUSTER,
         observation_count=observations,
+        block_length=block_length,
+        available_block_starts=start_count,
+        blocks_drawn_per_resample=blocks_per_resample,
+        clusters_retained_per_resample=cluster_count,
         resamples=resamples,
         confidence_level=confidence_level,
         seed=seed,
@@ -371,14 +466,14 @@ def paired_cluster_bootstrap(
         upper=upper,
         excludes_zero=excludes,
         # Favorable means the whole interval sits above zero: the candidate beat
-        # persistence by a margin the cluster resampling did not erase.
+        # persistence by a margin the block resampling did not erase.
         excludes_zero_favorably=lower > 0.0,
     )
 
 
-def undefined_cluster_bootstrap(
+def undefined_moving_block_bootstrap(
     *, seed: int, resamples: int, confidence_level: float, reason: str
-) -> ClusterBootstrapInterval:
+) -> MovingBlockBootstrapInterval:
     """An interval that could not be computed, stated rather than faked.
 
     Used when a paired difference is undefined somewhere in the panel. The run
@@ -386,11 +481,15 @@ def undefined_cluster_bootstrap(
     Z5 limitation carries the reason -- rather than the bootstrap silently
     running on a smaller, narrower sample.
     """
-    return ClusterBootstrapInterval(
+    return MovingBlockBootstrapInterval(
         defined=False,
         cluster_count=0,
         assets_per_cluster=BOOTSTRAP_ASSETS_PER_CLUSTER,
         observation_count=0,
+        block_length=BOOTSTRAP_BLOCK_LENGTH,
+        available_block_starts=BOOTSTRAP_AVAILABLE_BLOCK_STARTS,
+        blocks_drawn_per_resample=BOOTSTRAP_BLOCKS_PER_RESAMPLE,
+        clusters_retained_per_resample=0,
         resamples=resamples,
         confidence_level=confidence_level,
         seed=seed,

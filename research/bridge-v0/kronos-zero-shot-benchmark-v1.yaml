@@ -405,60 +405,126 @@ metrics:
     asset-origin. Positive is favorable.
 
 bootstrap:
-  method: paired_percentile_cluster_bootstrap_over_origin_ordinals
-  unit_of_resampling: origin_ordinal_cluster_all_assets
+  method: paired_percentile_moving_block_bootstrap_over_origin_clusters
+  base_resampling_unit: origin_ordinal_cluster_all_assets
+  temporal_resampling_unit: four_consecutive_origin_clusters
   cluster_count: 25
   assets_per_cluster: 4
   observation_count: 100
+  block_length: 4
+  available_block_starts: 22
+  blocks_drawn_per_resample: 7
+  clusters_retained_per_resample: 25
   resamples: 2000
   confidence_level: 0.95
   seed: 20260803
   deterministic: true
   favorable_exclusion: lower_bound_greater_than_zero
   assets_resampled_within_cluster: false
+  origins_resampled_independently: false
+  wraparound: false
   cross_asset_dependence_preserved: true
-  rationale: >-
+  temporal_dependence_preserved: true
+
+  cross_sectional_rationale: >-
     SPY, QQQ, IWM and DIA are evaluated over the same chronological market
     windows, so their errors within an origin are cross-sectionally dependent.
     Treating the 100 asset-origins as 100 independent bootstrap units would
     understate uncertainty, produce intervals that are too narrow, and could let
     a spurious interval satisfy the Z1 favorable-exclusion requirement on its
-    own. The resampling unit is therefore the origin ordinal, and an ordinal is
-    indivisible: all four of its asset-level paired differences enter or none
-    do.
+    own. The base resampling unit is therefore the origin ordinal, and an
+    ordinal is indivisible: all four of its asset-level paired differences enter
+    or none do.
+
+  temporal_rationale: >-
+    The origins are sequential and their information windows overlap, so the 25
+    origin clusters are not independent either. With a 40-session context and a
+    12-session stride, adjacent origins share 28 context sessions, origins two
+    strides apart share 16, and origins three strides apart share 4. Origins
+    four strides apart share none. Separately, the twelve target sessions of one
+    origin become part of the context available to later origins. Sampling the
+    25 clusters independently would therefore understate uncertainty for exactly
+    the same reason sampling the four assets independently would, so the
+    clusters are resampled in consecutive temporal blocks instead.
+
+  block_length_derivation:
+    formula: ceil(context_length / origin_stride)
+    computation: ceil(40 / 12) = 4
+    justification: >-
+      Four is the smallest block that spans every directly overlapping context
+      relationship. Origins separated by one, two or three strides share context
+      rows and must be able to travel together; origins separated by four
+      strides share none, so a longer block would discard usable resampling
+      variety without capturing further dependence.
+    selected_before_execution: true
+    estimated_or_tuned_from_results: false
+    may_be_changed_after_results_exist: false
+
   algorithm:
-    - Validate the cluster structure; anything malformed is a typed failure.
-    - Seed one deterministic generator from the seed above.
-    - For each of the 2000 resamples, sample exactly 25 origin ordinals with replacement.
-    - When an ordinal is selected, include all four of its asset paired differences.
-    - Average the resulting 100 observations to obtain one resampled mean.
+    - Validate the cluster structure and the block length; anything malformed is a typed failure.
+    - Seed one random.Random once with 20260803.
+    - >-
+      Enumerate every valid contiguous four-origin block without wraparound:
+      0..3, 1..4, through 21..24, giving 22 available block starts.
+    - For each of the 2000 resamples, draw seven block starts with replacement from 0..21.
+    - Expand each selected start into its four consecutive origin clusters, in chronological order.
+    - Concatenate the seven blocks, producing 28 cluster positions.
+    - Keep the first 25 positions.
+    - Every retained origin cluster contributes all four of its assets together.
+    - Average the resulting 100 paired differences to obtain one resampled mean.
     - Take the 95% percentile interval from the sorted resampled means.
+
   point_estimate: >-
-    The mean paired difference across all 100 asset-origins as actually
-    measured. Only the uncertainty is estimated from the 25 chronological
-    clusters; the point estimate is not a resampled quantity.
-  effective_sample_size_for_uncertainty: 25
+    The mean paired difference across all 100 measured asset-origins, which is
+    equivalent to the mean of the 25 four-asset cluster means. Only the
+    uncertainty comes from the block resampling; the point estimate is not a
+    resampled quantity.
+
+  effective_sample_size_for_uncertainty: >-
+    Approximately 25 / 4 independent temporal blocks, materially fewer than 25
+    and far fewer than 100. This is the honest cost of overlapping windows.
+
   prohibited:
     - independently resampling assets within an ordinal
+    - independently resampling origin ordinals
     - selecting, weighting or omitting an asset based on its result
+    - reordering origins inside a selected block
+    - wrapping ordinal 24 around to ordinal 0
+    - estimating or tuning the block length from results
     - reducing the bootstrap sample when an observation is undefined
     - using any individual asset-origin interval in a decision rule
+    - using any independent origin-cluster interval in a decision rule
+
   individual_asset_origin_bootstrap:
     retained: false
     decision_bearing: false
+  independent_origin_cluster_bootstrap:
+    retained: false
+    decision_bearing: false
     note: >-
-      Omitted entirely rather than kept as a labelled alternative. No function
-      producing a flat asset-origin interval exists in the implementation, so
-      "the decision layer cannot read one" is a structural fact rather than a
-      convention.
+      Both superseded designs are omitted entirely rather than kept as labelled
+      alternatives. No function producing either interval exists in the
+      implementation, and the decision layer accepts only the moving-block
+      interval type, so "no weaker interval can reach Z1" is a structural fact
+      rather than a convention.
+
   undefined_input_policy: >-
     A missing or non-finite paired difference never shrinks the bootstrap
     sample. It produces an explicitly undefined interval and activates the
     predeclared Z5 limitation, or a typed failure. Shrinking the sample would
     narrow the interval, which is the exact error this design removes.
+
+  correction_status: >-
+    The benchmark has never been deployed, invoked or executed, no market data
+    has been retrieved, no result exists and no zsb_ identifier has been
+    created. v1 is therefore corrected in place before any result exists, rather
+    than superseded by a v2 that would preserve an unexecuted and indefensible
+    design.
+
   note: >-
-    The seed, resample count, cluster count and confidence level are fixed here,
-    before execution, so the interval is reproducible and cannot be re-rolled.
+    The seed, resample count, cluster count, block length and confidence level
+    are all fixed here, before execution, so the interval is reproducible and
+    cannot be re-rolled.
 
 # ---------------------------------------------------------------------------
 # Cross-asset calendar alignment - proved, not assumed
@@ -521,13 +587,14 @@ decision_rules:
         - at least 60 percent of origins beat persistence
         - the result holds on at least 3 of the 4 assets
         - >-
-          the paired CLUSTER bootstrap confidence interval, resampled over the 25
-          origin ordinals, excludes zero in the favorable direction
-      interval_used: cluster_bootstrap_only
+          the paired MOVING-BLOCK bootstrap confidence interval, resampled over
+          consecutive four-origin clusters, excludes zero in the favorable
+          direction
+      interval_used: moving_block_bootstrap_only
       interval_note: >-
-        Z1 reads the clustered interval and nothing else. No individual
-        asset-origin interval exists in the implementation, so none can reach
-        this rule.
+        Z1 reads the moving-block interval and nothing else. Neither an
+        individual asset-origin interval nor an independent origin-cluster
+        interval exists in the implementation, so neither can reach this rule.
     - id: Z2
       name: ISOLATED_CONFIGURATION_EFFECT
       matches_if: >-

@@ -39,22 +39,26 @@ from ..phase2.measurement import GpuMeasurement, gpu_snapshot, reset_gpu_statist
 from ..phase2.provider import Phase2Provider, RetrievalRequest, validate_series
 from .aggregation import (
     BOOTSTRAP_ASSETS_PER_CLUSTER,
+    BOOTSTRAP_AVAILABLE_BLOCK_STARTS,
+    BOOTSTRAP_BASE_RESAMPLING_UNIT,
+    BOOTSTRAP_BLOCK_LENGTH,
+    BOOTSTRAP_BLOCKS_PER_RESAMPLE,
     BOOTSTRAP_CLUSTER_COUNT,
     BOOTSTRAP_METHOD,
     BOOTSTRAP_OBSERVATION_COUNT,
-    BOOTSTRAP_UNIT_OF_RESAMPLING,
-    ClusterBootstrapInterval,
+    BOOTSTRAP_TEMPORAL_RESAMPLING_UNIT,
     DistributionSummary,
     ExtendedForecastMetrics,
+    MovingBlockBootstrapInterval,
     OriginCluster,
     StepSummary,
     absolute_return_errors,
     extended_metrics,
-    paired_cluster_bootstrap,
+    paired_origin_moving_block_bootstrap,
     relative_skill,
     step_summaries,
     summarize,
-    undefined_cluster_bootstrap,
+    undefined_moving_block_bootstrap,
 )
 from .baselines import PRIMARY_BASELINE_ID, build_baselines
 from .decision import (
@@ -300,8 +304,9 @@ class ConfigurationAggregate(BaseModel):
     #: The clusters the interval was actually computed from, recorded so the
     #: interval can be recomputed from the artifact alone.
     origin_clusters: tuple[OriginCluster, ...]
-    #: The only interval Z1 reads. There is no flat asset-origin alternative.
-    cluster_bootstrap: ClusterBootstrapInterval
+    #: The only interval Z1 reads. There is no flat asset-origin alternative and
+    #: no independent origin-cluster alternative.
+    moving_block_bootstrap: MovingBlockBootstrapInterval
 
 
 class ZeroShotBenchmarkArtifact(BaseModel):
@@ -349,10 +354,14 @@ class ZeroShotBenchmarkArtifact(BaseModel):
     secondary_metrics: tuple[str, ...] = SECONDARY_METRICS
 
     bootstrap_method: str
-    bootstrap_unit_of_resampling: str
+    bootstrap_base_resampling_unit: str
+    bootstrap_temporal_resampling_unit: str
     bootstrap_cluster_count: int
     bootstrap_assets_per_cluster: int
     bootstrap_observation_count: int
+    bootstrap_block_length: int
+    bootstrap_available_block_starts: int
+    bootstrap_blocks_per_resample: int
     bootstrap_resamples: int
     bootstrap_confidence_level: float
     bootstrap_seed: int
@@ -919,7 +928,7 @@ def _aggregate(
         configuration_label=configuration.label, origins=origins
     )
     if clusters is None:
-        interval = undefined_cluster_bootstrap(
+        interval = undefined_moving_block_bootstrap(
             seed=BOOTSTRAP_SEED,
             resamples=BOOTSTRAP_RESAMPLES,
             confidence_level=BOOTSTRAP_CONFIDENCE_LEVEL,
@@ -927,8 +936,9 @@ def _aggregate(
         )
         clusters = ()
     else:
-        interval = paired_cluster_bootstrap(
+        interval = paired_origin_moving_block_bootstrap(
             clusters,
+            block_length=BOOTSTRAP_BLOCK_LENGTH,
             seed=BOOTSTRAP_SEED,
             resamples=BOOTSTRAP_RESAMPLES,
             confidence_level=BOOTSTRAP_CONFIDENCE_LEVEL,
@@ -952,7 +962,7 @@ def _aggregate(
             horizon=HORIZON_CANDLES,
         ),
         origin_clusters=clusters,
-        cluster_bootstrap=interval,
+        moving_block_bootstrap=interval,
     )
 
 
@@ -1009,7 +1019,7 @@ def _evidence(aggregate: ConfigurationAggregate) -> ConfigurationEvidence:
             for asset in aggregate.assets
         ),
         # Only the clustered interval is handed to the decision layer.
-        bootstrap=aggregate.cluster_bootstrap,
+        bootstrap=aggregate.moving_block_bootstrap,
     )
 
 
@@ -1165,10 +1175,14 @@ def run_zero_shot_benchmark(
         sampling_configurations=configurations,
         ensemble_seeds=seeds,
         bootstrap_method=BOOTSTRAP_METHOD,
-        bootstrap_unit_of_resampling=BOOTSTRAP_UNIT_OF_RESAMPLING,
+        bootstrap_base_resampling_unit=BOOTSTRAP_BASE_RESAMPLING_UNIT,
+        bootstrap_temporal_resampling_unit=BOOTSTRAP_TEMPORAL_RESAMPLING_UNIT,
         bootstrap_cluster_count=BOOTSTRAP_CLUSTER_COUNT,
         bootstrap_assets_per_cluster=BOOTSTRAP_ASSETS_PER_CLUSTER,
         bootstrap_observation_count=BOOTSTRAP_OBSERVATION_COUNT,
+        bootstrap_block_length=BOOTSTRAP_BLOCK_LENGTH,
+        bootstrap_available_block_starts=BOOTSTRAP_AVAILABLE_BLOCK_STARTS,
+        bootstrap_blocks_per_resample=BOOTSTRAP_BLOCKS_PER_RESAMPLE,
         bootstrap_resamples=BOOTSTRAP_RESAMPLES,
         bootstrap_confidence_level=BOOTSTRAP_CONFIDENCE_LEVEL,
         bootstrap_seed=BOOTSTRAP_SEED,
