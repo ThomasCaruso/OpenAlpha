@@ -14,10 +14,12 @@ import ast
 import hashlib
 import json
 import math
+import random
 import subprocess
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import pytest
 from openalpha_bridge.base_study.spec import (
@@ -35,7 +37,7 @@ from openalpha_bridge.diagnostic.backends import (
     StepSampling,
     TokenPair,
 )
-from openalpha_bridge.diagnostic.normalization import NormalizationState
+from openalpha_bridge.diagnostic.normalization import ClippingReport, NormalizationState
 from openalpha_bridge.diagnostic.official_input import OfficialRow, TimeStamp
 from openalpha_bridge.diagnostic.spec import (
     OFFICIAL_SOURCE_FILES,
@@ -46,8 +48,22 @@ from openalpha_bridge.phase2.identity import verify_locked_hashes
 from openalpha_bridge.phase2.invocation import RUN_ID_PATTERN as MINI_RUN_ID_PATTERN
 from openalpha_bridge.phase2.kronos import SOURCE_SPEC
 from openalpha_bridge.phase2.provider import Candle, MarketSeries, ProviderMode, RetrievalRequest
+from openalpha_bridge.zero_shot import aggregation as aggregation_module
 from openalpha_bridge.zero_shot import baselines as baselines_module
-from openalpha_bridge.zero_shot.aggregation import extended_metrics, paired_bootstrap, summarize
+from openalpha_bridge.zero_shot.aggregation import (
+    BOOTSTRAP_ASSETS_PER_CLUSTER,
+    BOOTSTRAP_CLUSTER_COUNT,
+    BOOTSTRAP_OBSERVATION_COUNT,
+    ClusterBootstrapInterval,
+    OriginCluster,
+    extended_metrics,
+    paired_cluster_bootstrap,
+    summarize,
+    undefined_cluster_bootstrap,
+)
+from openalpha_bridge.zero_shot.aggregation import (
+    ExtendedForecastMetrics as ExtendedForecastMetricsModel,
+)
 from openalpha_bridge.zero_shot.artifact import (
     ZERO_SHOT_FAILURE_CODE,
     ZERO_SHOT_OPERATIONAL_FAILURE_CODE,
@@ -70,6 +86,7 @@ from openalpha_bridge.zero_shot.origins import (
     resolve_origins,
     verify_origin_policy,
 )
+from openalpha_bridge.zero_shot.runner import verify_cross_asset_alignment
 from openalpha_bridge.zero_shot.spec import (
     ASSET_PANEL,
     BOOTSTRAP_RESAMPLES,
@@ -93,6 +110,7 @@ from openalpha_bridge.zero_shot.worker import (
     ZeroShotWorkerResult,
     run_zero_shot_benchmark_worker,
 )
+from pydantic import ValidationError
 
 REPO = Path(__file__).resolve().parents[3]
 RESEARCH = REPO / "research" / "bridge-v0"
@@ -1149,8 +1167,6 @@ def _evidence(
     lower: float,
     upper: float,
 ) -> ConfigurationEvidence:
-    from openalpha_bridge.zero_shot.aggregation import BootstrapInterval
-
     return ConfigurationEvidence(
         label=label,
         temperature=temperature,
@@ -1167,9 +1183,11 @@ def _evidence(
             )
             for index, asset in enumerate(ASSET_PANEL)
         ),
-        bootstrap=BootstrapInterval(
+        bootstrap=ClusterBootstrapInterval(
             defined=True,
-            sample_size=100,
+            cluster_count=BOOTSTRAP_CLUSTER_COUNT,
+            assets_per_cluster=BOOTSTRAP_ASSETS_PER_CLUSTER,
+            observation_count=BOOTSTRAP_OBSERVATION_COUNT,
             resamples=BOOTSTRAP_RESAMPLES,
             confidence_level=0.95,
             seed=BOOTSTRAP_SEED,
@@ -1180,6 +1198,24 @@ def _evidence(
             excludes_zero_favorably=lower > 0.0,
         ),
     )
+
+
+def _clusters(
+    values: list[tuple[float, float, float, float]],
+    *,
+    assets: tuple[str, ...] = ASSET_PANEL,
+    ordinals: list[int] | None = None,
+) -> tuple[OriginCluster, ...]:
+    """Build well-formed clusters, or deliberately malformed ones."""
+    chosen = ordinals if ordinals is not None else list(range(len(values)))
+    return tuple(
+        OriginCluster(ordinal=ordinal, assets=assets, paired_differences=tuple(row))
+        for ordinal, row in zip(chosen, values, strict=True)
+    )
+
+
+def _uniform_clusters(value: float = 0.001) -> tuple[OriginCluster, ...]:
+    return _clusters([(value, value, value, value) for _ in range(BOOTSTRAP_CLUSTER_COUNT)])
 
 
 def test_z1_requires_all_four_conditions() -> None:
@@ -1286,35 +1322,535 @@ def test_the_four_predeclared_outcomes_are_exactly_these() -> None:
     }
 
 
-# ====== aggregation and the bootstrap ================================
+# ====== C1-C2: the resampling unit is the ordinal, and it is indivisible ====
 
 
-def test_the_bootstrap_is_deterministic_and_seeded_from_the_specification() -> None:
-    differences = [0.001 * ((index % 7) - 3) for index in range(100)]
-    first = paired_bootstrap(
-        differences, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
+def test_the_bootstrap_resamples_ordinals_not_individual_asset_origin_rows() -> None:
+    """Observe the draws directly rather than inferring them from the output.
+
+    One ordinal is made hugely different from the rest. If assets were drawn
+    individually there would be 100 units and the giant ordinal's four rows
+    could be split across a resample; because the ordinal is indivisible, every
+    resampled mean is a multiple of 1/25 of whole-cluster totals.
+    """
+    calls: list[int] = []
+    real_randrange = random.Random.randrange
+
+    def recording(self: random.Random, *args: Any, **kwargs: Any) -> int:
+        drawn = real_randrange(self, *args, **kwargs)
+        calls.append(args[0] if args else -1)
+        return drawn
+
+    clusters = _uniform_clusters()
+    with mock.patch.object(random.Random, "randrange", recording):
+        interval = paired_cluster_bootstrap(
+            clusters, seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
+        )
+
+    # Every draw is over 25 clusters, never over 100 rows.
+    assert set(calls) == {BOOTSTRAP_CLUSTER_COUNT}
+    assert len(calls) == 10 * BOOTSTRAP_CLUSTER_COUNT
+    assert interval.cluster_count == BOOTSTRAP_CLUSTER_COUNT
+    assert interval.assets_resampled_within_cluster is False
+
+
+def test_selecting_one_ordinal_always_selects_all_four_asset_differences() -> None:
+    """A lone non-zero cluster can only ever contribute all four of its values."""
+    rows = [(0.0, 0.0, 0.0, 0.0) for _ in range(BOOTSTRAP_CLUSTER_COUNT)]
+    rows[7] = (1.0, 2.0, 3.0, 4.0)  # sums to 10.0
+    interval = paired_cluster_bootstrap(
+        _clusters(rows), seed=BOOTSTRAP_SEED, resamples=500, confidence_level=0.95
     )
-    second = paired_bootstrap(
-        differences, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
+    assert interval.defined is True
+    assert interval.observation_count == BOOTSTRAP_OBSERVATION_COUNT
+
+    # Each resampled mean must be k * 10.0 / 100 for an integer k: the cluster
+    # enters whole or not at all. A partial contribution (say one asset's 1.0)
+    # would produce a mean that is not a multiple of the cluster total.
+    step = 10.0 / BOOTSTRAP_OBSERVATION_COUNT
+    for value in (interval.lower, interval.upper, interval.point_estimate):
+        assert value is not None
+        multiples = value / step
+        assert multiples == pytest.approx(round(multiples), abs=1e-9)
+    assert interval.point_estimate == pytest.approx(10.0 / BOOTSTRAP_OBSERVATION_COUNT)
+
+
+# ====== C3-C9: cluster structure is validated, never silently repaired =====
+
+
+def test_exactly_twenty_five_clusters_are_required() -> None:
+    for count in (24, 26, 0):
+        rows = [(0.001, 0.001, 0.001, 0.001) for _ in range(count)]
+        with pytest.raises(BridgeTransformError) as excinfo:
+            paired_cluster_bootstrap(
+                _clusters(rows), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
+            )
+        assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_CLUSTER_COUNT_INVALID"
+    assert BOOTSTRAP_CLUSTER_COUNT == 25
+
+
+def test_every_cluster_must_carry_exactly_four_assets() -> None:
+    clusters = list(_uniform_clusters())
+    clusters[3] = OriginCluster(
+        ordinal=3, assets=("SPY", "QQQ", "IWM"), paired_differences=(0.1, 0.1, 0.1)
+    )
+    with pytest.raises(BridgeTransformError) as excinfo:
+        paired_cluster_bootstrap(
+            tuple(clusters), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
+        )
+    assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_CLUSTER_ASSET_COUNT_INVALID"
+    assert BOOTSTRAP_ASSETS_PER_CLUSTER == 4
+
+
+def test_the_cluster_asset_identities_must_be_the_preregistered_panel() -> None:
+    assert ASSET_PANEL == ("SPY", "QQQ", "IWM", "DIA")
+    clusters = list(_uniform_clusters())
+    clusters[0] = OriginCluster(
+        ordinal=0, assets=("SPY", "QQQ", "IWM", "VOO"), paired_differences=(0.1, 0.1, 0.1, 0.1)
+    )
+    with pytest.raises(BridgeTransformError) as excinfo:
+        paired_cluster_bootstrap(
+            tuple(clusters), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
+        )
+    assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_ASSET_PANEL_MISMATCH"
+
+
+def test_a_duplicated_asset_in_a_cluster_is_rejected() -> None:
+    clusters = list(_uniform_clusters())
+    clusters[5] = OriginCluster(
+        ordinal=5, assets=("SPY", "SPY", "IWM", "DIA"), paired_differences=(0.1, 0.1, 0.1, 0.1)
+    )
+    with pytest.raises(BridgeTransformError) as excinfo:
+        paired_cluster_bootstrap(
+            tuple(clusters), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
+        )
+    assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_DUPLICATE_ASSET"
+
+
+def test_a_missing_paired_difference_is_rejected() -> None:
+    clusters = list(_uniform_clusters())
+    clusters[2] = OriginCluster(
+        ordinal=2, assets=ASSET_PANEL, paired_differences=(0.1, 0.1, 0.1)
+    )
+    with pytest.raises(BridgeTransformError) as excinfo:
+        paired_cluster_bootstrap(
+            tuple(clusters), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
+        )
+    assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_MISSING_DIFFERENCE"
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_paired_difference_is_rejected_at_the_type_boundary(bad: float) -> None:
+    """The cluster model refuses it before the bootstrap is ever called."""
+    with pytest.raises(ValidationError):
+        OriginCluster(ordinal=9, assets=ASSET_PANEL, paired_differences=(0.001, bad, 0.001, 0.001))
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_difference_is_also_caught_if_the_model_is_bypassed(bad: float) -> None:
+    """Defense in depth: the runtime guard stands even without model validation.
+
+    ``model_construct`` skips validation the way a future refactor might. The
+    bootstrap must still refuse rather than propagate a non-finite mean.
+    """
+    clusters = list(_uniform_clusters())
+    clusters[9] = OriginCluster.model_construct(
+        ordinal=9, assets=ASSET_PANEL, paired_differences=(0.001, bad, 0.001, 0.001)
+    )
+    with pytest.raises(BridgeTransformError) as excinfo:
+        paired_cluster_bootstrap(
+            tuple(clusters), seed=BOOTSTRAP_SEED, resamples=10, confidence_level=0.95
+        )
+    assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_NON_FINITE_DIFFERENCE"
+
+
+def test_the_ordinals_must_be_exactly_zero_through_twenty_four() -> None:
+    rows = [(0.001, 0.001, 0.001, 0.001) for _ in range(BOOTSTRAP_CLUSTER_COUNT)]
+    for ordinals in (
+        [*range(1, BOOTSTRAP_CLUSTER_COUNT + 1)],  # shifted
+        [*range(BOOTSTRAP_CLUSTER_COUNT - 1), 0],  # duplicated / unsorted
+    ):
+        with pytest.raises(BridgeTransformError) as excinfo:
+            paired_cluster_bootstrap(
+                _clusters(rows, ordinals=ordinals),
+                seed=BOOTSTRAP_SEED,
+                resamples=10,
+                confidence_level=0.95,
+            )
+        assert excinfo.value.failures[0].code == "ZERO_SHOT_BOOTSTRAP_ORDINALS_INVALID"
+
+
+def test_an_undefined_difference_never_shrinks_the_bootstrap_sample() -> None:
+    """The undefined path reports absence; it does not resample a smaller panel."""
+    interval = undefined_cluster_bootstrap(
+        seed=BOOTSTRAP_SEED,
+        resamples=BOOTSTRAP_RESAMPLES,
+        confidence_level=0.95,
+        reason="the paired difference is undefined at ordinal 4 for IWM",
+    )
+    assert interval.defined is False
+    assert interval.cluster_count == 0
+    assert interval.observation_count == 0
+    assert interval.lower is None and interval.upper is None
+    assert interval.excludes_zero_favorably is False
+    assert interval.undefined_reason is not None
+
+
+# ====== C10-C12: determinism, metadata, and the width property =============
+
+
+def test_the_cluster_bootstrap_is_deterministic_under_the_preregistered_seed() -> None:
+    rows = [
+        (
+            0.001 * ((index % 7) - 3),
+            0.001 * ((index % 5) - 2),
+            0.001 * ((index % 3) - 1),
+            0.001 * ((index % 11) - 5),
+        )
+        for index in range(BOOTSTRAP_CLUSTER_COUNT)
+    ]
+    first = paired_cluster_bootstrap(
+        _clusters(rows),
+        seed=BOOTSTRAP_SEED,
+        resamples=BOOTSTRAP_RESAMPLES,
+        confidence_level=0.95,
+    )
+    second = paired_cluster_bootstrap(
+        _clusters(rows),
+        seed=BOOTSTRAP_SEED,
+        resamples=BOOTSTRAP_RESAMPLES,
+        confidence_level=0.95,
     )
     assert first == second
-    assert first.defined is True
-    assert first.sample_size == 100
+    assert BOOTSTRAP_SEED == 20260803
+    assert first.seed == 20260803
     assert first.lower is not None and first.upper is not None
     assert first.lower <= first.upper
 
-    favorable = paired_bootstrap(
-        [0.01] * 50, seed=BOOTSTRAP_SEED, resamples=200, confidence_level=0.95
+    different = paired_cluster_bootstrap(
+        _clusters(rows), seed=BOOTSTRAP_SEED + 1, resamples=200, confidence_level=0.95
+    )
+    assert different.seed != first.seed
+
+
+def test_the_interval_metadata_reports_the_corrected_design() -> None:
+    interval = paired_cluster_bootstrap(
+        _uniform_clusters(), seed=BOOTSTRAP_SEED, resamples=200, confidence_level=0.95
+    )
+    assert interval.method == "paired_percentile_cluster_bootstrap_over_origin_ordinals"
+    assert interval.unit_of_resampling == "origin_ordinal_cluster_all_assets"
+    assert interval.cluster_count == 25
+    assert interval.assets_per_cluster == 4
+    assert interval.observation_count == 100
+    assert interval.resamples == 200
+    assert interval.confidence_level == 0.95
+    assert interval.seed == BOOTSTRAP_SEED
+    assert interval.assets_resampled_within_cluster is False
+
+    favorable = paired_cluster_bootstrap(
+        _uniform_clusters(0.01), seed=BOOTSTRAP_SEED, resamples=200, confidence_level=0.95
     )
     assert favorable.excludes_zero_favorably is True
-
-    unfavorable = paired_bootstrap(
-        [-0.01] * 50, seed=BOOTSTRAP_SEED, resamples=200, confidence_level=0.95
+    unfavorable = paired_cluster_bootstrap(
+        _uniform_clusters(-0.01), seed=BOOTSTRAP_SEED, resamples=200, confidence_level=0.95
     )
     assert unfavorable.excludes_zero is True
     assert unfavorable.excludes_zero_favorably is False
 
-    assert paired_bootstrap([], seed=1, resamples=10, confidence_level=0.95).defined is False
+
+def _independent_row_interval(
+    clusters: tuple[OriginCluster, ...], *, seed: int, resamples: int, confidence_level: float
+) -> tuple[float, float]:
+    """The discredited flat design, reimplemented HERE for comparison only.
+
+    It lives in the test rather than the library on purpose: the library must
+    not contain a function that could produce a decision-bearing flat interval.
+    """
+    rows = [value for cluster in clusters for value in cluster.paired_differences]
+    generator = random.Random(seed)
+    size = len(rows)
+    means: list[float] = []
+    for _ in range(resamples):
+        means.append(sum(rows[generator.randrange(size)] for _ in range(size)) / size)
+    means.sort()
+    tail = (1.0 - confidence_level) / 2.0
+    return means[math.floor(tail * (resamples - 1))], means[math.ceil((1.0 - tail) * (resamples - 1))]
+
+
+def test_perfectly_correlated_assets_give_a_wider_interval_than_row_resampling() -> None:
+    """The whole point of the correction, demonstrated numerically.
+
+    When the four ETFs move together -- which is the real situation being
+    modelled -- treating them as four independent draws shrinks the interval by
+    roughly a factor of two. The cluster design refuses that free precision.
+    """
+    rows = [
+        (v, v, v, v)
+        for v in (0.002 * ((index % 9) - 4) for index in range(BOOTSTRAP_CLUSTER_COUNT))
+    ]
+    clusters = _clusters(rows)
+
+    clustered = paired_cluster_bootstrap(
+        clusters, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
+    )
+    flat_lower, flat_upper = _independent_row_interval(
+        clusters, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
+    )
+
+    assert clustered.lower is not None and clustered.upper is not None
+    clustered_width = clustered.upper - clustered.lower
+    flat_width = flat_upper - flat_lower
+    assert clustered_width >= flat_width
+    # Not merely equal: with perfect correlation the flat design understates
+    # uncertainty substantially.
+    assert clustered_width > flat_width * 1.5
+
+
+def test_a_too_narrow_flat_interval_could_have_falsely_satisfied_z1() -> None:
+    """Why this matters: the corrected interval refuses a claim the flat one allows."""
+    # Mean 0.003 with a per-origin standard deviation of 0.01, four perfectly
+    # correlated assets. Flat resampling sees a standard error of sd/sqrt(100)
+    # and excludes zero; clustering sees sd/sqrt(25), twice as wide, and does
+    # not. The effect is favorable on average but not distinguishable from zero
+    # once cross-asset dependence is respected.
+    pattern = (-1.4142135623730951, -0.7071067811865476, 0.0, 0.7071067811865476, 1.4142135623730951)
+    rows = [
+        (v, v, v, v)
+        for v in (
+            0.003 + 0.01 * pattern[index % len(pattern)]
+            for index in range(BOOTSTRAP_CLUSTER_COUNT)
+        )
+    ]
+    clusters = _clusters(rows)
+    clustered = paired_cluster_bootstrap(
+        clusters, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
+    )
+    flat_lower, _ = _independent_row_interval(
+        clusters, seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES, confidence_level=0.95
+    )
+    assert clustered.point_estimate is not None and clustered.point_estimate > 0.0
+    assert flat_lower > 0.0, "the flat design would have claimed favorable exclusion"
+    assert clustered.excludes_zero_favorably is False, (
+        "the clustered design must not claim it"
+    )
+
+
+# ====== C13-C14: only the clustered interval reaches the decision layer ====
+
+
+def test_z1_reads_only_the_clustered_interval() -> None:
+    from openalpha_bridge.zero_shot.spec import ZERO_SHOT_THRESHOLDS
+
+    evidence = _evidence(
+        label="A", temperature=0.6, median=0.1, fraction=0.7, supporting=3,
+        lower=0.001, upper=0.01,
+    )
+    conditions = evidence.z1_conditions(ZERO_SHOT_THRESHOLDS)
+    assert "cluster_bootstrap_excludes_zero_favorably" in conditions
+    assert conditions["cluster_bootstrap_excludes_zero_favorably"] is True
+    assert not [key for key in conditions if key.startswith("bootstrap_")]
+    assert evidence.bootstrap.unit_of_resampling == "origin_ordinal_cluster_all_assets"
+
+
+def test_no_flat_asset_origin_interval_can_reach_the_decision_layer() -> None:
+    """Structural, not conventional: the flat function does not exist."""
+    assert not hasattr(aggregation_module, "paired_bootstrap")
+    assert not hasattr(aggregation_module, "BootstrapInterval")
+    assert "paired_bootstrap" not in ZERO_SHOT_NAMES
+
+    # ConfigurationEvidence accepts one interval type, and it is the clustered one.
+    annotation = ConfigurationEvidence.model_fields["bootstrap"].annotation
+    assert annotation is ClusterBootstrapInterval
+
+    with pytest.raises(ValidationError):
+        ConfigurationEvidence(
+            label="A",
+            temperature=0.6,
+            origins_scored=100,
+            pooled_median_relative_skill=0.1,
+            pooled_fraction_beating_persistence=0.7,
+            assets=(),
+            bootstrap={"defined": True, "sample_size": 100, "lower": 0.1},  # type: ignore[arg-type]
+        )
+
+
+def test_the_run_carries_the_clustered_interval_into_the_decision() -> None:
+    result, _, _, _ = _run()
+    payload = result.payload
+    assert payload["bootstrap_method"] == (
+        "paired_percentile_cluster_bootstrap_over_origin_ordinals"
+    )
+    assert payload["bootstrap_unit_of_resampling"] == "origin_ordinal_cluster_all_assets"
+    assert payload["bootstrap_cluster_count"] == 25
+    assert payload["bootstrap_assets_per_cluster"] == 4
+    assert payload["bootstrap_observation_count"] == 100
+    assert payload["bootstrap_seed"] == 20260803
+    assert payload["bootstrap_resamples"] == 2000
+
+    for aggregate in payload["aggregates"]:
+        assert "bootstrap" not in aggregate
+        interval = aggregate["cluster_bootstrap"]
+        assert interval["defined"] is True
+        assert interval["cluster_count"] == 25
+        assert interval["assets_per_cluster"] == 4
+        assert interval["observation_count"] == 100
+        assert interval["assets_resampled_within_cluster"] is False
+        assert len(aggregate["origin_clusters"]) == 25
+        for cluster in aggregate["origin_clusters"]:
+            assert cluster["assets"] == list(ASSET_PANEL)
+            assert len(cluster["paired_differences"]) == 4
+        assert [c["ordinal"] for c in aggregate["origin_clusters"]] == list(range(25))
+
+    for configuration in payload["decision"]["configurations"]:
+        assert configuration["bootstrap"]["unit_of_resampling"] == (
+            "origin_ordinal_cluster_all_assets"
+        )
+        assert configuration["bootstrap"]["cluster_count"] == 25
+
+
+def test_the_recorded_clusters_reproduce_the_recorded_interval() -> None:
+    """The artifact carries enough to recompute its own interval."""
+    result, _, _, _ = _run()
+    for aggregate in result.payload["aggregates"]:
+        clusters = tuple(
+            OriginCluster(
+                ordinal=entry["ordinal"],
+                assets=tuple(entry["assets"]),
+                paired_differences=tuple(entry["paired_differences"]),
+            )
+            for entry in aggregate["origin_clusters"]
+        )
+        recomputed = paired_cluster_bootstrap(
+            clusters,
+            seed=BOOTSTRAP_SEED,
+            resamples=BOOTSTRAP_RESAMPLES,
+            confidence_level=0.95,
+        )
+        assert recomputed.lower == pytest.approx(aggregate["cluster_bootstrap"]["lower"])
+        assert recomputed.upper == pytest.approx(aggregate["cluster_bootstrap"]["upper"])
+        assert recomputed.point_estimate == pytest.approx(
+            aggregate["cluster_bootstrap"]["point_estimate"]
+        )
+
+
+# ====== C15-C17: cross-asset calendar alignment ===========================
+
+
+def test_all_four_assets_share_target_and_context_dates_at_every_ordinal() -> None:
+    result, _, _, _ = _run()
+    alignment = result.payload["cross_asset_alignment"]
+    assert alignment["ordinals_checked"] == 25
+    assert alignment["assets_checked"] == list(ASSET_PANEL)
+    assert alignment["target_dates_aligned"] is True
+    assert alignment["context_dates_aligned"] is True
+    assert alignment["proved_from_retrieved_sessions"] is True
+
+    by_ordinal: dict[int, set[tuple[str, str, str, str]]] = {}
+    for origin in result.payload["origins"]:
+        by_ordinal.setdefault(origin["ordinal"], set()).add(
+            (
+                origin["target_first_session"],
+                origin["target_last_session"],
+                origin["context_first_session"],
+                origin["context_last_session"],
+            )
+        )
+    assert len(by_ordinal) == 25
+    for ordinal, windows in by_ordinal.items():
+        assert len(windows) == 1, f"ordinal {ordinal} spans more than one window"
+
+
+def _origin_result(asset: str, ordinal: int, *, shift_target: int = 0, shift_context: int = 0):
+    from openalpha_bridge.zero_shot.runner import OriginResult
+
+    base = date(2025, 6, 2)
+    return OriginResult(
+        asset=asset,
+        ordinal=ordinal,
+        origin_index=40 + 12 * ordinal,
+        context_first_session=base + timedelta(days=shift_context),
+        context_last_session=base + timedelta(days=39 + shift_context),
+        target_first_session=base + timedelta(days=40 + shift_target),
+        target_last_session=base + timedelta(days=51 + shift_target),
+        context_candles=CONTEXT_CANDLES,
+        horizon_candles=HORIZON_CANDLES,
+        anchor_close=100.0,
+        target_closes=tuple(100.0 for _ in range(HORIZON_CANDLES)),
+        normalization_state_sha256="d" * 64,
+        normalization_fitted_candle_count=CONTEXT_CANDLES,
+        context_clipping=ClippingReport(
+            rows=CONTEXT_CANDLES,
+            scalar_values=CONTEXT_CANDLES * 6,
+            clipped_scalar_values=0,
+            clipped_scalar_fraction=0.0,
+            clipped_by_column={},
+            clipped_fraction_by_column={},
+            rows_with_any_clipped_channel=0,
+            row_clipped_fraction=0.0,
+            clipped_row_indices=(),
+        ),
+        persistence_metrics=ExtendedForecastMetricsModel(defined=True),
+        persistence_step_absolute_return_errors=(),
+        baselines=(),
+        configurations=(),
+    )
+
+
+def test_a_mismatched_target_range_fails_with_the_typed_alignment_code() -> None:
+    origins = tuple(
+        _origin_result(asset, 0, shift_target=3 if asset == "IWM" else 0)
+        for asset in ASSET_PANEL
+    )
+    with pytest.raises(BridgeTransformError) as excinfo:
+        verify_cross_asset_alignment(origins)
+    failure = excinfo.value.failures[0]
+    assert failure.code == "ZERO_SHOT_CROSS_ASSET_ORIGIN_MISALIGNED"
+    assert "ordinal 0" in failure.message
+    assert "IWM" in failure.message
+    assert failure.field == "ordinal_0"
+
+
+def test_a_mismatched_context_range_is_also_rejected() -> None:
+    origins = tuple(
+        _origin_result(asset, 4, shift_context=2 if asset == "DIA" else 0)
+        for asset in ASSET_PANEL
+    )
+    with pytest.raises(BridgeTransformError) as excinfo:
+        verify_cross_asset_alignment(origins)
+    failure = excinfo.value.failures[0]
+    assert failure.code == "ZERO_SHOT_CROSS_ASSET_ORIGIN_MISALIGNED"
+    assert "context window disagrees" in failure.message
+    assert "DIA" in failure.message
+
+
+def test_a_missing_asset_at_an_ordinal_fails_rather_than_shrinking_the_panel() -> None:
+    origins = tuple(_origin_result(asset, 0) for asset in ASSET_PANEL[:3])
+    with pytest.raises(BridgeTransformError) as excinfo:
+        verify_cross_asset_alignment(origins)
+    failure = excinfo.value.failures[0]
+    assert failure.code == "ZERO_SHOT_CROSS_ASSET_ORIGIN_MISALIGNED"
+    assert "DIA" in failure.message
+
+
+def test_misalignment_publishes_a_typed_failure_and_no_interval() -> None:
+    """Fail closed end to end: one artifact, typed code, no fallback interval."""
+
+    class _MisalignedProvider(_PanelProvider):
+        def fetch(self, request: RetrievalRequest) -> MarketSeries:
+            series = super().fetch(request)
+            if request.symbol != "DIA":
+                return series
+            # Drop DIA's first session so every one of its origins lands on a
+            # different date than the other three.
+            return series.model_copy(update={"candles": series.candles[1:]})
+
+    factory = _Factory(provider=_MisalignedProvider())
+    result, store, _, _ = _run(factory=factory)
+    assert result.outcome == ZERO_SHOT_FAILURE_CODE
+    assert result.payload["failure_code"] == "ZERO_SHOT_CROSS_ASSET_ORIGIN_MISALIGNED"
+    assert store.list_keys("") == (zero_shot_artifact_key(RUN_ID),)
+    assert "cluster_bootstrap" not in result.payload
+    assert result.payload["scientific_result_available"] is False
 
 
 def test_every_declared_aggregation_level_is_present() -> None:
@@ -1339,8 +1875,8 @@ def test_every_declared_aggregation_level_is_present() -> None:
             for statistic in ("mean", "median", "standard_deviation"):
                 assert summary[statistic] is not None
         assert aggregate["fraction_beating_persistence"] is not None
-        assert aggregate["bootstrap"]["seed"] == BOOTSTRAP_SEED
-        assert aggregate["bootstrap"]["resamples"] == BOOTSTRAP_RESAMPLES
+        assert aggregate["cluster_bootstrap"]["seed"] == BOOTSTRAP_SEED
+        assert aggregate["cluster_bootstrap"]["resamples"] == BOOTSTRAP_RESAMPLES
     assert result.payload["primary_metric"] == PRIMARY_METRIC == "close_return_mae"
 
 
@@ -1362,6 +1898,96 @@ def test_the_single_path_is_ensemble_member_zero() -> None:
             assert configuration["single_path_metrics"]["close_return_mae"] == pytest.approx(
                 configuration["paths"][0]["close_return_mae"]
             )
+
+
+# ====== C18-C20: everything except the bootstrap structure is unchanged ====
+
+
+def test_every_benchmark_constant_except_the_bootstrap_structure_is_unchanged() -> None:
+    """The correction is narrow. This pins the blast radius.
+
+    If any of these move, the change stopped being a statistical-design
+    correction and became a redesign of the study.
+    """
+    from openalpha_bridge.zero_shot.origins import ORIGIN_STRIDE
+    from openalpha_bridge.zero_shot.spec import (
+        BOOTSTRAP_CONFIDENCE_LEVEL,
+        MAXIMUM_CONTEXT,
+        RETRIEVAL_END_EXCLUSIVE,
+        RETRIEVAL_MAXIMUM_CANDLES,
+        RETRIEVAL_START_INCLUSIVE,
+        ZERO_SHOT_ARTIFACT_OBJECT_NAME,
+        ZERO_SHOT_CACHE_VOLUME,
+        ZERO_SHOT_THRESHOLDS,
+    )
+
+    # Panel, window and provider policy.
+    assert ASSET_PANEL == ("SPY", "QQQ", "IWM", "DIA")
+    assert RETRIEVAL_START_INCLUSIVE == "2025-01-02"
+    assert RETRIEVAL_END_EXCLUSIVE == "2026-07-01"
+    assert RETRIEVAL_MAXIMUM_CANDLES == 512
+    assert REQUIRED_SESSIONS == 340
+
+    # Geometry.
+    assert CONTEXT_CANDLES == 40
+    assert HORIZON_CANDLES == 12
+    assert MAXIMUM_CONTEXT == 512
+    assert len(ORIGIN_INDEX_OFFSETS) == 25
+    assert ORIGIN_INDEX_OFFSETS[0] == 40
+    assert ORIGIN_INDEX_OFFSETS[-1] == 328
+    assert ORIGIN_STRIDE == 12
+
+    # Configurations and seeds.
+    assert [c.temperature for c in SAMPLING_CONFIGURATIONS] == [0.6, 1.0]
+    assert ENSEMBLE_SEEDS == (
+        20250102, 20250103, 20250104, 20250105, 20250106, 20250107, 20250108, 20250109,
+    )
+
+    # Candidate, baselines, metrics.
+    assert BASELINE_IDS == (
+        "zero_return_persistence",
+        "last_close_level",
+        "context_mean_return",
+        "context_drift",
+    )
+    assert PRIMARY_BASELINE_ID == "zero_return_persistence"
+    assert PRIMARY_METRIC == "close_return_mae"
+
+    # Z1 thresholds are untouched by this correction.
+    assert ZERO_SHOT_THRESHOLDS.minimum_median_relative_skill == 0.0
+    assert ZERO_SHOT_THRESHOLDS.minimum_fraction_of_origins_beating_persistence == 0.60
+    assert ZERO_SHOT_THRESHOLDS.minimum_supporting_assets == 3
+    assert ZERO_SHOT_THRESHOLDS.total_assets == 4
+
+    # Namespaces, identities and storage.
+    assert ZERO_SHOT_EXPERIMENT_ID == "openalpha-kronos-zero-shot-benchmark-v1"
+    assert ZERO_SHOT_ARTIFACT_ROOT == "openalpha-compatibility/kronos-zero-shot-benchmark"
+    assert ZERO_SHOT_ARTIFACT_OBJECT_NAME == "kronos_zero_shot_benchmark_terminal.json"
+    assert ZERO_SHOT_RUN_ID_PATTERN.pattern == r"^zsb_[0-9a-f]{8,32}$"
+    assert ZERO_SHOT_CACHE_VOLUME == "openalpha-kronos-base-cache"
+
+    # The parts of the bootstrap that were already correct.
+    assert BOOTSTRAP_SEED == 20260803
+    assert BOOTSTRAP_RESAMPLES == 2000
+    assert BOOTSTRAP_CONFIDENCE_LEVEL == 0.95
+
+    # And the model pair.
+    assert verify_pinned_pair()["model_revision"] == "2b554741eca47781b64468546e77fef3e85130e6"
+
+
+def test_the_completed_study_report_material_is_unchanged() -> None:
+    """The correction must not touch the completed structural studies."""
+    digests = {
+        "artifact-manifest.json": (
+            "666603480dd576cc1e6270a72cc853b25fe7477f715d59452433441c321ee11d"
+        ),
+        "results-summary.json": (
+            "fabd86207ca37dd7d6ec1e04e6cca916813c5e324d9fa18f03d368b821d1f25a"
+        ),
+    }
+    for name, expected in digests.items():
+        observed = hashlib.sha256((REPORT / name).read_bytes()).hexdigest()
+        assert observed == expected, f"{name} changed; the completed studies are immutable"
 
 
 # ====== 24: the repository size guard still applies ==================

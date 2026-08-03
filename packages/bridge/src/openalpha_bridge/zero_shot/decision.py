@@ -18,7 +18,7 @@ from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .aggregation import BootstrapInterval
+from .aggregation import ClusterBootstrapInterval
 from .spec import ZERO_SHOT_THRESHOLDS, ZeroShotThresholds
 
 __all__ = [
@@ -82,7 +82,7 @@ class ConfigurationEvidence(BaseModel):
     pooled_median_relative_skill: float | None = None
     pooled_fraction_beating_persistence: float | None = None
     assets: tuple[AssetSupport, ...]
-    bootstrap: BootstrapInterval
+    bootstrap: ClusterBootstrapInterval
 
     @property
     def supporting_assets(self) -> tuple[str, ...]:
@@ -103,7 +103,7 @@ class ConfigurationEvidence(BaseModel):
             "enough_supporting_assets": (
                 len(self.supporting_assets) >= thresholds.minimum_supporting_assets
             ),
-            "bootstrap_excludes_zero_favorably": (
+            "cluster_bootstrap_excludes_zero_favorably": (
                 self.bootstrap.defined and self.bootstrap.excludes_zero_favorably
             ),
         }
@@ -198,7 +198,8 @@ def decide(
             },
             detail=(
                 "median relative skill, the fraction of origins beating persistence, "
-                "per-asset support and the paired bootstrap interval, all four required"
+                "per-asset support and the paired CLUSTER bootstrap interval over the 25 "
+                "origin ordinals, all four required"
             ),
         ),
         RuleEvaluation(

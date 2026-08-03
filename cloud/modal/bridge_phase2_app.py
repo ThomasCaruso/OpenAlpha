@@ -1134,6 +1134,13 @@ def verify_zero_shot_benchmark_deployment() -> dict[str, Any]:
     )
     from openalpha_bridge.diagnostic.spec import verify_diagnostic_specifications
     from openalpha_bridge.phase2.identity import verify_locked_hashes
+    from openalpha_bridge.zero_shot.aggregation import (
+        BOOTSTRAP_ASSETS_PER_CLUSTER,
+        BOOTSTRAP_CLUSTER_COUNT,
+        BOOTSTRAP_METHOD,
+        BOOTSTRAP_OBSERVATION_COUNT,
+        BOOTSTRAP_UNIT_OF_RESAMPLING,
+    )
     from openalpha_bridge.zero_shot.baselines import BASELINE_IDS, PRIMARY_BASELINE_ID
     from openalpha_bridge.zero_shot.origins import ORIGIN_INDEX_OFFSETS, verify_origin_policy
     from openalpha_bridge.zero_shot.spec import (
@@ -1252,9 +1259,22 @@ def verify_zero_shot_benchmark_deployment() -> dict[str, Any]:
         ],
         "thresholds": ZERO_SHOT_THRESHOLDS.model_dump(mode="json"),
         "bootstrap": {
+            "method": BOOTSTRAP_METHOD,
+            "unit_of_resampling": BOOTSTRAP_UNIT_OF_RESAMPLING,
+            "cluster_count": BOOTSTRAP_CLUSTER_COUNT,
+            "assets_per_cluster": BOOTSTRAP_ASSETS_PER_CLUSTER,
+            "observation_count": BOOTSTRAP_OBSERVATION_COUNT,
             "resamples": BOOTSTRAP_RESAMPLES,
             "confidence_level": BOOTSTRAP_CONFIDENCE_LEVEL,
             "seed": BOOTSTRAP_SEED,
+            "assets_resampled_within_cluster": False,
+            "individual_asset_origin_interval_retained": False,
+        },
+        "cross_asset_calendar_alignment": {
+            "proved_before_aggregation": True,
+            "proved_from_retrieved_sessions": True,
+            "context_alignment_required": True,
+            "typed_failure_code": "ZERO_SHOT_CROSS_ASSET_ORIGIN_MISALIGNED",
         },
         "remote_cache_volume": ZERO_SHOT_CACHE_VOLUME,
         "creates_new_weight_storage": False,

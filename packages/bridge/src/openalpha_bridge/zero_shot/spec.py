@@ -70,7 +70,7 @@ ZERO_SHOT_EXPERIMENT_ID: Final = "openalpha-kronos-zero-shot-benchmark-v1"
 
 ZERO_SHOT_SPECIFICATION_NAME: Final[str] = "kronos-zero-shot-benchmark-v1.yaml"
 ZERO_SHOT_SPECIFICATION_SHA256: Final[str] = (
-    "51a54d800d6828d3ae8a0082ee448bc708b611b27ab9a017c1ccde0ba35609ec"
+    "242e89f28fbddee60f05fb2ce7d3684f72b986e83aa42ae66f7bd5b11079366d"
 )
 
 #: A third root. Shares no prefix with the mini diagnostic's

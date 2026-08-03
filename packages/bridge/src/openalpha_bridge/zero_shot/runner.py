@@ -38,16 +38,23 @@ from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from ..phase2.measurement import GpuMeasurement, gpu_snapshot, reset_gpu_statistics
 from ..phase2.provider import Phase2Provider, RetrievalRequest, validate_series
 from .aggregation import (
-    BootstrapInterval,
+    BOOTSTRAP_ASSETS_PER_CLUSTER,
+    BOOTSTRAP_CLUSTER_COUNT,
+    BOOTSTRAP_METHOD,
+    BOOTSTRAP_OBSERVATION_COUNT,
+    BOOTSTRAP_UNIT_OF_RESAMPLING,
+    ClusterBootstrapInterval,
     DistributionSummary,
     ExtendedForecastMetrics,
+    OriginCluster,
     StepSummary,
     absolute_return_errors,
     extended_metrics,
-    paired_bootstrap,
+    paired_cluster_bootstrap,
     relative_skill,
     step_summaries,
     summarize,
+    undefined_cluster_bootstrap,
 )
 from .baselines import PRIMARY_BASELINE_ID, build_baselines
 from .decision import (
@@ -89,11 +96,13 @@ from .spec import (
 
 __all__ = [
     "AssetRetrieval",
+    "CrossAssetAlignment",
     "OriginConfigurationResult",
     "OriginResult",
     "PathRecord",
     "ZeroShotBenchmarkArtifact",
     "run_zero_shot_benchmark",
+    "verify_cross_asset_alignment",
 ]
 
 _EXPECTED_MODEL_REPOSITORY: Final[str] = "NeoQuasar/Kronos-base"
@@ -253,6 +262,24 @@ class AssetAggregate(BaseModel):
     supports_configuration: bool = False
 
 
+class CrossAssetAlignment(BaseModel):
+    """Proof that one ordinal is one shared chronological window.
+
+    A cluster only means something if the four ETFs at an ordinal really are the
+    same market window. The four are expected to share the XNYS calendar, but
+    expectation is not evidence, so this is proved from the retrieved sessions
+    before anything is clustered.
+    """
+
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
+
+    ordinals_checked: int = Field(ge=0)
+    assets_checked: tuple[str, ...]
+    target_dates_aligned: Literal[True] = True
+    context_dates_aligned: Literal[True] = True
+    proved_from_retrieved_sessions: Literal[True] = True
+
+
 class ConfigurationAggregate(BaseModel):
     """Pooled and per-asset aggregates for one temperature configuration."""
 
@@ -270,7 +297,11 @@ class ConfigurationAggregate(BaseModel):
     secondary_metrics: dict[str, DistributionSummary]
     assets: tuple[AssetAggregate, ...]
     steps: tuple[StepSummary, ...]
-    bootstrap: BootstrapInterval
+    #: The clusters the interval was actually computed from, recorded so the
+    #: interval can be recomputed from the artifact alone.
+    origin_clusters: tuple[OriginCluster, ...]
+    #: The only interval Z1 reads. There is no flat asset-origin alternative.
+    cluster_bootstrap: ClusterBootstrapInterval
 
 
 class ZeroShotBenchmarkArtifact(BaseModel):
@@ -317,8 +348,18 @@ class ZeroShotBenchmarkArtifact(BaseModel):
     primary_metric: str = PRIMARY_METRIC
     secondary_metrics: tuple[str, ...] = SECONDARY_METRICS
 
+    bootstrap_method: str
+    bootstrap_unit_of_resampling: str
+    bootstrap_cluster_count: int
+    bootstrap_assets_per_cluster: int
+    bootstrap_observation_count: int
+    bootstrap_resamples: int
+    bootstrap_confidence_level: float
+    bootstrap_seed: int
+
     retrievals: tuple[AssetRetrieval, ...]
     provider_request_count: int = Field(ge=0)
+    cross_asset_alignment: CrossAssetAlignment
     origins: tuple[OriginResult, ...]
     aggregates: tuple[ConfigurationAggregate, ...]
     decision: ZeroShotDecision
@@ -667,6 +708,122 @@ def _run_origin(
     )
 
 
+def verify_cross_asset_alignment(
+    origins: tuple[OriginResult, ...],
+) -> CrossAssetAlignment:
+    """Prove every ordinal is the same chronological window for all four ETFs.
+
+    Clustering assumes an ordinal names one shared market window. If SPY's
+    ordinal 7 covered different sessions from DIA's ordinal 7, a cluster would
+    be pooling unrelated windows and the interval built from it would be
+    meaningless.
+
+    On any mismatch this fails closed, naming the ordinal and the disagreeing
+    assets. It does not shrink the panel, shift an origin, or fall back to
+    resampling individual rows -- each of those would silently convert a data
+    problem into a narrower interval.
+    """
+    by_ordinal: dict[int, dict[str, tuple[date, date, date, date]]] = {}
+    for origin in origins:
+        by_ordinal.setdefault(origin.ordinal, {})[origin.asset] = (
+            origin.target_first_session,
+            origin.target_last_session,
+            origin.context_first_session,
+            origin.context_last_session,
+        )
+
+    for ordinal in sorted(by_ordinal):
+        per_asset = by_ordinal[ordinal]
+        missing = [asset for asset in ASSET_PANEL if asset not in per_asset]
+        if missing:
+            raise _fail(
+                "ZERO_SHOT_CROSS_ASSET_ORIGIN_MISALIGNED",
+                (
+                    f"ordinal {ordinal} is missing {sorted(missing)}; a cluster must carry "
+                    f"every asset of the preregistered panel {list(ASSET_PANEL)}"
+                ),
+                field=f"ordinal_{ordinal}",
+            )
+
+        reference_asset = ASSET_PANEL[0]
+        reference = per_asset[reference_asset]
+        for asset in ASSET_PANEL[1:]:
+            observed = per_asset[asset]
+            if observed[:2] != reference[:2]:
+                raise _fail(
+                    "ZERO_SHOT_CROSS_ASSET_ORIGIN_MISALIGNED",
+                    (
+                        f"ordinal {ordinal} target window disagrees: {reference_asset} covers "
+                        f"{reference[0]}..{reference[1]} but {asset} covers "
+                        f"{observed[0]}..{observed[1]}; the four assets must resolve to one "
+                        "shared chronological window before they can be clustered"
+                    ),
+                    field=f"ordinal_{ordinal}",
+                )
+            if observed[2:] != reference[2:]:
+                raise _fail(
+                    "ZERO_SHOT_CROSS_ASSET_ORIGIN_MISALIGNED",
+                    (
+                        f"ordinal {ordinal} context window disagrees: {reference_asset} covers "
+                        f"{reference[2]}..{reference[3]} but {asset} covers "
+                        f"{observed[2]}..{observed[3]}; context alignment is required so a "
+                        "cluster represents one market window end to end"
+                    ),
+                    field=f"ordinal_{ordinal}",
+                )
+
+    return CrossAssetAlignment(
+        ordinals_checked=len(by_ordinal),
+        assets_checked=ASSET_PANEL,
+    )
+
+
+def _build_clusters(
+    *, configuration_label: str, origins: tuple[OriginResult, ...]
+) -> tuple[tuple[OriginCluster, ...] | None, str | None]:
+    """Assemble one cluster per ordinal, or explain why it is impossible.
+
+    Returns ``(None, reason)`` when any paired difference is undefined. The
+    bootstrap is never run on a partial panel: a missing observation must become
+    a declared limitation, never a quietly smaller and narrower sample.
+    """
+    by_ordinal: dict[int, dict[str, float | None]] = {}
+    for origin in origins:
+        result = next(
+            (r for r in origin.configurations if r.configuration_label == configuration_label),
+            None,
+        )
+        if result is None:
+            return None, (
+                f"configuration {configuration_label} is missing at {origin.asset} "
+                f"ordinal {origin.ordinal}"
+            )
+        by_ordinal.setdefault(origin.ordinal, {})[origin.asset] = (
+            result.ensemble_paired_difference
+        )
+
+    clusters: list[OriginCluster] = []
+    for ordinal in sorted(by_ordinal):
+        per_asset = by_ordinal[ordinal]
+        differences: list[float] = []
+        for asset in ASSET_PANEL:
+            value = per_asset.get(asset)
+            if value is None:
+                return None, (
+                    f"the paired difference is undefined at ordinal {ordinal} for {asset}, "
+                    "so the cluster bootstrap cannot be computed on the full panel"
+                )
+            differences.append(value)
+        clusters.append(
+            OriginCluster(
+                ordinal=ordinal,
+                assets=ASSET_PANEL,
+                paired_differences=tuple(differences),
+            )
+        )
+    return tuple(clusters), None
+
+
 def _aggregate(
     *,
     configuration: SamplingConfiguration,
@@ -755,6 +912,28 @@ def _aggregate(
             )
         )
 
+    # The decision-bearing interval. Built from whole origin clusters so the
+    # four ETFs of one chronological window stay inseparable; `paired` above is
+    # kept only for its descriptive mean/median/spread and never resampled.
+    clusters, reason = _build_clusters(
+        configuration_label=configuration.label, origins=origins
+    )
+    if clusters is None:
+        interval = undefined_cluster_bootstrap(
+            seed=BOOTSTRAP_SEED,
+            resamples=BOOTSTRAP_RESAMPLES,
+            confidence_level=BOOTSTRAP_CONFIDENCE_LEVEL,
+            reason=reason or "the origin clusters could not be assembled",
+        )
+        clusters = ()
+    else:
+        interval = paired_cluster_bootstrap(
+            clusters,
+            seed=BOOTSTRAP_SEED,
+            resamples=BOOTSTRAP_RESAMPLES,
+            confidence_level=BOOTSTRAP_CONFIDENCE_LEVEL,
+        )
+
     return ConfigurationAggregate(
         configuration_label=configuration.label,
         temperature=configuration.temperature,
@@ -772,12 +951,8 @@ def _aggregate(
             persistence_step_errors=persistence_steps,
             horizon=HORIZON_CANDLES,
         ),
-        bootstrap=paired_bootstrap(
-            paired,
-            seed=BOOTSTRAP_SEED,
-            resamples=BOOTSTRAP_RESAMPLES,
-            confidence_level=BOOTSTRAP_CONFIDENCE_LEVEL,
-        ),
+        origin_clusters=clusters,
+        cluster_bootstrap=interval,
     )
 
 
@@ -805,6 +980,14 @@ def _limitations(
                     f"a generation or scoring step did not complete at {origin.asset} "
                     f"origin {origin.ordinal}"
                 )
+            if result.ensemble_paired_difference is None:
+                # An undefined difference must surface as a limitation. Dropping
+                # it would shrink the cluster panel and narrow the interval,
+                # which is precisely the failure this design removes.
+                found.append(
+                    f"the paired difference is undefined at {origin.asset} "
+                    f"origin {origin.ordinal}, so the cluster bootstrap is incomplete"
+                )
     return tuple(dict.fromkeys(found))
 
 
@@ -825,7 +1008,8 @@ def _evidence(aggregate: ConfigurationAggregate) -> ConfigurationEvidence:
             )
             for asset in aggregate.assets
         ),
-        bootstrap=aggregate.bootstrap,
+        # Only the clustered interval is handed to the decision layer.
+        bootstrap=aggregate.cluster_bootstrap,
     )
 
 
@@ -936,6 +1120,11 @@ def run_zero_shot_benchmark(
                 )
             )
 
+    # Proved before anything is aggregated or clustered. A cluster is only a
+    # shared market window if the four assets really resolve to the same dates.
+    tracker.enter("verify_cross_asset_alignment")
+    alignment = verify_cross_asset_alignment(tuple(origins))
+
     tracker.enter("verify_parameters")
     parameter_after = str(parameter_digest())
     if parameter_before != parameter_after:
@@ -975,8 +1164,17 @@ def run_zero_shot_benchmark(
         total_asset_origins=len(origins),
         sampling_configurations=configurations,
         ensemble_seeds=seeds,
+        bootstrap_method=BOOTSTRAP_METHOD,
+        bootstrap_unit_of_resampling=BOOTSTRAP_UNIT_OF_RESAMPLING,
+        bootstrap_cluster_count=BOOTSTRAP_CLUSTER_COUNT,
+        bootstrap_assets_per_cluster=BOOTSTRAP_ASSETS_PER_CLUSTER,
+        bootstrap_observation_count=BOOTSTRAP_OBSERVATION_COUNT,
+        bootstrap_resamples=BOOTSTRAP_RESAMPLES,
+        bootstrap_confidence_level=BOOTSTRAP_CONFIDENCE_LEVEL,
+        bootstrap_seed=BOOTSTRAP_SEED,
         retrievals=tuple(retrievals),
         provider_request_count=len(counting.requests),
+        cross_asset_alignment=alignment,
         origins=tuple(origins),
         aggregates=aggregates,
         decision=decision,

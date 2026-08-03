@@ -1,12 +1,21 @@
-"""Metrics, aggregation and the deterministic paired bootstrap.
+"""Metrics, aggregation and the deterministic paired cluster bootstrap.
 
 Pooled error is reported but never decides anything on its own: a handful of
 high-volatility windows can dominate a pooled mean, so every decision quantity
 here is either a median, a fraction of origins, or a paired interval.
 
-The bootstrap is seeded from the specification and resamples asset-origins, not
-forecast steps. Steps inside one origin are not independent, so resampling them
-would manufacture confidence the data does not contain.
+The bootstrap resamples **origin ordinals**, not individual asset-origin rows,
+and not forecast steps. SPY, QQQ, IWM and DIA are evaluated over the same
+chronological windows, so their errors within an origin are cross-sectionally
+dependent. Treating the four as four independent draws would manufacture
+confidence the data does not contain and could let a too-narrow interval satisfy
+Z1's favorable-exclusion requirement on its own. Each resample therefore draws
+whole origin clusters, carrying all four assets together.
+
+There is deliberately no flat asset-origin bootstrap in this module. Omitting it
+is what makes "the decision layer cannot read one" a structural fact rather than
+a convention: the function does not exist, and :class:`ClusterBootstrapInterval`
+is the only interval type the decision layer accepts.
 """
 
 from __future__ import annotations
@@ -14,26 +23,50 @@ from __future__ import annotations
 import math
 import random
 import statistics
-from typing import Final
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..diagnostic.metrics import DirectionalAccuracy, directional_accuracy
 from ..diagnostic.official_input import OfficialRow
+from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
+from .spec import ASSET_PANEL, ORIGINS_PER_ASSET
 
 __all__ = [
-    "BootstrapInterval",
+    "BOOTSTRAP_ASSETS_PER_CLUSTER",
+    "BOOTSTRAP_CLUSTER_COUNT",
+    "BOOTSTRAP_METHOD",
+    "BOOTSTRAP_OBSERVATION_COUNT",
+    "BOOTSTRAP_UNIT_OF_RESAMPLING",
+    "ClusterBootstrapInterval",
     "DistributionSummary",
     "ExtendedForecastMetrics",
+    "OriginCluster",
     "StepSummary",
     "extended_metrics",
-    "paired_bootstrap",
+    "paired_cluster_bootstrap",
     "relative_skill",
     "step_summaries",
     "summarize",
+    "undefined_cluster_bootstrap",
 ]
 
-_MINIMUM_BOOTSTRAP_SAMPLE: Final[int] = 2
+BOOTSTRAP_METHOD: Final[str] = "paired_percentile_cluster_bootstrap_over_origin_ordinals"
+BOOTSTRAP_UNIT_OF_RESAMPLING: Final[str] = "origin_ordinal_cluster_all_assets"
+BOOTSTRAP_CLUSTER_COUNT: Final[int] = ORIGINS_PER_ASSET
+BOOTSTRAP_ASSETS_PER_CLUSTER: Final[int] = len(ASSET_PANEL)
+BOOTSTRAP_OBSERVATION_COUNT: Final[int] = BOOTSTRAP_CLUSTER_COUNT * BOOTSTRAP_ASSETS_PER_CLUSTER
+
+
+def _fail(code: str, message: str, *, field: str | None = None) -> BridgeTransformError:
+    return BridgeTransformError(
+        BridgeFailure(
+            category=FailureCategory.INVALID_CONFIGURATION,
+            code=code,
+            field=field,
+            message=message,
+        )
+    )
 
 
 def _anchored_returns(rows: tuple[OfficialRow, ...], anchor: float) -> list[float] | None:
@@ -146,20 +179,40 @@ def summarize(values: list[float]) -> DistributionSummary:
     )
 
 
-class BootstrapInterval(BaseModel):
-    """A deterministic paired percentile bootstrap over asset-origins.
+class OriginCluster(BaseModel):
+    """One chronological origin, carrying every asset evaluated at it.
 
-    ``differences`` are persistence minus candidate on the primary metric, so a
-    positive value is favorable and an interval strictly above zero is a
-    favorable exclusion of zero.
+    The cluster is the resampling unit. It exists as a type so a caller cannot
+    hand the bootstrap a flat list of asset-origin rows by accident: the four
+    assets of one ordinal arrive together or the model refuses to build.
+
+    ``paired_differences`` are persistence minus candidate on the primary
+    metric, positionally aligned with ``assets``. Positive is favorable.
+    """
+
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
+
+    ordinal: int = Field(ge=0)
+    assets: tuple[str, ...]
+    paired_differences: tuple[float, ...]
+
+
+class ClusterBootstrapInterval(BaseModel):
+    """A deterministic paired percentile cluster bootstrap over origin ordinals.
+
+    The only interval type the decision layer accepts. Its metadata states the
+    resampling unit explicitly so a reader never has to infer whether
+    cross-asset dependence was preserved.
     """
 
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
     defined: bool
-    method: str = "paired_percentile_bootstrap_over_asset_origins"
-    unit_of_resampling: str = "asset_origin"
-    sample_size: int = Field(ge=0)
+    method: str = BOOTSTRAP_METHOD
+    unit_of_resampling: str = BOOTSTRAP_UNIT_OF_RESAMPLING
+    cluster_count: int = Field(ge=0)
+    assets_per_cluster: int = Field(ge=0)
+    observation_count: int = Field(ge=0)
     resamples: int = Field(ge=0)
     confidence_level: float
     seed: int
@@ -168,56 +221,148 @@ class BootstrapInterval(BaseModel):
     upper: float | None = None
     excludes_zero: bool = False
     excludes_zero_favorably: bool = False
+    #: Stated so no reader has to check the code to know assets were not
+    #: resampled independently inside an ordinal.
+    assets_resampled_within_cluster: Literal[False] = False
     undefined_reason: str | None = None
 
 
-def paired_bootstrap(
-    differences: list[float], *, seed: int, resamples: int, confidence_level: float
-) -> BootstrapInterval:
-    """Percentile bootstrap of the mean paired difference.
+def _validate_clusters(clusters: tuple[OriginCluster, ...]) -> None:
+    """Every structural requirement, checked before a single resample is drawn.
 
-    Deterministic: the generator is seeded from the specification, so the
-    interval is reproducible and cannot be re-rolled after the fact.
+    An undefined or malformed input is a typed failure here, never a quietly
+    smaller bootstrap sample: shrinking the sample would narrow the interval,
+    which is the exact error this whole change exists to remove.
     """
-    size = len(differences)
-    if size < _MINIMUM_BOOTSTRAP_SAMPLE:
-        return BootstrapInterval(
-            defined=False,
-            sample_size=size,
-            resamples=resamples,
-            confidence_level=confidence_level,
-            seed=seed,
-            undefined_reason="fewer than two paired differences, so no interval exists",
+    if len(clusters) != BOOTSTRAP_CLUSTER_COUNT:
+        raise _fail(
+            "ZERO_SHOT_BOOTSTRAP_CLUSTER_COUNT_INVALID",
+            (
+                f"the cluster bootstrap needs exactly {BOOTSTRAP_CLUSTER_COUNT} origin "
+                f"clusters, got {len(clusters)}"
+            ),
+            field="clusters",
         )
+
+    expected_ordinals = tuple(range(BOOTSTRAP_CLUSTER_COUNT))
+    observed_ordinals = tuple(cluster.ordinal for cluster in clusters)
+    if observed_ordinals != expected_ordinals:
+        raise _fail(
+            "ZERO_SHOT_BOOTSTRAP_ORDINALS_INVALID",
+            (
+                f"origin ordinals must be exactly {expected_ordinals[0]}.."
+                f"{expected_ordinals[-1]} in ascending order, got {observed_ordinals}"
+            ),
+            field="clusters",
+        )
+
+    for cluster in clusters:
+        if len(cluster.assets) != BOOTSTRAP_ASSETS_PER_CLUSTER:
+            raise _fail(
+                "ZERO_SHOT_BOOTSTRAP_CLUSTER_ASSET_COUNT_INVALID",
+                (
+                    f"ordinal {cluster.ordinal} carries {len(cluster.assets)} assets, "
+                    f"expected exactly {BOOTSTRAP_ASSETS_PER_CLUSTER}"
+                ),
+                field=f"ordinal_{cluster.ordinal}",
+            )
+        if len(set(cluster.assets)) != len(cluster.assets):
+            raise _fail(
+                "ZERO_SHOT_BOOTSTRAP_DUPLICATE_ASSET",
+                f"ordinal {cluster.ordinal} repeats an asset: {cluster.assets}",
+                field=f"ordinal_{cluster.ordinal}",
+            )
+        if tuple(cluster.assets) != ASSET_PANEL:
+            raise _fail(
+                "ZERO_SHOT_BOOTSTRAP_ASSET_PANEL_MISMATCH",
+                (
+                    f"ordinal {cluster.ordinal} carries {cluster.assets}, expected the "
+                    f"preregistered panel {ASSET_PANEL} in that order"
+                ),
+                field=f"ordinal_{cluster.ordinal}",
+            )
+        if len(cluster.paired_differences) != len(cluster.assets):
+            raise _fail(
+                "ZERO_SHOT_BOOTSTRAP_MISSING_DIFFERENCE",
+                (
+                    f"ordinal {cluster.ordinal} has {len(cluster.paired_differences)} paired "
+                    f"differences for {len(cluster.assets)} assets"
+                ),
+                field=f"ordinal_{cluster.ordinal}",
+            )
+        for asset, difference in zip(cluster.assets, cluster.paired_differences, strict=True):
+            if not math.isfinite(difference):
+                raise _fail(
+                    "ZERO_SHOT_BOOTSTRAP_NON_FINITE_DIFFERENCE",
+                    f"ordinal {cluster.ordinal} asset {asset} has a non-finite difference",
+                    field=f"ordinal_{cluster.ordinal}",
+                )
+
+
+def paired_cluster_bootstrap(
+    clusters: tuple[OriginCluster, ...],
+    *,
+    seed: int,
+    resamples: int,
+    confidence_level: float,
+) -> ClusterBootstrapInterval:
+    """Percentile bootstrap of the mean paired difference, clustered by ordinal.
+
+    The algorithm, exactly:
+
+    1. Validate the cluster structure. Anything malformed is a typed failure.
+    2. For each of ``resamples`` iterations, draw ``cluster_count`` ordinals with
+       replacement from a generator seeded once from the specification.
+    3. When an ordinal is drawn, take **all four** of its asset paired
+       differences. Assets are never drawn, weighted or omitted individually,
+       and never selected on their result.
+    4. Average the resulting ``cluster_count * assets_per_cluster``
+       observations to get one resampled mean.
+    5. Take the percentile interval from the sorted resampled means.
+
+    The point estimate is the mean over all observations as actually measured,
+    not a resampled quantity. Only the uncertainty comes from the 25 clusters.
+    """
+    _validate_clusters(clusters)
     if resamples <= 0:
-        return BootstrapInterval(
-            defined=False,
-            sample_size=size,
-            resamples=resamples,
-            confidence_level=confidence_level,
-            seed=seed,
-            undefined_reason="the resample count is not positive",
+        raise _fail(
+            "ZERO_SHOT_BOOTSTRAP_RESAMPLES_INVALID",
+            f"the resample count must be positive, got {resamples}",
+            field="resamples",
         )
+    if not 0.0 < confidence_level < 1.0:
+        raise _fail(
+            "ZERO_SHOT_BOOTSTRAP_CONFIDENCE_INVALID",
+            f"the confidence level must lie strictly between 0 and 1, got {confidence_level}",
+            field="confidence_level",
+        )
+
+    cluster_count = len(clusters)
+    per_cluster_totals = [sum(cluster.paired_differences) for cluster in clusters]
+    observations = cluster_count * BOOTSTRAP_ASSETS_PER_CLUSTER
 
     generator = random.Random(seed)
     means: list[float] = []
     for _ in range(resamples):
         total = 0.0
-        for _ in range(size):
-            total += differences[generator.randrange(size)]
-        means.append(total / size)
+        for _ in range(cluster_count):
+            # One draw selects an ordinal, and an ordinal is indivisible: its
+            # four asset differences enter together, which is what preserves the
+            # cross-sectional dependence between the four ETFs.
+            total += per_cluster_totals[generator.randrange(cluster_count)]
+        means.append(total / observations)
     means.sort()
 
     tail = (1.0 - confidence_level) / 2.0
-    lower_index = math.floor(tail * (resamples - 1))
-    upper_index = math.ceil((1.0 - tail) * (resamples - 1))
-    lower = means[lower_index]
-    upper = means[upper_index]
-    point = sum(differences) / size
+    lower = means[math.floor(tail * (resamples - 1))]
+    upper = means[math.ceil((1.0 - tail) * (resamples - 1))]
+    point = sum(per_cluster_totals) / observations
     excludes = (lower > 0.0 and upper > 0.0) or (lower < 0.0 and upper < 0.0)
-    return BootstrapInterval(
+    return ClusterBootstrapInterval(
         defined=True,
-        sample_size=size,
+        cluster_count=cluster_count,
+        assets_per_cluster=BOOTSTRAP_ASSETS_PER_CLUSTER,
+        observation_count=observations,
         resamples=resamples,
         confidence_level=confidence_level,
         seed=seed,
@@ -226,8 +371,30 @@ def paired_bootstrap(
         upper=upper,
         excludes_zero=excludes,
         # Favorable means the whole interval sits above zero: the candidate beat
-        # persistence by a margin the resampling did not erase.
+        # persistence by a margin the cluster resampling did not erase.
         excludes_zero_favorably=lower > 0.0,
+    )
+
+
+def undefined_cluster_bootstrap(
+    *, seed: int, resamples: int, confidence_level: float, reason: str
+) -> ClusterBootstrapInterval:
+    """An interval that could not be computed, stated rather than faked.
+
+    Used when a paired difference is undefined somewhere in the panel. The run
+    still publishes, the interval is explicitly undefined, and the predeclared
+    Z5 limitation carries the reason -- rather than the bootstrap silently
+    running on a smaller, narrower sample.
+    """
+    return ClusterBootstrapInterval(
+        defined=False,
+        cluster_count=0,
+        assets_per_cluster=BOOTSTRAP_ASSETS_PER_CLUSTER,
+        observation_count=0,
+        resamples=resamples,
+        confidence_level=confidence_level,
+        seed=seed,
+        undefined_reason=reason,
     )
 
 

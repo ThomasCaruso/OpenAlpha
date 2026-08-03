@@ -405,15 +405,95 @@ metrics:
     asset-origin. Positive is favorable.
 
 bootstrap:
-  method: paired_percentile_bootstrap_over_asset_origins
+  method: paired_percentile_cluster_bootstrap_over_origin_ordinals
+  unit_of_resampling: origin_ordinal_cluster_all_assets
+  cluster_count: 25
+  assets_per_cluster: 4
+  observation_count: 100
   resamples: 2000
   confidence_level: 0.95
   seed: 20260803
-  unit_of_resampling: asset_origin
   deterministic: true
+  favorable_exclusion: lower_bound_greater_than_zero
+  assets_resampled_within_cluster: false
+  cross_asset_dependence_preserved: true
+  rationale: >-
+    SPY, QQQ, IWM and DIA are evaluated over the same chronological market
+    windows, so their errors within an origin are cross-sectionally dependent.
+    Treating the 100 asset-origins as 100 independent bootstrap units would
+    understate uncertainty, produce intervals that are too narrow, and could let
+    a spurious interval satisfy the Z1 favorable-exclusion requirement on its
+    own. The resampling unit is therefore the origin ordinal, and an ordinal is
+    indivisible: all four of its asset-level paired differences enter or none
+    do.
+  algorithm:
+    - Validate the cluster structure; anything malformed is a typed failure.
+    - Seed one deterministic generator from the seed above.
+    - For each of the 2000 resamples, sample exactly 25 origin ordinals with replacement.
+    - When an ordinal is selected, include all four of its asset paired differences.
+    - Average the resulting 100 observations to obtain one resampled mean.
+    - Take the 95% percentile interval from the sorted resampled means.
+  point_estimate: >-
+    The mean paired difference across all 100 asset-origins as actually
+    measured. Only the uncertainty is estimated from the 25 chronological
+    clusters; the point estimate is not a resampled quantity.
+  effective_sample_size_for_uncertainty: 25
+  prohibited:
+    - independently resampling assets within an ordinal
+    - selecting, weighting or omitting an asset based on its result
+    - reducing the bootstrap sample when an observation is undefined
+    - using any individual asset-origin interval in a decision rule
+  individual_asset_origin_bootstrap:
+    retained: false
+    decision_bearing: false
+    note: >-
+      Omitted entirely rather than kept as a labelled alternative. No function
+      producing a flat asset-origin interval exists in the implementation, so
+      "the decision layer cannot read one" is a structural fact rather than a
+      convention.
+  undefined_input_policy: >-
+    A missing or non-finite paired difference never shrinks the bootstrap
+    sample. It produces an explicitly undefined interval and activates the
+    predeclared Z5 limitation, or a typed failure. Shrinking the sample would
+    narrow the interval, which is the exact error this design removes.
   note: >-
-    The bootstrap seed and resample count are fixed here, before execution, so
-    the interval is reproducible and cannot be re-rolled.
+    The seed, resample count, cluster count and confidence level are fixed here,
+    before execution, so the interval is reproducible and cannot be re-rolled.
+
+# ---------------------------------------------------------------------------
+# Cross-asset calendar alignment - proved, not assumed
+# ---------------------------------------------------------------------------
+
+cross_asset_calendar_alignment:
+  requirement: >-
+    Because one cluster is intended to represent one shared chronological market
+    window, every ordinal 0..24 must resolve to the same window for all four
+    ETFs before any aggregation or clustering occurs.
+  proved_before_aggregation: true
+  proved_from_retrieved_sessions: true
+  assumed_from_calendar_policy: false
+  identical_fields_required:
+    - target_first_session
+    - target_last_session
+    - context_first_session
+    - context_last_session
+  context_alignment_required: true
+  on_mismatch:
+    outcome: fail_closed
+    typed_code: ZERO_SHOT_CROSS_ASSET_ORIGIN_MISALIGNED
+    recorded_in_sanitized_evidence:
+      - the ordinal
+      - the mismatching assets
+      - the disagreeing date ranges
+    forbidden_responses:
+      - silently clustering windows from different dates
+      - shrinking the asset panel
+      - shifting an origin
+      - falling back to individual-observation bootstrapping
+  note: >-
+    The four ETFs are expected to share the XNYS session calendar. Expectation
+    is not evidence, so the implementation proves it from the retrieved sessions
+    of each asset rather than assuming it from the declared calendar policy.
 
 # ---------------------------------------------------------------------------
 # Preregistered decision rules
@@ -440,7 +520,14 @@ decision_rules:
         - median relative skill against persistence is greater than 0
         - at least 60 percent of origins beat persistence
         - the result holds on at least 3 of the 4 assets
-        - the paired bootstrap confidence interval excludes zero in the favorable direction
+        - >-
+          the paired CLUSTER bootstrap confidence interval, resampled over the 25
+          origin ordinals, excludes zero in the favorable direction
+      interval_used: cluster_bootstrap_only
+      interval_note: >-
+        Z1 reads the clustered interval and nothing else. No individual
+        asset-origin interval exists in the implementation, so none can reach
+        this rule.
     - id: Z2
       name: ISOLATED_CONFIGURATION_EFFECT
       matches_if: >-
