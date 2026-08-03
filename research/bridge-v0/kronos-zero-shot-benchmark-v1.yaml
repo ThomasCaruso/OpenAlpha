@@ -1,0 +1,644 @@
+experiment_id: openalpha-kronos-zero-shot-benchmark-v1
+schema_version: openalpha.research.zero_shot.kronos_benchmark.v1
+title: >-
+  Zero-shot forecast skill of frozen Kronos-base against simple baselines under
+  paper-style daily horizons across multiple chronological development origins
+status: development_only_benchmark_specification
+preregistered_before_execution: true
+
+# ---------------------------------------------------------------------------
+# Relationship to prior work
+# ---------------------------------------------------------------------------
+#
+# This is a NEW study. It is not an amendment, retry, reopening, reinterpretation
+# or optimization of either completed structural-validity diagnostic. It asks a
+# different question, under a different configuration, with a disjoint identity
+# in every namespace.
+
+relationship_to_prior_work:
+  completed_studies:
+    - study: bridge-v0 frozen inference diagnostic (Kronos-mini)
+      run_id: canary_0a92fde788bd685c
+      artifact_sha256: 8e3d8a333c11c1939c5d182db73012fc3e0fc01da42368eb23f71661aadab18c
+      operative_specification: phase2-frozen-inference-diagnostic-v4.yaml
+      operative_specification_sha256: bd407722adfc3ebf92eb187828d42c2c9cfa57b2fdc0406121f27d39a5c44977
+      primary_conclusion: ROUNDTRIP_MATERIAL_INVALIDITY
+    - study: openalpha-kronos-base-replication-v1
+      run_id: base_03b08cbc706193d6
+      artifact_sha256: 84ec1b197d4bf7a3b8f35a38d0feb8d5be086b61de23df0924d83ec273c731e6
+      operative_specification: kronos-base-replication-v1.yaml
+      operative_specification_sha256: 47ad7956adce368d5c6c69e54aea939ab6497bb4d411c96f894a4e30b7be58dd
+      primary_conclusion: ROUNDTRIP_MATERIAL_INVALIDITY
+  structural_validity_hypothesis: closed
+  is_a_structural_repair_experiment: false
+  amends_a_completed_study: false
+  interchangeability: >-
+    Results of this benchmark are not interchangeable with either completed
+    diagnostic. The completed studies measured structural validity at one long
+    horizon on one asset. This benchmark measures forecast skill at a short
+    horizon across four assets and twenty-five origins each. Neither can be
+    substituted for the other.
+
+# ---------------------------------------------------------------------------
+# Question
+# ---------------------------------------------------------------------------
+
+question: >-
+  Can frozen Kronos-base zero-shot forecasts beat simple persistence under
+  shorter, paper-style forecasting horizons across multiple chronological
+  development origins?
+
+subject: external validity and forecast configuration
+not_subject: structural repair, constrained decoding, validity filtering
+
+predeclared_interpretations:
+  - label: I1
+    statement: >-
+      A favorable result means the frozen model beat zero-return persistence on
+      the preregistered primary metric under a preregistered configuration at
+      development origins. It does not mean the model is tradable, profitable
+      after costs, or validated on held-out data.
+  - label: I2
+    statement: >-
+      An unfavorable result means direct zero-shot generation did not beat
+      persistence under the two tested configurations at the tested horizon and
+      origins. It does not establish that Kronos internal representations are
+      uninformative; that is a separate hypothesis with its own future study.
+  - label: I3
+    statement: >-
+      This benchmark cannot reopen the structural-validity question. Structural
+      metrics are recorded as descriptive fields only and are excluded from every
+      decision rule by construction.
+
+# ---------------------------------------------------------------------------
+# Pinned assets - the already verified frozen pair
+# ---------------------------------------------------------------------------
+
+pinned_assets:
+  official_source:
+    repository: https://github.com/shiyu-coder/Kronos
+    revision: 67b630e67f6a18c9e9be918d9b4337c960db1e9a
+    files:
+      model/kronos.py:
+        sha256_crlf_normalized: 638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a
+        sha256_as_committed: 0a5f90282e2039c2de0771473419715c845def154896dbd0f5747837e6241032
+      model/module.py:
+        sha256_crlf_normalized: a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f
+        sha256_as_committed: a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f
+  forecast_model:
+    repository: NeoQuasar/Kronos-base
+    revision: 2b554741eca47781b64468546e77fef3e85130e6
+    config_sha256: 77ebc3038b647709b92be002f801d72e1a385f4c8c2c5aa1cc6cf21fcfe44eb2
+    weights_file: model.safetensors
+    weights_sha256: abff193acab6db1a0368e9773e75799d11403b6d054ee6d5f0a11aeabc5f4b83
+    weights_size_bytes: 409264008
+    total_parameter_count_expected: 106268634
+    trainable_parameter_count_required: 0
+  tokenizer:
+    repository: NeoQuasar/Kronos-Tokenizer-base
+    revision: 0e0117387f39004a9016484a186a908917e22426
+    config_sha256: 2366e7ccfec76cbc19cf3c4c1b9c5d901be336ca1e83f2d2292c9bff381b77a2
+    weights_sha256: 59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee
+  pairing_note: >-
+    Kronos-base is used only with Kronos-Tokenizer-base. A crossed pair is a
+    hard failure, not a warning.
+  allowed_downloaded_files:
+    - config.json
+    - model.safetensors
+  download_location: >-
+    The pre-existing read-only Modal volume openalpha-kronos-base-cache, which
+    already contains exactly these two repositories at these two revisions and
+    425106905 primary bytes. No duplicate weight storage is created. No weight
+    is downloaded to a laptop, added to Git, Git LFS, the Modal image, CI
+    artifacts, test fixtures, terminal artifacts, or any local temporary
+    directory. All official-weight access remains inside Modal.
+  reuses_existing_volume: true
+  creates_new_weight_storage: false
+
+# ---------------------------------------------------------------------------
+# Assets
+# ---------------------------------------------------------------------------
+
+assets:
+  panel:
+    - SPY
+    - QQQ
+    - IWM
+    - DIA
+  rationale: >-
+    A small, highly liquid US equity index ETF panel with long continuous daily
+    history and identical retrieval semantics under one provider and one
+    calendar.
+  fail_closed: >-
+    If the provider cannot supply all four symbols under identical semantics -
+    same interval, same calendar, same column set, same adjustment convention,
+    and at least the required session count - the benchmark fails closed with
+    ZERO_SHOT_ASSET_PANEL_INCOMPLETE and publishes a typed failure artifact.
+    Symbols are never silently replaced, reordered, dropped, or substituted.
+  substitution_permitted: false
+
+# ---------------------------------------------------------------------------
+# Frequency, context and horizon
+# ---------------------------------------------------------------------------
+
+frequency: 1d
+calendar: XNYS
+
+context_and_horizon:
+  context_candles: 40
+  forecast_candles: 12
+  window_candles: 52
+  maximum_context: 512
+  sum_against_budget: 52
+  fills_budget_exactly: false
+  truncation_occurs: false
+  truncation_note: >-
+    40 context + 12 generated = 52, far below the 512 budget, so the official
+    final-max_context selection is the identity and no context row is discarded.
+    Unlike the completed 448 -> 64 diagnostics, this window deliberately does
+    NOT fill the budget; it is chosen to be materially closer to the published
+    daily benchmark horizon.
+  materially_closer_to_published_daily_benchmark: true
+
+# ---------------------------------------------------------------------------
+# Retrieval and origins
+# ---------------------------------------------------------------------------
+
+retrieval:
+  provider_retrievals_permitted_per_asset: 1
+  total_provider_requests_expected: 4
+  start_inclusive: '2025-01-02'
+  end_exclusive: '2026-07-01'
+  maximum_candles: 512
+  required_sessions: 340
+  sessions_used: >-
+    Exactly the first 340 retrieved sessions, in ascending session order. Any
+    additional sessions the provider returns inside the window are recorded but
+    unused, so the evaluated data is identical regardless of provider surplus.
+  failure_if_short: ZERO_SHOT_INSUFFICIENT_SESSIONS
+
+origins:
+  count_per_asset: 25
+  total_asset_origins: 100
+  selection: deterministic_index_offsets_fixed_before_execution
+  definition: >-
+    An origin is the integer index, into the ascending 340-session sequence, of
+    the FIRST target row. Its context is the 40 sessions immediately preceding
+    that index; its target is the 12 sessions beginning at that index.
+  rule: origin_index(i) = 40 + 12 * i, for i in 0..24
+  stride: 12
+  first_origin_index: 40
+  last_origin_index: 328
+  last_target_row_index: 339
+  index_offsets:
+    - 40
+    - 52
+    - 64
+    - 76
+    - 88
+    - 100
+    - 112
+    - 124
+    - 136
+    - 148
+    - 160
+    - 172
+    - 184
+    - 196
+    - 208
+    - 220
+    - 232
+    - 244
+    - 256
+    - 268
+    - 280
+    - 292
+    - 304
+    - 316
+    - 328
+  separation_property: >-
+    The stride equals the horizon, so the 25 target windows of an asset are
+    exactly disjoint and contiguous: no target row is scored twice and no target
+    window is duplicated. Contexts necessarily overlap, which is inherent to
+    rolling-origin evaluation and is not a leakage path because normalization is
+    refitted per origin from context rows only.
+  same_policy_for_every_asset: true
+  complete_windows_required: true
+  calendar_policy: >-
+    One calendar policy for all four assets: XNYS sessions as returned by the
+    single provider under one identical request shape. Origins are index-based,
+    not date-based, so the same policy resolves identically for every asset even
+    where a symbol has a different first listed session inside the window.
+  resolved_dates_recorded_at_execution: true
+  hidden_partition_avoided: true
+
+pretraining_cutoff:
+  intent: >-
+    Origins are drawn from strictly post-2024 sessions, preferring dates after
+    the likely Kronos pretraining cutoff.
+  window_is_strictly_post_2024: true
+  documented_limitation: >-
+    The exact Kronos pretraining cutoff is not published and cannot be verified
+    from the released artifacts. Selecting sessions from 2025-01-02 onward is a
+    best-effort precaution, not a proof of non-contamination. This limitation is
+    recorded BEFORE execution and must be restated in any report of the result.
+    No separation is fabricated: if the provider cannot supply 340 sessions in
+    the declared post-2024 window, the benchmark fails closed with
+    ZERO_SHOT_INSUFFICIENT_SESSIONS rather than reaching backwards into earlier
+    data.
+  reaches_backwards_on_shortfall: false
+
+# ---------------------------------------------------------------------------
+# Sampling configurations - exactly two, fixed before execution
+# ---------------------------------------------------------------------------
+
+sampling_configurations:
+  count: 2
+  additional_temperatures_after_observing_results: forbidden
+  configurations:
+    - label: A
+      temperature: 0.6
+      top_k: 0
+      top_p: 0.9
+      sample_count: 1
+    - label: B
+      temperature: 1.0
+      top_k: 0
+      top_p: 0.9
+      sample_count: 1
+  shared_settings:
+    clip: 5.0
+    prediction_length: 12
+    context_length_used: 40
+    max_context: 512
+    gradient_mode: inference_mode
+    parameters_frozen: true
+    verbose: false
+
+# ---------------------------------------------------------------------------
+# Forecast paths and seeds
+# ---------------------------------------------------------------------------
+
+forecast_paths:
+  deterministic_single_path:
+    generated: true
+    seed: 20250102
+    note: >-
+      Exactly one deterministic seeded path per asset-origin-configuration. It
+      is ensemble member zero, so it is generated once and used twice rather
+      than regenerated, and its agreement with ensemble member zero is an
+      internal reproducibility check.
+  ensemble:
+    implemented: true
+    paths: 8
+    justification_before_observing_results: >-
+      Preregistered on prior-study evidence, not on this study's results. In the
+      completed Kronos-base diagnostic the 64-seed manual ensemble had a
+      materially lower close-return MAE (0.00487316858023227) than the single
+      sampled path (0.00920398038369002), so a single sample_count=1 path is
+      noise dominated. Eight paths is the smallest bounded ensemble that
+      meaningfully reduces sampling variance at an affordable cost. Sixty-four
+      paths per origin is explicitly NOT used in this initial benchmark.
+    seeds:
+      - 20250102
+      - 20250103
+      - 20250104
+      - 20250105
+      - 20250106
+      - 20250107
+      - 20250108
+      - 20250109
+    identical_seed_set_for_every_asset_origin_configuration: true
+    aggregation: >-
+      Per-channel arithmetic mean across the eight decoded paths at each of the
+      12 forecast steps. No weighting, no trimming, no selection.
+  best_seed_selection_after_seeing_target: forbidden
+  path_selection_by_structural_validity: forbidden
+
+primary_candidate: ensemble_mean
+secondary_candidate: deterministic_single_path
+primary_candidate_rationale: >-
+  Declared before execution. The ensemble mean is the primary candidate because
+  sample_count is 1 and a single sampled path is dominated by sampling noise;
+  the prior completed study already demonstrated this. The single deterministic
+  path is reported at every aggregation level as the secondary candidate. Only
+  the primary candidate enters the decision rules, so there is no post-hoc
+  choice between candidates.
+
+# ---------------------------------------------------------------------------
+# Baselines - none may access target data
+# ---------------------------------------------------------------------------
+
+baselines:
+  primary: zero_return_persistence
+  definitions:
+    - id: zero_return_persistence
+      description: >-
+        Every forecast close equals the final observed context close, so every
+        predicted log return is exactly zero.
+      uses_target_data: false
+      is_primary: true
+    - id: last_close_level
+      description: >-
+        The final observed context close carried forward as a level forecast.
+      uses_target_data: false
+      identical_path_to_persistence: true
+      identity_note: >-
+        This path is identical by construction to zero_return_persistence. It is
+        recorded as a separately named baseline because the two are conventionally
+        reported in different metric spaces (levels versus returns), and the
+        identity is asserted by test rather than assumed.
+    - id: context_mean_return
+      description: >-
+        Constant per-step log return equal to the arithmetic mean of the 39
+        internal log returns of the 40-row context, compounded forward from the
+        final context close.
+      uses_target_data: false
+    - id: context_drift
+      description: >-
+        Linear level extrapolation from the context: per-step increment equals
+        (last context close - first context close) / (context_candles - 1),
+        added forward from the final context close. Distinct from
+        context_mean_return, which is geometric in return space.
+      uses_target_data: false
+  target_access: forbidden_for_every_baseline
+  future_information: forbidden_for_every_baseline
+
+# ---------------------------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------------------------
+
+metrics:
+  primary: close_return_mae
+  secondary:
+    - close_mae
+    - directional_accuracy
+    - close_return_rmse
+    - median_absolute_return_error
+  return_definition: >-
+    Anchored log returns. The first predicted transition is anchored on the
+    final observed context close, which the model genuinely had.
+  aggregation_levels:
+    - asset
+    - temperature
+    - pooled_overall
+    - origin
+    - forecast_step
+  statistics_reported:
+    - mean
+    - median
+    - standard_deviation
+    - bootstrap_confidence_interval
+    - fraction_of_origins_beating_persistence
+    - relative_skill_versus_persistence
+    - paired_differences_against_persistence
+  pooled_error_caution: >-
+    Pooled error is reported but is never the sole basis of a decision, because
+    a small number of high-volatility windows can dominate it. Every decision
+    rule uses median relative skill, the fraction of origins beating
+    persistence, per-asset support, and a paired bootstrap interval.
+  relative_skill_definition: >-
+    1 - candidate_close_return_mae / persistence_close_return_mae at one
+    asset-origin. Positive beats the baseline; zero matches it.
+  paired_difference_definition: >-
+    persistence_close_return_mae - candidate_close_return_mae at one
+    asset-origin. Positive is favorable.
+
+bootstrap:
+  method: paired_percentile_bootstrap_over_asset_origins
+  resamples: 2000
+  confidence_level: 0.95
+  seed: 20260803
+  unit_of_resampling: asset_origin
+  deterministic: true
+  note: >-
+    The bootstrap seed and resample count are fixed here, before execution, so
+    the interval is reproducible and cannot be re-rolled.
+
+# ---------------------------------------------------------------------------
+# Preregistered decision rules
+# ---------------------------------------------------------------------------
+
+thresholds:
+  minimum_median_relative_skill: 0.0
+  minimum_fraction_of_origins_beating_persistence: 0.60
+  minimum_supporting_assets: 3
+  total_assets: 4
+  bootstrap_confidence_level: 0.95
+
+decision_rules:
+  evaluated_on: primary_candidate
+  evaluated_per_configuration: true
+  asset_support_definition: >-
+    An asset supports a configuration when, restricted to that asset's 25
+    origins, the median relative skill is greater than 0 AND at least 60 percent
+    of its origins beat persistence.
+  rule_ids:
+    - id: Z1
+      name: ZERO_SHOT_SKILL_OBSERVED
+      matches_only_if_all_hold:
+        - median relative skill against persistence is greater than 0
+        - at least 60 percent of origins beat persistence
+        - the result holds on at least 3 of the 4 assets
+        - the paired bootstrap confidence interval excludes zero in the favorable direction
+    - id: Z2
+      name: ISOLATED_CONFIGURATION_EFFECT
+      matches_if: >-
+        exactly one of the two temperature configurations satisfies Z1 and the
+        other does not
+    - id: Z3
+      name: ASSET_SPECIFIC_EFFECT
+      matches_if: >-
+        no configuration satisfies Z1, and for at least one configuration
+        exactly one asset supports it
+    - id: Z4
+      name: NO_ZERO_SHOT_SKILL
+      matches_if: no configuration satisfies Z1
+    - id: Z5
+      name: BENCHMARK_INCONCLUSIVE
+      matches_only_for_predeclared_limitations:
+        - a required asset could not be retrieved under identical semantics
+        - fewer than the required 340 sessions were available for any asset
+        - any of the 100 asset-origins could not form a complete 40 + 12 window
+        - the primary metric was undefined at any evaluated asset-origin
+        - a generation, decode, or scoring step did not complete
+        - the provider request count did not equal exactly one per asset
+      precedence: >-
+        Z5 is evaluated first and, when matched, is decisive: no skill claim is
+        made from an execution that could not be interpreted.
+  alteration_after_results_exist: forbidden
+
+decision_outcomes:
+  predeclared:
+    - PROCEED_TO_FROZEN_REPRESENTATION_PROBE
+    - PROCEED_TO_CONFIGURATION_CONFIRMATION
+    - STOP_KRONOS_ZERO_SHOT_DIRECTION
+    - BENCHMARK_INCONCLUSIVE
+  mapping:
+    - when: Z5 matched
+      outcome: BENCHMARK_INCONCLUSIVE
+      zero_shot_generation_direction: CONTINUE_UNDER_CONFIRMATION
+    - when: Z1 matched by at least one configuration
+      outcome: PROCEED_TO_CONFIGURATION_CONFIRMATION
+      zero_shot_generation_direction: CONTINUE_UNDER_CONFIRMATION
+    - when: Z1 matched by no configuration and Z3 matched
+      outcome: PROCEED_TO_CONFIGURATION_CONFIRMATION
+      zero_shot_generation_direction: CONTINUE_UNDER_CONFIRMATION
+    - when: Z4 matched and Z3 not matched
+      outcome: PROCEED_TO_FROZEN_REPRESENTATION_PROBE
+      zero_shot_generation_direction: STOP_KRONOS_ZERO_SHOT_DIRECTION
+  frozen_representation_probe_always_permitted: true
+  frozen_representation_probe_note: >-
+    A direct zero-shot failure still permits a frozen-representation probe.
+    Direct generation quality and representation usefulness are different
+    hypotheses, and this benchmark tests only the former. Nothing in this
+    specification authorizes the probe to be implemented or executed; that
+    requires its own preregistration.
+
+# ---------------------------------------------------------------------------
+# Structural metrics - observational only
+# ---------------------------------------------------------------------------
+
+structural_metrics:
+  status: secondary_descriptive_fields_only
+  recorded:
+    - ohlc_invalid_candle_counts
+    - ohlc_invalid_candle_fractions
+    - invalidity_error_rank_correlation
+    - clipping_attribution
+  forbidden:
+    - repairing forecasts
+    - filtering by validity
+    - selecting paths based on validity
+    - using structural validity in any decision rule
+    - creating another projection method
+  rationale: >-
+    The completed studies already answered the structural question. These fields
+    exist so the benchmark remains descriptive about what it observed, not so
+    the question can be reopened.
+  excluded_from_every_decision_rule: true
+
+# ---------------------------------------------------------------------------
+# Leakage and chronology
+# ---------------------------------------------------------------------------
+
+leakage_controls:
+  normalization: context_only_refitted_per_origin
+  target_access_during_prediction: forbidden
+  target_dependent_seed_selection: forbidden
+  target_dependent_configuration_selection: forbidden
+  future_information_in_baselines: forbidden
+  trainable_process: none_the_model_is_frozen
+  final_test_partition: not_opened
+  held_out_partition: not_opened
+  trading_backtest: not_performed
+  transaction_cost_claim: not_made
+  result_label: development_benchmarking
+
+# ---------------------------------------------------------------------------
+# Execution architecture
+# ---------------------------------------------------------------------------
+
+execution:
+  functions:
+    - verify_zero_shot_benchmark_deployment
+    - verify_zero_shot_benchmark_runtime
+    - run_zero_shot_benchmark
+    - inventory_zero_shot_artifacts
+  reuses_base_diagnostic_function_names: false
+  deployment_gate_must_verify:
+    - exact source commit
+    - exact benchmark specification hash
+    - exact model and tokenizer revisions and hashes
+    - asset list
+    - origin list
+    - context and horizon
+    - temperatures
+    - seeds
+    - metrics
+    - decision rules
+    - artifact namespace
+    - run-id namespace
+    - every historical structural specification hash
+  runtime_gate:
+    reuses_base_runtime_implementation: true
+    distinct_outer_identity: true
+    authorizes_nothing: true
+  worker_contract:
+    checks_for_existing_terminal_artifact_before_loading_weights: true
+    checks_for_existing_terminal_artifact_before_retrieving_data: true
+    run_ids_per_execution: 1
+    retries: 0
+    terminal_artifacts_written: 1
+    immutable: true
+    partial_progress_recorded_only_in_sanitized_logs: true
+    weights_stored_in_artifact: false
+    stops_after_publication: true
+
+# ---------------------------------------------------------------------------
+# Artifacts and namespaces
+# ---------------------------------------------------------------------------
+
+artifacts:
+  namespace: openalpha-compatibility/kronos-zero-shot-benchmark
+  object_name: kronos_zero_shot_benchmark_terminal.json
+  run_id_pattern: '^zsb_[0-9a-f]{8,32}$'
+  success_schema: openalpha.bridge.zero_shot.kronos_zero_shot_benchmark.v1
+  failure_schema: openalpha.bridge.zero_shot.kronos_zero_shot_failure.v1
+  runtime_probe_schema: openalpha.bridge.zero_shot.runtime_probe.v1
+  immutability: write_once_never_overwritten
+  namespace_separation: >-
+    Shares no prefix with openalpha-compatibility/bridge-phase2 or
+    openalpha-compatibility/kronos-base-diagnostic. The run-id prefix zsb_ is
+    disjoint from canary_ and base_ by construction: no string matches more than
+    one pattern, so no key of any study can be produced from another study's
+    identifier.
+  disjoint_from:
+    - openalpha-compatibility/bridge-phase2
+    - openalpha-compatibility/kronos-base-diagnostic
+
+# ---------------------------------------------------------------------------
+# Prohibitions
+# ---------------------------------------------------------------------------
+
+prohibitions:
+  - constrained OHLC decoding
+  - projection variants
+  - rejection sampling for structural validity
+  - valid-only rollout selection
+  - beam search for valid candles
+  - structural repair heads
+  - OHLC inequality losses
+  - token probability weighting intended to solve structural validity
+  - fine-tuning
+  - frozen-representation probe implementation
+  - training
+  - optimizer construction
+  - checkpoint creation or selection
+  - Stage B
+  - Stage C
+  - test or held-out partition opening
+  - production inference
+  - trading functions
+  - CloudRunner
+  - amending, retrying or reinterpreting either completed structural study
+  - reusing a spent run identifier
+
+# ---------------------------------------------------------------------------
+# Claim boundary and authorizations
+# ---------------------------------------------------------------------------
+
+claim_boundary: DEVELOPMENT BENCHMARK - NOT HOLDOUT OR TRADING EVIDENCE
+
+evidence_class: development_compatibility_canary
+
+authorizations:
+  authorizes_training: false
+  authorizes_fine_tuning: false
+  authorizes_representation_probe: false
+  authorizes_stage_b: false
+  authorizes_stage_c: false
+  authorizes_test_opening: false
+  authorizes_production_inference: false
+  authorizes_trading_claims: false
+  scientific_result_available: false

@@ -1,0 +1,196 @@
+{
+  "schema": "openalpha.research.reports.kronos_structural_validity.results_summary.v1",
+  "title": "Structural Validity Is Not Forecast Skill: Frozen-Inference Diagnostics of Kronos-mini and Kronos-base",
+  "status": "closed",
+  "evidence_class": "development_compatibility_canary",
+  "claim_boundary": "DEVELOPMENT DIAGNOSTIC - NOT HOLDOUT OR TRADING EVIDENCE",
+  "strongest_supported_conclusion": "Across the two tested released Kronos model/tokenizer pairs, OHLC structural invalidity was material, but deterministic restoration of complete structural validity produced no improvement in the preregistered primary forecast metric at the tested SPY development origin.",
+  "shared_evaluation_setting": {
+    "asset": "SPY",
+    "frequency": "1d",
+    "context_candles": 448,
+    "target_candles": 64,
+    "maximum_context": 512,
+    "fills_budget_exactly": true,
+    "truncation_occurs": false,
+    "forecast_origins": 1,
+    "primary_metric": "close_return_mae",
+    "persistence_baseline": "zero_return",
+    "persistence_close_return_mae": 0.0033651655739541575,
+    "roundtrip_material_invalid_fraction_threshold": 0.01
+  },
+  "studies": {
+    "kronos_mini": {
+      "model_repository": "NeoQuasar/Kronos-mini",
+      "tokenizer_repository": "NeoQuasar/Kronos-Tokenizer-2k",
+      "run_id": "canary_0a92fde788bd685c",
+      "operative_specification": "phase2-frozen-inference-diagnostic-v4.yaml",
+      "operative_specification_sha256": "bd407722adfc3ebf92eb187828d42c2c9cfa57b2fdc0406121f27d39a5c44977",
+      "primary_conclusion": "ROUNDTRIP_MATERIAL_INVALIDITY",
+      "recommended_next_experiment": "ABANDON_STRUCTURAL_VALIDITY_DIRECTION",
+      "roundtrip_full_invalid_fraction": 0.24609375,
+      "roundtrip_target_suffix_invalid_fraction": 0.9375,
+      "valid_rollout_count": 0,
+      "rollout_count": 64,
+      "method_b_close_return_mae": 0.007306554165097093,
+      "persistence_close_return_mae": 0.0033651655739541575,
+      "projection_primary_improvement": 0.0,
+      "invalidity_error_spearman": 0.04015798783221637
+    },
+    "kronos_base": {
+      "model_repository": "NeoQuasar/Kronos-base",
+      "model_revision": "2b554741eca47781b64468546e77fef3e85130e6",
+      "tokenizer_repository": "NeoQuasar/Kronos-Tokenizer-base",
+      "tokenizer_revision": "0e0117387f39004a9016484a186a908917e22426",
+      "run_id": "base_03b08cbc706193d6",
+      "experiment_id": "openalpha-kronos-base-replication-v1",
+      "operative_specification": "kronos-base-replication-v1.yaml",
+      "operative_specification_sha256": "47ad7956adce368d5c6c69e54aea939ab6497bb4d411c96f894a4e30b7be58dd",
+      "primary_conclusion": "ROUNDTRIP_MATERIAL_INVALIDITY",
+      "primary_rule_id": "R1",
+      "recommended_next_experiment": "ABANDON_STRUCTURAL_VALIDITY_DIRECTION",
+      "roundtrip_full_invalid_fraction": 0.123046875,
+      "roundtrip_target_suffix_invalid_fraction": 0.609375,
+      "valid_rollout_count": 0,
+      "rollout_count": 64,
+      "method_b_close_return_mae": 0.00920398038369002,
+      "persistence_close_return_mae": 0.0033651655739541575,
+      "projection_primary_improvement": 0.0,
+      "invalidity_error_spearman": 0.43092362328095035,
+      "manual_ensemble_close_return_mae": 0.00487316858023227,
+      "best_persistence_skill": -0.4481214885679963,
+      "detail": {
+        "data": {
+          "symbol": "SPY",
+          "frequency": "1d",
+          "calendar": "XNYS",
+          "first_session": "2015-05-07",
+          "last_session": "2017-05-17",
+          "retrieved_sessions": 512,
+          "candle_data_sha256": "56c810e5c5d7cfa92062eaced416b6648581ad99b2fdf1563c501cc21ac7f88b",
+          "provider_request_count": 1
+        },
+        "method_a": {
+          "invalid_candle_count_full": 63,
+          "candle_count_full": 512,
+          "invalid_candle_count_target_suffix": 39,
+          "candle_count_target_suffix": 64,
+          "internal_return_mae_full": 0.0028718265429328277,
+          "internal_return_mae_target_suffix": 0.003298432083532728,
+          "violation_counts_full": {
+            "low_above_open": 38,
+            "high_below_close": 35,
+            "high_below_open": 17,
+            "low_above_close": 5
+          },
+          "clipping": {
+            "row_clipped_fraction": 0.001953125,
+            "clipped_input_rows": 1,
+            "clipped_scalar_values": 2,
+            "clipped_columns": ["volume", "amount"],
+            "target_suffix_clipped_rows": 0,
+            "invalid_rows_with_clipped_input": 0,
+            "invalid_rows_with_unclipped_input": 63,
+            "unclipped_input_rows": 511,
+            "invalid_fraction_given_clipped_input": 0.0,
+            "invalid_fraction_given_unclipped_input": 0.1232876712328767
+          }
+        },
+        "method_b": {
+          "seed": 20150507,
+          "temperature": 1.0,
+          "top_p": 0.9,
+          "top_k": 0,
+          "sample_count_per_call": 1,
+          "close_return_mae": 0.00920398038369002,
+          "close_mae": 25.250720262527466,
+          "close_return_skill": -1.735075045022258,
+          "close_level_skill": -7.293362925826031,
+          "directional_accuracy": 0.4375,
+          "invalid_candle_count": 11,
+          "invalid_candle_fraction": 0.171875,
+          "total_path_sampling_log_probability": -354.53529707053775
+        },
+        "method_c": {
+          "method": "TERMINAL_PROJECTION_V0",
+          "restores_validity": true,
+          "invalid_candle_count_before": 11,
+          "invalid_candle_count_after": 0,
+          "unrepairable_candle_count": 0,
+          "adjusted_candle_count": 11,
+          "adjusted_field_count": 15,
+          "maximum_absolute_adjustment": 1.1321563720703125,
+          "total_absolute_adjustment": 4.072662353515625,
+          "close_return_mae_before": 0.00920398038369002,
+          "close_return_mae_after": 0.00920398038369002,
+          "primary_error_improvement": 0.0
+        },
+        "method_d": {
+          "rollout_count": 64,
+          "valid_rollout_count": 0,
+          "valid_rollout_fraction": 0.0,
+          "distinct_token_paths": 64,
+          "repeated_path_count": 0,
+          "invalid_candle_count_min": 3,
+          "invalid_candle_count_max": 21,
+          "invalid_candle_count_mean": 10.09375,
+          "invalid_group_mean_primary_error": 0.008886499571094574,
+          "valid_group_mean_primary_error": null,
+          "mean_pairwise_close_dispersion": 2.8422398547409102,
+          "manual_seeded_ensemble_close_return_mae": 0.00487316858023227,
+          "manual_seeded_ensemble_close_return_skill": -0.4481214885679963,
+          "manual_seeded_ensemble_directional_accuracy": 0.515625,
+          "size_matched_controls_defined": false,
+          "size_matched_controls_undefined_reason": "no valid rollouts, so there is no size to match"
+        },
+        "frozen_model_integrity": {
+          "total_parameter_count": 106268634,
+          "trainable_parameter_count": 0,
+          "parameter_sha256_before": "8a056aaa47ee31de1b877d3f70ae4bc80d19969215577b90e765ea1541c08fdb",
+          "parameter_sha256_after": "8a056aaa47ee31de1b877d3f70ae4bc80d19969215577b90e765ea1541c08fdb",
+          "parameters_unmodified": true,
+          "training_performed": false,
+          "optimizer_constructed": false,
+          "held_out_partition_opened": false
+        },
+        "runtime": {
+          "total_seconds": 181.430315,
+          "gpu": "Tesla T4",
+          "peak_allocated_bytes": 470318592,
+          "peak_reserved_bytes": 490733568
+        },
+        "matched_findings": [
+          "ROUNDTRIP_MATERIAL_INVALIDITY",
+          "ROUNDTRIP_STRUCTURAL_INVALIDITY_OBSERVED",
+          "ROUNDTRIP_INVALIDITY_ON_UNCLIPPED_INPUTS",
+          "NO_VALID_ROLLOUTS_OBSERVED",
+          "PROJECTION_RESTORES_VALIDITY_WITHOUT_THRESHOLD_IMPROVEMENT",
+          "NO_SKILL_AGAINST_PERSISTENCE"
+        ],
+        "reproducibility": {
+          "performed": true,
+          "agrees": true,
+          "detail": "identical"
+        }
+      }
+    }
+  },
+  "authorizations": {
+    "authorizes_training": false,
+    "authorizes_stage_b": false,
+    "authorizes_stage_c": false,
+    "authorizes_test_opening": false,
+    "authorizes_production_inference": false,
+    "authorizes_trading_claims": false,
+    "scientific_result_available": false
+  },
+  "not_established": [
+    "universal Kronos failure",
+    "failure across all horizons or assets",
+    "failure under the paper's exact evaluation protocol",
+    "failure after task-specific fine-tuning",
+    "absence of useful internal representations",
+    "a trading conclusion",
+    "a held-out scientific result"
+  ]
+}

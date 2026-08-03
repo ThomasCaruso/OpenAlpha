@@ -1,0 +1,177 @@
+{
+  "schema": "openalpha.research.reports.kronos_structural_validity.artifact_manifest.v1",
+  "purpose": "Immutable identities of the two completed structural-validity terminal artifacts. The artifact bytes are NOT stored in Git; only their object keys and digests are recorded here.",
+  "immutability_notice": "Both studies are closed. Nothing referenced by this manifest may be amended, retried, reopened, reinterpreted or optimized. Repository tests pin these values.",
+  "artifacts": [
+    {
+      "study": "kronos-mini frozen inference diagnostic",
+      "model_family": "kronos-mini",
+      "run_id": "canary_0a92fde788bd685c",
+      "run_id_namespace": "canary_",
+      "artifact_key": "openalpha-compatibility/bridge-phase2/runs/canary_0a92fde788bd685c/frozen-inference-diagnostic/frozen_inference_diagnostic_terminal.json",
+      "artifact_root": "openalpha-compatibility/bridge-phase2",
+      "artifact_sha256": "8e3d8a333c11c1939c5d182db73012fc3e0fc01da42368eb23f71661aadab18c",
+      "experiment_identity": "bridge-v0 frozen inference diagnostic (Kronos-mini)",
+      "operative_specification": {
+        "path": "research/bridge-v0/phase2-frozen-inference-diagnostic-v4.yaml",
+        "name": "phase2-frozen-inference-diagnostic-v4.yaml",
+        "sha256": "bd407722adfc3ebf92eb187828d42c2c9cfa57b2fdc0406121f27d39a5c44977"
+      },
+      "specification_chain": [
+        {
+          "name": "phase2-frozen-inference-diagnostic.yaml",
+          "sha256": "c909e156a61ac5b5323de9e794aad20521839c0f43f491fb356c1968f730101b"
+        },
+        {
+          "name": "phase2-frozen-inference-diagnostic-v2.yaml",
+          "sha256": "c39fff4541afcc948cd80fcc545398312897efe723deca26554143989e4a175e"
+        },
+        {
+          "name": "phase2-frozen-inference-diagnostic-v3.yaml",
+          "sha256": "f10076b6676a72552b1c9c96720d0087c009fc939e4667509bfcfccf7929bcb6"
+        },
+        {
+          "name": "phase2-frozen-inference-diagnostic-v4.yaml",
+          "sha256": "bd407722adfc3ebf92eb187828d42c2c9cfa57b2fdc0406121f27d39a5c44977"
+        }
+      ],
+      "sealed_preregistration_documents": [
+        {
+          "name": "experiment.yaml",
+          "sha256": "d52a9be733f4ec331e081346e64ab7415ac0f9510e494733746f975f114f47b2"
+        },
+        {
+          "name": "phase2-preregistration-amendment.yaml",
+          "sha256": "4c60846e8cb791d922c29a5e704fe3a473740171dd2bbb7b3390796ceeeef3c8"
+        },
+        {
+          "name": "phase2-amendment-2-context-prefix.yaml",
+          "sha256": "66f3c8171c2805bccf4b924125bd206edad27c957dfff40a0abf3864fbab10c1"
+        },
+        {
+          "name": "phase2-amendment-3-scale-features.yaml",
+          "sha256": "d9484020a22df42c93edc19941374c628ea891f08c8bee8151b82264c00bb12b"
+        }
+      ],
+      "model": {
+        "repository": "NeoQuasar/Kronos-mini"
+      },
+      "tokenizer": {
+        "repository": "NeoQuasar/Kronos-Tokenizer-2k"
+      },
+      "source": {
+        "authoritative_branch": "feature/openalpha-kronos-constrained-inference",
+        "authoritative_branch_head": "8e90533aefa94e552de58d2d2a003489769e7f87",
+        "source_commit_note": "The exact source commit of this run is recorded inside the terminal artifact itself. It is not restated here, because this manifest is derived without reading or re-opening the artifact."
+      },
+      "primary_conclusion": "ROUNDTRIP_MATERIAL_INVALIDITY",
+      "recommended_next_experiment": "ABANDON_STRUCTURAL_VALIDITY_DIRECTION",
+      "evidence_class": "development_compatibility_canary"
+    },
+    {
+      "study": "kronos-base replication study",
+      "model_family": "kronos-base",
+      "run_id": "base_03b08cbc706193d6",
+      "run_id_namespace": "base_",
+      "run_id_pattern": "^base_[0-9a-f]{8,32}$",
+      "artifact_key": "openalpha-compatibility/kronos-base-diagnostic/runs/base_03b08cbc706193d6/kronos_base_diagnostic_terminal.json",
+      "artifact_root": "openalpha-compatibility/kronos-base-diagnostic",
+      "artifact_sha256": "84ec1b197d4bf7a3b8f35a38d0feb8d5be086b61de23df0924d83ec273c731e6",
+      "experiment_identity": "openalpha-kronos-base-replication-v1",
+      "success_schema": "openalpha.bridge.base_study.kronos_base_diagnostic.v1",
+      "failure_schema": "openalpha.bridge.base_study.kronos_base_failure.v1",
+      "runtime_probe_schema": "openalpha.bridge.base_study.runtime_probe.v1",
+      "operative_specification": {
+        "path": "research/bridge-v0/kronos-base-replication-v1.yaml",
+        "name": "kronos-base-replication-v1.yaml",
+        "sha256": "47ad7956adce368d5c6c69e54aea939ab6497bb4d411c96f894a4e30b7be58dd"
+      },
+      "model": {
+        "repository": "NeoQuasar/Kronos-base",
+        "revision": "2b554741eca47781b64468546e77fef3e85130e6",
+        "config_sha256": "77ebc3038b647709b92be002f801d72e1a385f4c8c2c5aa1cc6cf21fcfe44eb2",
+        "weights_sha256": "abff193acab6db1a0368e9773e75799d11403b6d054ee6d5f0a11aeabc5f4b83",
+        "weights_size_bytes": 409264008,
+        "total_parameter_count": 106268634,
+        "trainable_parameter_count": 0,
+        "parameter_sha256": "8a056aaa47ee31de1b877d3f70ae4bc80d19969215577b90e765ea1541c08fdb"
+      },
+      "tokenizer": {
+        "repository": "NeoQuasar/Kronos-Tokenizer-base",
+        "revision": "0e0117387f39004a9016484a186a908917e22426",
+        "config_sha256": "2366e7ccfec76cbc19cf3c4c1b9c5d901be336ca1e83f2d2292c9bff381b77a2",
+        "weights_sha256": "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee"
+      },
+      "vendored_official_source": {
+        "revision": "67b630e67f6a18c9e9be918d9b4337c960db1e9a",
+        "files": {
+          "model/kronos.py": {
+            "as_committed_sha256": "0a5f90282e2039c2de0771473419715c845def154896dbd0f5747837e6241032",
+            "crlf_normalized_sha256": "638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a"
+          },
+          "model/module.py": {
+            "as_committed_sha256": "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f",
+            "crlf_normalized_sha256": "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f"
+          }
+        }
+      },
+      "remote_cache": {
+        "volume": "openalpha-kronos-base-cache",
+        "read_only": true,
+        "deletion_supported": false,
+        "combined_primary_bytes": 425106905,
+        "snapshots": {
+          "NeoQuasar/Kronos-base": {
+            "revision": "2b554741eca47781b64468546e77fef3e85130e6",
+            "resolved_bytes": 409264236,
+            "files": ["config.json", "model.safetensors"]
+          },
+          "NeoQuasar/Kronos-Tokenizer-base": {
+            "revision": "0e0117387f39004a9016484a186a908917e22426",
+            "resolved_bytes": 15842669,
+            "files": ["config.json", "model.safetensors"]
+          }
+        }
+      },
+      "data": {
+        "symbol": "SPY",
+        "frequency": "1d",
+        "calendar": "XNYS",
+        "first_session": "2015-05-07",
+        "last_session": "2017-05-17",
+        "retrieved_sessions": 512,
+        "candle_data_sha256": "56c810e5c5d7cfa92062eaced416b6648581ad99b2fdf1563c501cc21ac7f88b"
+      },
+      "source": {
+        "authoritative_branch": "feature/openalpha-kronos-base-diagnostic",
+        "source_commit": "0e6193baabd747dc0b2610a0ab80c3320e32fdd0",
+        "deployed_commit": "0e6193baabd747dc0b2610a0ab80c3320e32fdd0"
+      },
+      "primary_conclusion": "ROUNDTRIP_MATERIAL_INVALIDITY",
+      "primary_rule_id": "R1",
+      "recommended_next_experiment": "ABANDON_STRUCTURAL_VALIDITY_DIRECTION",
+      "outcome": "KRONOS_BASE_DIAGNOSTIC_COMPLETED",
+      "evidence_class": "development_compatibility_canary",
+      "already_existed_at_publication": false
+    }
+  ],
+  "namespace_disjointness": {
+    "statement": "The two completed studies and the successor zero-shot benchmark occupy mutually disjoint artifact roots and run-ID namespaces.",
+    "artifact_roots": [
+      "openalpha-compatibility/bridge-phase2",
+      "openalpha-compatibility/kronos-base-diagnostic",
+      "openalpha-compatibility/kronos-zero-shot-benchmark"
+    ],
+    "run_id_namespaces": ["canary_", "base_", "zsb_"]
+  },
+  "storage_policy": {
+    "terminal_artifacts_in_git": false,
+    "model_weights_in_git": false,
+    "model_weights_in_git_lfs": false,
+    "model_weights_in_modal_image": false,
+    "model_weights_in_ci_artifacts": false,
+    "model_weights_in_test_fixtures": false,
+    "model_weights_in_terminal_artifacts": false,
+    "official_weight_access": "inside Modal only, against the read-only volume openalpha-kronos-base-cache"
+  }
+}

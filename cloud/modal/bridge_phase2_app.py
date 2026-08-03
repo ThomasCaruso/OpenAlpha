@@ -1101,3 +1101,313 @@ def inventory_base_remote_cache() -> dict[str, Any]:
         deployed_commit=_require_deployed_commit(),
         inspected_at=_now(),
     )
+
+
+# ======================================================================
+# Kronos-base zero-shot forecasting benchmark
+#
+# A third study, with its own preregistration, artifact namespace, run-identifier
+# space, schemas and worker. It reuses the base study's remote volume because the
+# two pinned repositories already live there and duplicating 409 MB of weights
+# would be waste, not isolation -- the volume is mounted read-only and this study
+# writes nothing to it.
+#
+# No function below is named as though it were a structural diagnostic, and
+# nothing here reads or writes either completed study's artifacts.
+# ======================================================================
+
+
+@app.function(image=image, secrets=secrets, timeout=CONTROL_TIMEOUT)
+def verify_zero_shot_benchmark_deployment() -> dict[str, Any]:
+    """Fail deployment when the image and the benchmark preregistration disagree.
+
+    Separate from both completed studies' gates. It still verifies every
+    historical structural specification hash, because this repository must not
+    be able to ship a benchmark while quietly having drifted a sealed document
+    the completed studies depend on.
+    """
+    from pathlib import Path
+
+    from openalpha_bridge.base_study.spec import (
+        BASE_ARTIFACT_ROOT,
+        verify_base_specification,
+    )
+    from openalpha_bridge.diagnostic.spec import verify_diagnostic_specifications
+    from openalpha_bridge.phase2.identity import verify_locked_hashes
+    from openalpha_bridge.zero_shot.baselines import BASELINE_IDS, PRIMARY_BASELINE_ID
+    from openalpha_bridge.zero_shot.origins import ORIGIN_INDEX_OFFSETS, verify_origin_policy
+    from openalpha_bridge.zero_shot.spec import (
+        ASSET_PANEL,
+        BOOTSTRAP_CONFIDENCE_LEVEL,
+        BOOTSTRAP_RESAMPLES,
+        BOOTSTRAP_SEED,
+        CONTEXT_CANDLES,
+        ENSEMBLE_SEEDS,
+        HORIZON_CANDLES,
+        PRIMARY_METRIC,
+        REQUIRED_SESSIONS,
+        RETRIEVAL_END_EXCLUSIVE,
+        RETRIEVAL_START_INCLUSIVE,
+        SAMPLING_CONFIGURATIONS,
+        SECONDARY_METRICS,
+        ZERO_SHOT_ARTIFACT_ROOT,
+        ZERO_SHOT_CACHE_VOLUME,
+        ZERO_SHOT_EXPERIMENT_ID,
+        ZERO_SHOT_FAILURE_SCHEMA_VERSION,
+        ZERO_SHOT_MODEL_SPEC,
+        ZERO_SHOT_PROBE_SCHEMA_VERSION,
+        ZERO_SHOT_SUCCESS_SCHEMA_VERSION,
+        ZERO_SHOT_THRESHOLDS,
+        ZERO_SHOT_TOKENIZER_SPEC,
+        prove_zero_shot_budget,
+        verify_pinned_pair,
+        verify_zero_shot_specification,
+    )
+
+    research_root = Path("/root/research/bridge-v0")
+    benchmark_hashes = verify_zero_shot_specification(research_root)
+    # Every historical structural document must still verify. A benchmark that
+    # shipped while a sealed prior document had drifted would make the completed
+    # studies unciteable.
+    base_hashes = verify_base_specification(research_root)
+    mini_sealed = verify_locked_hashes(research_root)
+    mini_diagnostic = verify_diagnostic_specifications(research_root)
+
+    verify_pinned_pair()
+    if ZERO_SHOT_MODEL_SPEC.repository != KRONOS_BASE_REPOSITORY:
+        raise RuntimeError("ZERO_SHOT_MODEL_REPOSITORY_DRIFT")
+    if ZERO_SHOT_MODEL_SPEC.revision != KRONOS_BASE_REVISION:
+        raise RuntimeError("ZERO_SHOT_MODEL_REVISION_DRIFT")
+    if ZERO_SHOT_TOKENIZER_SPEC.repository != KRONOS_BASE_TOKENIZER_REPOSITORY:
+        raise RuntimeError("ZERO_SHOT_TOKENIZER_REPOSITORY_DRIFT")
+    if ZERO_SHOT_TOKENIZER_SPEC.revision != KRONOS_BASE_TOKENIZER_REVISION:
+        raise RuntimeError("ZERO_SHOT_TOKENIZER_REVISION_DRIFT")
+    if ZERO_SHOT_ARTIFACT_ROOT.startswith(BASE_ARTIFACT_ROOT):
+        raise RuntimeError("ZERO_SHOT_ARTIFACT_NAMESPACE_COLLISION")
+
+    return {
+        "app": APP_NAME,
+        "version": APP_VERSION,
+        "gpu": GPU_CONFIG,
+        "python": PYTHON_VERSION,
+        "torch": TORCH_VERSION,
+        "experiment_id": ZERO_SHOT_EXPERIMENT_ID,
+        "study_type": "zero_shot_forecast_benchmark",
+        "benchmark_specification_hashes": benchmark_hashes,
+        "base_specification_hashes": base_hashes,
+        "mini_locked_hashes": mini_sealed,
+        "mini_diagnostic_specification_hashes": mini_diagnostic,
+        "artifact_namespace": ZERO_SHOT_ARTIFACT_ROOT,
+        "run_id_pattern": "^zsb_[0-9a-f]{8,32}$",
+        "success_schema": ZERO_SHOT_SUCCESS_SCHEMA_VERSION,
+        "failure_schema": ZERO_SHOT_FAILURE_SCHEMA_VERSION,
+        "runtime_probe_schema": ZERO_SHOT_PROBE_SCHEMA_VERSION,
+        "model": {
+            "repository": ZERO_SHOT_MODEL_SPEC.repository,
+            "revision": ZERO_SHOT_MODEL_SPEC.revision,
+            "config_sha256": ZERO_SHOT_MODEL_SPEC.config_sha256,
+            "weights_sha256": ZERO_SHOT_MODEL_SPEC.weights_sha256,
+            "weights_size_bytes": ZERO_SHOT_MODEL_SPEC.weights_size_bytes,
+        },
+        "tokenizer": {
+            "repository": ZERO_SHOT_TOKENIZER_SPEC.repository,
+            "revision": ZERO_SHOT_TOKENIZER_SPEC.revision,
+            "config_sha256": ZERO_SHOT_TOKENIZER_SPEC.config_sha256,
+            "weights_sha256": ZERO_SHOT_TOKENIZER_SPEC.weights_sha256,
+        },
+        "assets": list(ASSET_PANEL),
+        "frequency": "1d",
+        "calendar": "XNYS",
+        "retrieval_start_inclusive": RETRIEVAL_START_INCLUSIVE,
+        "retrieval_end_exclusive": RETRIEVAL_END_EXCLUSIVE,
+        "required_sessions": REQUIRED_SESSIONS,
+        "context_candles": CONTEXT_CANDLES,
+        "horizon_candles": HORIZON_CANDLES,
+        "context_budget": prove_zero_shot_budget(),
+        "origin_policy": verify_origin_policy(),
+        "origin_index_offsets": list(ORIGIN_INDEX_OFFSETS),
+        "total_asset_origins": len(ASSET_PANEL) * len(ORIGIN_INDEX_OFFSETS),
+        "sampling_configurations": [
+            {
+                "label": configuration.label,
+                "temperature": configuration.temperature,
+                "top_k": configuration.top_k,
+                "top_p": configuration.top_p,
+                "sample_count": configuration.sample_count,
+            }
+            for configuration in SAMPLING_CONFIGURATIONS
+        ],
+        "ensemble_seeds": list(ENSEMBLE_SEEDS),
+        "primary_candidate": "ensemble_mean",
+        "baselines": list(BASELINE_IDS),
+        "primary_baseline": PRIMARY_BASELINE_ID,
+        "primary_metric": PRIMARY_METRIC,
+        "secondary_metrics": list(SECONDARY_METRICS),
+        "decision_rules": ["Z1", "Z2", "Z3", "Z4", "Z5"],
+        "decision_outcomes": [
+            "PROCEED_TO_FROZEN_REPRESENTATION_PROBE",
+            "PROCEED_TO_CONFIGURATION_CONFIRMATION",
+            "STOP_KRONOS_ZERO_SHOT_DIRECTION",
+            "BENCHMARK_INCONCLUSIVE",
+        ],
+        "thresholds": ZERO_SHOT_THRESHOLDS.model_dump(mode="json"),
+        "bootstrap": {
+            "resamples": BOOTSTRAP_RESAMPLES,
+            "confidence_level": BOOTSTRAP_CONFIDENCE_LEVEL,
+            "seed": BOOTSTRAP_SEED,
+        },
+        "remote_cache_volume": ZERO_SHOT_CACHE_VOLUME,
+        "creates_new_weight_storage": False,
+        "deployed_commit": _require_deployed_commit(),
+        "verified_at": _now().isoformat(),
+    }
+
+
+@app.function(
+    image=image,
+    gpu=GPU_CONFIG,
+    volumes={BASE_CACHE_ROOT: base_cache_volume},
+    secrets=secrets,
+    timeout=30 * 60,
+    retries=0,
+)
+def verify_zero_shot_benchmark_runtime() -> dict[str, Any]:
+    """Does the deployed image execute the official path for this benchmark?
+
+    A compatibility probe. It retrieves no market data, computes no forecast
+    metric, evaluates no decision rule and authorizes nothing, including the
+    benchmark itself. The measurement body is the one the base study already
+    validated against real Modal; only the outer identity differs.
+    """
+    from pathlib import Path
+
+    from openalpha_bridge.diagnostic.official_backend import official_runtime
+    from openalpha_bridge.diagnostic.runtime_probe import RuntimeEnvironment
+    from openalpha_bridge.zero_shot.runtime_probe import run_zero_shot_runtime_probe
+    from openalpha_bridge.zero_shot.spec import ZERO_SHOT_MODEL_SPEC, ZERO_SHOT_TOKENIZER_SPEC
+
+    _register_secrets()
+    cache_root = Path(BASE_CACHE_ROOT)
+    os.environ.setdefault("HF_HOME", str(cache_root / "huggingface"))
+    source_root = Path(os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH", KRONOS_SOURCE_ROOT))
+
+    import numpy
+    import torch
+
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "ZERO_SHOT_RUNTIME_PROBE_NO_CUDA: the probe exists to exercise the deployed GPU path"
+        )
+
+    environment = RuntimeEnvironment(
+        torch_version=torch.__version__,
+        torch_cuda_version=torch.version.cuda,
+        cuda_available=True,
+        device_name=torch.cuda.get_device_name(0),
+        device_capability=".".join(str(part) for part in torch.cuda.get_device_capability(0)),
+        numpy_version=numpy.__version__,
+    )
+
+    # The same two pinned repositories the base volume already holds. Nothing
+    # new is stored; the resolver returns the existing snapshot directories.
+    tokenizer_dir, model_dir = _download_base_pair(cache_root)
+
+    with official_runtime(
+        source_root=source_root,
+        tokenizer_directory=tokenizer_dir,
+        model_directory=model_dir,
+        tokenizer_spec=ZERO_SHOT_TOKENIZER_SPEC,
+        model_spec=ZERO_SHOT_MODEL_SPEC,
+        device="cuda",
+    ) as runtime:
+        result = run_zero_shot_runtime_probe(
+            codec=runtime.codec,
+            model=runtime.model,
+            assets=runtime.assets,
+            parameter_digest=runtime.parameter_digest,
+            environment=environment,
+            run_id="zero_shot_runtime_probe",
+            deployed_commit=_require_deployed_commit(),
+            now=_now(),
+        )
+
+    base_cache_volume.commit()
+    return result.model_dump(mode="json")
+
+
+@app.function(
+    image=image,
+    gpu=GPU_CONFIG,
+    volumes={BASE_CACHE_ROOT: base_cache_volume},
+    secrets=secrets,
+    timeout=2 * 60 * 60,
+    retries=0,
+)
+def run_zero_shot_benchmark(source_commit: str, run_id: str) -> dict[str, Any]:
+    """The Kronos-base zero-shot forecasting benchmark, and nothing else.
+
+    Its own function rather than a flag on either diagnostic, so the three can
+    never share a code path, an artifact key, a run identifier or a failure
+    mode. There is no import of and no call into the mini worker, the base
+    structural worker, CloudRunner, training, an optimizer, checkpoint code,
+    Stage B, Stage C, test opening, held-out evaluation, structural projection
+    or validity filtering. Execution stops after the artifact is written.
+
+    This is a shell. Everything it does lives in
+    openalpha_bridge.zero_shot.worker, which tests exercise with doubles.
+    """
+    from pathlib import Path
+
+    from openalpha_bridge.diagnostic.official_backend import official_runtime
+    from openalpha_bridge.phase2.provider import YahooDailyProvider
+    from openalpha_bridge.zero_shot.spec import ZERO_SHOT_MODEL_SPEC, ZERO_SHOT_TOKENIZER_SPEC
+    from openalpha_bridge.zero_shot.worker import run_zero_shot_benchmark_worker
+
+    _register_secrets()
+    cache_root = Path(BASE_CACHE_ROOT)
+    os.environ.setdefault("HF_HOME", str(cache_root / "huggingface"))
+    source_root = Path(os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH", KRONOS_SOURCE_ROOT))
+
+    def resolve_runtime():
+        """The one official runtime context, entered only when there is work."""
+        tokenizer_dir, model_dir = _download_base_pair(cache_root)
+        return official_runtime(
+            source_root=source_root,
+            tokenizer_directory=tokenizer_dir,
+            model_directory=model_dir,
+            tokenizer_spec=ZERO_SHOT_TOKENIZER_SPEC,
+            model_spec=ZERO_SHOT_MODEL_SPEC,
+            device="cuda",
+        )
+
+    result = run_zero_shot_benchmark_worker(
+        store=_build_store(),
+        resolve_runtime=resolve_runtime,
+        provider_factory=lambda: YahooDailyProvider(stage="kronos-zero-shot-benchmark"),
+        research_root=Path("/root/research/bridge-v0"),
+        source_commit=source_commit,
+        deployed_commit=_require_deployed_commit(),
+        run_id=run_id,
+    )
+    base_cache_volume.commit()
+    return result.model_dump(mode="json")
+
+
+@app.function(image=image, secrets=secrets, timeout=CONTROL_TIMEOUT)
+def inventory_zero_shot_artifacts() -> dict[str, Any]:
+    """Report what exists under the benchmark's own artifact root.
+
+    Read-only, and structurally unable to inspect either completed study: the
+    prefix is fixed inside the library rather than passed in, so no caller can
+    aim this at another namespace. It has no delete mode, mounts no volume and
+    loads no weight.
+    """
+    from openalpha_bridge.zero_shot.inventory import inventory_zero_shot_artifacts as build
+
+    _register_secrets()
+    result = build(
+        _build_store(),
+        deployed_commit=_require_deployed_commit(),
+        inspected_at=_now(),
+    )
+    return result.model_dump(mode="json")
