@@ -364,10 +364,14 @@ integration contract, feature cache, locked training module, evaluation metrics,
 paired bootstrap, gate evaluator, GPU preflight, CLI, and a portable execution
 bundle.
 
-Phase 2 has still not executed. Zero provider requests, zero retrieved candles,
-zero Kronos downloads or checkpoint loads, zero tokenizer encodes, zero optimizer
-steps, and no validation, reconstruction-test, external, forecast, or
+Phase 2 Bridge training has still not executed: zero optimizer steps, zero Bridge
+checkpoints, and no validation, reconstruction-test, external, forecast or
 untouched-holdout access. `test_partition_opened` remains false.
+
+Provider requests and Kronos checkpoint loads are no longer zero. The three
+completed diagnostic and benchmark studies performed both against pinned public
+revisions while training nothing; see `research/reports/`. The direction this
+Bridge design served has since been closed by those studies.
 
 Stage A, Stage B, and Stage C run together on one GPU host. See
 [BRIDGE_PHASE2_EXECUTION.md](BRIDGE_PHASE2_EXECUTION.md) and
@@ -390,9 +394,14 @@ Production path: GitHub deployment, an authenticated control API on Modal CPU
 endpoints, one background Modal GPU worker, the market-data API, the Hugging Face
 Hub API, S3-compatible cloud storage, and status and artifact APIs.
 
-Phase 2 has still not executed empirically. Zero provider requests, zero retrieved
-candles, zero Kronos downloads or checkpoint loads, zero optimizer steps, and no
-held-out access. `test_partition_opened` remains false.
+Phase 2 Bridge training has still not executed: zero optimizer steps, zero Bridge
+checkpoints, and no validation, reconstruction-test, external, forecast or
+untouched-holdout access. `test_partition_opened` remains false.
+
+Provider requests and Kronos checkpoint loads are no longer zero. The three
+completed diagnostic and benchmark studies performed both against pinned public
+revisions while training nothing; see `research/reports/`. The direction this
+Bridge design served has since been closed by those studies.
 
 See [BRIDGE_CLOUD_ARCHITECTURE.md](BRIDGE_CLOUD_ARCHITECTURE.md),
 [BRIDGE_CLOUD_API.md](BRIDGE_CLOUD_API.md),

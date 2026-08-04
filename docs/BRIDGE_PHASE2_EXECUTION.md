@@ -1,11 +1,18 @@
 # Bridge Phase 2 Execution Pipeline
 
-**Status: pipeline implemented and synthetically validated. No stage has been
-executed against real data.**
+**Status: pipeline implemented and synthetically validated. The Bridge training
+run was never executed, and the direction it served is now closed.**
 
-Phase 2 has not run. No provider request has been made, no Kronos asset
-downloaded, no parameter trained, and no held-out partition opened. What exists
-is the complete execution pipeline, verified end to end against fake components.
+No Bridge stage has run: no parameter was trained, no Bridge checkpoint written,
+and no held-out partition opened. What exists is the complete execution pipeline,
+verified end to end against fake components.
+
+Provider requests and Kronos asset downloads are no longer zero — the three
+completed diagnostic and benchmark studies performed both while training nothing
+(`trainable_parameter_count = 0`, unchanged parameter hashes,
+`optimizer_constructed = false`). Those studies closed the structural-validity
+direction this pipeline was built to serve; see
+[`../research/reports/`](../research/reports/).
 
 ## Why local execution stopped
 

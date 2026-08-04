@@ -1,227 +1,247 @@
 # OpenAlpha
 
-Constraint-preserving assurance and compatibility for financial foundation models.
+**Preregistered empirical research on whether a pretrained financial foundation
+model produces usable forecasts.**
 
-OpenAlpha makes financial foundation-model forecasts structurally safe, auditable,
-and deployment-ready. Its first integration adds a constraint-preserving
-compatibility decoder and assurance layer to Kronos without retraining the
-pretrained forecasting backbone.
+Three completed studies against [Kronos](https://github.com/shiyu-coder/Kronos),
+a published time-series foundation model. Three negative results — including one
+that falsified this project's own original thesis.
 
-The project remains **OpenAlpha**. Its primary public integration is **OpenAlpha
-for Kronos**.
+| Study | Question | Conclusion |
+| --- | --- | --- |
+| Kronos-mini frozen-inference diagnostic | Does the tokenizer round trip preserve OHLC structure? | `ROUNDTRIP_MATERIAL_INVALIDITY` |
+| Kronos-base replication | Does the larger released model behave differently? | `ROUNDTRIP_MATERIAL_INVALIDITY` |
+| Kronos-base zero-shot benchmark | Do frozen forecasts beat persistence at a paper-style horizon? | `NO_ZERO_SHOT_SKILL` |
 
-## Current status
+Every conclusion was reached under decision rules fixed and cryptographically
+sealed **before** the data was touched.
 
-OpenAlpha has completed the Sentinel v0, v1, and v1.1 development investigations.
-Phase 1 proved the Bridge mathematical/runtime contract.
+📊 **[Read the research reports →](research/reports/)**
 
-Phase 2 first stopped at its preregistered pre-data gate with
-`OPERATIONALLY_BLOCKED`. That finding was traced to a protocol-design error
-rather than a data, compute, or Kronos limitation, and Amendment 2 corrected it
-by separating the 448-candle read-only causal context prefix from the 64-candle
-scored suffix. The blocker record is preserved unchanged.
+---
 
-The Phase 2 execution pipeline is now implemented, synthetically validated, and
-deployed as an **API-operated managed cloud job**: GitHub deployment, an
-authenticated control API, one background Modal GPU worker, and S3-compatible
-cloud storage. There is no user-managed GPU host, and nothing heavy is installed
-on a workstation.
+## What this project actually is
 
-Phase 2 has still not executed empirically. No market data has been retrieved, no
-Kronos checkpoint loaded, no Bridge checkpoint trained, no benchmark evaluated,
-`test_partition_opened` is false, and the untouched Sentinel holdout remains
-unaccessed.
+OpenAlpha began as a product thesis: pretrained financial models emit candles
+that violate elementary structure (`high < open`, `low > close`), so a
+constraint-preserving decoder — "Bridge" — would make them safe to consume.
 
-Start here: [BRIDGE_CLOUD_ARCHITECTURE.md](docs/BRIDGE_CLOUD_ARCHITECTURE.md),
-[BRIDGE_MODAL_DEPLOYMENT.md](docs/BRIDGE_MODAL_DEPLOYMENT.md), and
-[BRIDGE_GPU_RUNBOOK.md](docs/BRIDGE_GPU_RUNBOOK.md).
+That thesis was tested and **closed by this project's own research**. The
+structural defect is real and material. But a deterministic repair that restored
+*complete* structural validity changed the primary forecast metric by exactly
+`0.0`. Structural validity and forecast skill turned out to be separate
+properties, and the former was not the binding constraint. Both structural
+studies independently recommended `ABANDON_STRUCTURAL_VALIDITY_DIRECTION`, and it
+was abandoned.
 
-## The problem
+A fair objection survived: those studies used one asset, one origin, and a
+448 → 64 horizon far longer than the published daily benchmark. Perhaps the model
+had never been asked properly. The third study asks properly — four ETFs, 25
+chronological origins each, a 40 → 12 horizon, two temperatures, 1,600
+generations. It does not beat a zero-return baseline either.
 
-Financial-model output can look plausible while violating elementary candle
-structure. A downstream system must not silently treat a row as valid when, for
-example, its high is below its open or close, its low is above them, or a price is
-nonfinite or nonpositive.
+Bridge was never trained. That is the finding, not an omission.
 
-OpenAlpha addresses structural correctness and safe downstream use. It does not
-claim to make Kronos more profitable, improve every forecasting error, or create
-alpha.
+---
 
-## What OpenAlpha found
+## Headline results
 
-All findings below are limited to the pinned revisions, assets, periods,
-frequencies, horizons, and configurations recorded in this repository.
+### Structural validity is not forecast skill
 
-- Sentinel v0 found 473 of 936 generated paths invalid (50.53%), 961 of 4,680
-  generated candles invalid (20.53%), and 57 of 104 canonical forecasts invalid
-  (54.81%).
-- The direct official Kronos output was invalid under identical inputs and seeds;
-  OpenAlpha's mapping introduced no transformation error.
-- Kronos-Tokenizer-2k reconstructed 4,357 of 15,360 valid observed candles as
-  invalid (28.3659%).
-- Kronos-Tokenizer-base reconstructed 3,555 of 15,360 valid observed candles as
-  invalid (23.1445%).
-- In the Sentinel v1.1 generated-token audit, 68 of 180 forecast candles were
-  invalid (37.7778%). Supported token pairs were not safer than unsupported pairs,
-  and median bounded valid probability mass was approximately 60%.
-- The preregistered v1.1 conclusion was `TOKENIZER_CONSTRAINT_DEFECT`. The
-  inference-only constrained-decoding track stopped under its locked rules.
+| | Kronos-mini | Kronos-base |
+| --- | --- | --- |
+| Tokenizer round-trip invalid fraction | 24.61% | 12.30% |
+| Target-suffix invalid fraction | 93.75% | 60.94% |
+| Structurally valid rollouts | 0 / 64 | 0 / 64 |
+| Forecast error vs persistence | 0.00731 vs 0.00337 | 0.00920 vs 0.00337 |
+| **Improvement from full structural repair** | **0.0** | **0.0** |
 
-The complete evidence remains under `research/sentinel-v0/`,
-`research/sentinel-v1/`, and `research/sentinel-v1_1/`.
+Deterministic projection restored validity on all 64 candles — 11 repaired, zero
+unrepairable — and the primary metric did not move.
 
-## What failed
+### No zero-shot skill at a paper-style horizon
 
-Negative results are part of the product evidence, not discarded prototypes.
+| | T=0.6 | T=1.0 | Required |
+| --- | --- | --- | --- |
+| Median relative skill vs persistence | −0.0417 | −0.0836 | > 0 |
+| Origins beating persistence | 31% | 26% | ≥ 60% |
+| Supporting assets | 0 / 4 | 0 / 4 | ≥ 3 / 4 |
+| Moving-block 95% CI | [−0.00065, −0.00022] | [−0.00158, −0.00035] | excludes 0 favorably |
 
-- Forecast-time diagnostics did not usefully rank later Kronos return error. The
-  pooled chronological out-of-fold risk/error Spearman correlation was 0.08148.
-- Abstention did not reduce accepted-forecast error, and the zero-return baseline
-  beat Kronos at every declared coverage.
-- Stepwise projection and re-encoding returned valid paths when successful but
-  hard-failed 21 of 36 paths.
-- Valid-candidate resampling returned 36 of 36 valid paths but failed the locked
-  high-low range-error gate.
+All four preregistered conditions failed under both temperatures. Both intervals
+exclude zero on the *unfavorable* side. Three non-model baselines also failed to
+beat persistence, so the window is hard rather than the model uniquely poor.
 
-No untouched holdout result was accessed or used in any of these decisions.
+---
 
-## The root cause
+## Why the method matters more than the result
 
-At the pinned source revision, the official tokenizer converts each normalized
-six-feature candle into hierarchical 10-bit coarse and 10-bit fine identifiers.
-The official decoder reconstructs the combined 20-bit latent through a causal
-sequence model and an unrestricted linear head for open, high, low, close, volume,
-and amount. That head does not encode the financial ordering constraints.
+A negative result is only worth anything if the protocol could have produced a
+positive one. The controls here are the substance of the project.
 
-The round-trip experiment demonstrated that valid observed candles can become
-invalid before autoregressive forecasting begins. This does not establish that
-Kronos is universally broken; it identifies a measured compatibility defect at the
-tested continuous reconstruction boundary.
+**Preregistration is enforced, not promised.** Each specification's SHA-256 is
+verified *inside the execution container* before any work begins. A drifted
+document fails the run closed.
 
-## The solution
+**The running code is pinned to a commit.** The source commit is baked into the
+container image at deploy time and re-verified at execution; `source_commit` must
+equal `deployed_commit` or the run aborts.
 
-OpenAlpha is a connected three-layer stack:
+**Statistical design was corrected twice, before execution, each time weakening
+the claim it could make:**
 
-- **OpenAlpha Sentinel** validates timestamps, shapes, values, financial structure,
-  and provenance; preserves raw output; creates immutable audits; and prevents
-  invalid raw paths from being silently consumed.
-- **OpenAlpha Bridge** consumes the unchanged Kronos hierarchical token sequence,
-  reuses the frozen official tokenizer latent and causal decoder trunk, and learns
-  only a small constraint-preserving reconstruction head.
-- **OpenAlpha Evidence** preserves the reproducible investigation, failed methods,
-  comparison artifacts, limitations, and exact claim boundaries.
+| Revision | Resampling unit | Defect it fixed |
+| --- | --- | --- |
+| initial | 100 asset-origin rows | Four ETFs share windows — errors are cross-sectionally dependent |
+| second | 25 origin clusters | Origins overlap: 40-session context, 12-session stride → adjacent origins share 28 sessions |
+| final | moving blocks of 4 clusters | Block length `ceil(40/12)` spans every overlapping context relationship |
 
-Bridge output is separately labeled. It never overwrites or disguises the official
-Kronos result.
+Each correction *widened* the confidence interval. Both superseded estimators
+were deleted from the codebase, so no weaker interval can reach the decision
+layer — a structural guarantee, not a convention.
 
-## How OpenAlpha and Kronos work together
+**Leakage is prevented structurally.** Normalization is refit per origin from
+context rows only. Baselines take `(context, target_sessions)` — a target row
+cannot arrive through the signature. No holdout was ever opened.
 
-```text
-Historical OHLCV
-    |
-    v
-Official Kronos tokenizer encoder
-    |
-    v
-Official coarse/fine token identifiers
-    |
-    v
-Pretrained Kronos forecasting transformer (frozen)
-    |
-    v
-Generated official token sequence (preserved)
-    |---------------------------------------------|
-    v                                             v
-Official Kronos sequence decoder             OpenAlpha Bridge
-    |                                         constrained head
-    v                                             |
-Raw official forecast                             v
-    |                                     Separately labeled safe forecast
-    |                                             |
-    |---------------------> OpenAlpha Sentinel <--|
-                              validation + audit
+**Failures are typed and sanitized.** An operational failure records the
+exception class and a fixed message, never exception text, which can carry
+credentials or provider responses. A test plants a fake credential in an
+exception and asserts it appears in neither the artifact nor the logs.
+
+**Results cannot be quietly revised.** Write-once artifacts, `retries=0`, run IDs
+spent under every outcome including failure. Duplicate invocation loads no
+weights and issues no provider request.
+
+---
+
+## Repository tour
+
+```
+packages/bridge/      Research engine: diagnostics, zero-shot benchmark,
+                      metrics, bootstrap, decision rules, artifact publication
+packages/sentinel/    Structural validation and audit layer
+packages/research-core, packages/experiment-spec
+cloud/modal/          GPU execution shells — thin wrappers; all logic is importable
+research/bridge-v0/   Preregistrations, sealed with .sha256 sidecars
+research/reports/     ← the completed studies and their evidence
+research/sentinel-*/  Earlier investigations and their immutable artifacts
+docs/                 Architecture, ADRs, methodology, data policy
+vendor/kronos/        Two upstream files, verbatim, for offline conformance checks
 ```
 
-Kronos remains the forecasting model. OpenAlpha makes the generated token sequence
-safe and auditable at the decoding boundary.
+| | |
+| --- | --- |
+| Source | ~44,000 lines |
+| Tests | ~24,000 lines · **1,549 passing** |
+| Static analysis | `ruff` clean · `pyright` clean |
+| Stack | Python 3.13 · PyTorch 2.13 · Modal (T4) · S3-compatible storage · `uv` |
 
-## Planned interface
+---
 
-The paired predictor is a Phase 6 target, not a currently released API:
+## Quick start
 
-```python
-from openalpha.kronos import OpenAlphaKronosPredictor
+No GPU, no credentials, and no model weights are needed to run everything that
+does not touch a checkpoint.
 
-predictor = OpenAlphaKronosPredictor.from_pretrained(
-    model="NeoQuasar/Kronos-mini",
-    tokenizer="NeoQuasar/Kronos-Tokenizer-2k",
-    bridge="openalpha/bridge-2k-v0",
-)
-
-result = predictor.predict(df=history, pred_len=5)
-
-result.raw_forecast
-result.safe_forecast
-result.raw_validation
-result.safe_validation
-result.token_audit
-result.provenance
+```bash
+uv sync --locked --group dev
+uv run pytest -q          # 1,549 tests
+uv run ruff check .
+uv run pyright
 ```
 
-The runtime will reject model, tokenizer, source, feature, normalization, or Bridge
-checkpoint combinations that do not match the checkpoint compatibility manifest.
+Verify a sealed preregistration for yourself:
 
-## Benchmarks
+```bash
+sha256sum research/bridge-v0/kronos-zero-shot-benchmark-v1.yaml
+# 6832c0f7befc54cd7ccec382db8cac1e6314f3fb356eb5eed8e9e9eca9a6fd07
+```
 
-Bridge benchmarks have not been run. Phase 2 stopped before data access because the
-locked chronological partitions cannot form the locked 512-candle validation and
-test sequences. The preserved experiment was intended to compare the same official
-token sequences under four reconstruction paths:
+Executing a study additionally requires a Modal account and object-store
+credentials. See [`docs/BRIDGE_MODAL_DEPLOYMENT.md`](docs/BRIDGE_MODAL_DEPLOYMENT.md)
+and [`docs/BRIDGE_GPU_RUNBOOK.md`](docs/BRIDGE_GPU_RUNBOOK.md).
 
-| Decoder | Validity mechanism | Current evidence |
-|---|---|---|
-| Official Tokenizer-2k decoder | None | Measured round-trip invalidity: 28.3659% |
-| Terminal projection | Deterministic post-decoding projection | Valid by construction; forecast range MAE 0.00959934 in Sentinel v1 |
-| Linear residual + projection | Learned affine residual, then explicit projection | Baseline only; not yet evaluated |
-| OpenAlpha Bridge-2K | Hard constrained financial parameterization | Design locked; not yet trained |
+---
 
-Success requires zero invalid Bridge candles, materially better range reconstruction
-than terminal projection, non-inferior close/return and OHLC reconstruction, exact
-token compatibility, deterministic replay, bounded resource use, and external
-generalization. The numerical gates are frozen in
-`research/bridge-v0/experiment.yaml` before training.
+## Reproducibility and its limits
 
-## Reproducibility
+Pinned for every study:
 
-- Kronos source revision:
-  `67b630e67f6a18c9e9be918d9b4337c960db1e9a`
-- Kronos-mini revision:
-  `f4e68697d9d5aed55cef5c96aabc3376bcad9f81`
-- Kronos-Tokenizer-2k revision:
-  `26966d0035065a0cae0ebad7af8ece35bc1fb51c`
-- Kronos-Tokenizer-base revision:
-  `0e0117387f39004a9016484a186a908917e22426`
+```
+Kronos source        67b630e67f6a18c9e9be918d9b4337c960db1e9a
+Kronos-base          2b554741eca47781b64468546e77fef3e85130e6
+Kronos-Tokenizer-base 0e0117387f39004a9016484a186a908917e22426
+Kronos-mini          f4e68697d9d5aed55cef5c96aabc3376bcad9f81
+Kronos-Tokenizer-2k  26966d0035065a0cae0ebad7af8ece35bc1fb51c
+```
 
-See `docs/KRONOS_COMPATIBILITY_BOUNDARY.md` for source and checkpoint hashes,
-`docs/OPENALPHA_KRONOS_BRIDGE.md` for the selected architecture, and the research
-directories for immutable experiment artifacts.
+Terminal artifacts live in a private object store, so their bytes are not
+publicly fetchable. Each report therefore mirrors its **complete** numeric
+results into `results-summary.json`, generated directly from the artifact payload
+rather than transcribed.
 
-Raw provider data, caches, and model checkpoints remain outside Git. Only compact
-derived manifests, hashes, reports, and synthetic test fixtures may be committed.
+Checkable by anyone: specification digests, vendored source digests, model and
+tokenizer digests against public Hugging Face revisions, and the entire analysis
+and decision code with its test suite. Requires bucket access: byte-level
+confirmation of an artifact against its recorded SHA-256. That line is drawn
+explicitly in every report rather than glossed over.
 
-## Limitations
+Raw provider data, caches and checkpoints are never committed.
 
-- Bridge-2K feasibility is not yet established and no checkpoint exists.
-- Structural validity does not imply forecast accuracy, profitability, calibration,
-  or economic usefulness.
-- Existing empirical results are development evidence, not untouched-holdout
-  evidence.
-- The tokenizer findings do not automatically generalize to other Kronos revisions,
-  assets, frequencies, horizons, providers, or preprocessing choices.
-- A constrained decoder cannot recreate information absent from the frozen token
-  sequence.
-- The initial data and compute budget is deliberately small; a negative result will
-  be preserved rather than rescued with an unbounded corpus or model.
+---
 
-OpenAlpha is designed as an interoperable Kronos extension and a potential factual
-upstream contribution, not as a replacement for Kronos.
+## What this research does not establish
+
+- **Not** that Kronos is universally broken, or useless at other horizons, assets
+  or frequencies.
+- **Not** a contradiction of published Kronos results — the paper's evaluation
+  protocol was not replicated.
+- **Not** that Kronos would fail after task-specific fine-tuning.
+- **Not** that Kronos internal representations lack usable information — direct
+  generation and representation quality are different hypotheses, and only the
+  first was tested.
+- **Not** a trading, profitability, or economic claim. There is no backtest, no
+  transaction-cost model, and no execution assumption anywhere in this
+  repository.
+- **Not** a held-out result. Every finding is development evidence; no untouched
+  partition has been opened.
+
+Every authorization field in every artifact is `false`.
+
+---
+
+## Status and what would come next
+
+The structural direction is **closed**. The zero-shot generation direction is
+**stopped** by its own preregistered rule.
+
+One hypothesis survives: a model can generate poorly and still encode useful
+internal state. The preregistered decision therefore routes to a
+frozen-representation probe. A design note exists at
+[`research/bridge-v0/kronos-frozen-representation-probe-design.md`](research/bridge-v0/kronos-frozen-representation-probe-design.md),
+including a source audit confirming that `Kronos.decode_s1` already returns the
+transformer hidden state publicly — so the probe would need no upstream
+modification.
+
+It is **not implemented and not authorized**. It would require its own
+preregistration.
+
+---
+
+## Tooling disclosure
+
+Research and implementation were aided by Codex and Claude Code. All
+preregistrations, thresholds, decision rules, seeds and origin definitions were
+fixed and hashed before execution; every result is bound to a pinned commit and
+specification digest recorded inside its own artifact, and the full analysis code
+and test suite are in this repository for inspection.
+
+---
+
+## License
+
+[MIT](LICENSE). Vendored Kronos source is MIT, © 2025 ShiYu — see
+[`vendor/kronos/LICENSE`](vendor/kronos/LICENSE). Model weights are not
+redistributed; they are fetched at pinned revisions from the Hugging Face Hub and
+remain subject to their upstream terms.

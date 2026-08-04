@@ -1,11 +1,40 @@
 # Project Status
 
-Last updated: 2026-07-31
+Last updated: 2026-08-03
+
+## Current status: both research directions are closed
+
+Three preregistered studies have executed against real Kronos checkpoints on a
+Modal T4. All three reached their preregistered conclusions.
+
+| Study | Run | Conclusion |
+|---|---|---|
+| Kronos-mini frozen-inference diagnostic | `canary_0a92fde788bd685c` | `ROUNDTRIP_MATERIAL_INVALIDITY` |
+| Kronos-base replication | `base_03b08cbc706193d6` | `ROUNDTRIP_MATERIAL_INVALIDITY` |
+| Kronos-base zero-shot benchmark | `zsb_25e0256eefb2b07a` | `NO_ZERO_SHOT_SKILL` |
+
+The **structural-validity direction is closed**: restoring complete structural
+validity changed the primary forecast metric by exactly `0.0`, so both structural
+studies recommended `ABANDON_STRUCTURAL_VALIDITY_DIRECTION`.
+
+The **zero-shot generation direction is stopped** by rule Z4 of its own
+preregistration. The decision routes to a frozen-representation probe, which is a
+design note only and is not authorized.
+
+Full evidence: [`../research/reports/`](../research/reports/).
+
+**Bridge was never trained.** The sections below describe the Bridge Phase 2
+training pipeline, which remains implemented-but-unexecuted and is now
+superseded by the findings above. They are retained as the historical record of
+that design.
+
+---
 
 ## OpenAlpha for Kronos Bridge Phase 2 cloud deployment
 
-**Status: cloud conversion complete and synthetically validated. No empirical
-Phase 2 run has been executed.**
+**Status: cloud conversion complete and synthetically validated. The Bridge
+training run was never executed, and the direction it served has since been
+closed by the studies listed above.**
 
 Phase 2 is now an API-operated managed cloud job. There is no user-managed GPU
 host, and nothing heavy is installed on a workstation.
@@ -26,15 +55,19 @@ evaluated and declined because its coverage begins 2016-01-01 against a locked
 2010-01-01 training start; see [DATA_POLICY.md](DATA_POLICY.md). No pre-data
 amendment was required, and every prior hash is preserved.
 
-Execution counts remain zero:
+Bridge training execution counts remain zero:
 
-- provider requests and retrieved candles: 0;
-- Kronos source/checkpoint downloads and checkpoint loads: 0;
-- tokenizer encodes and optimizer steps: 0;
+- Bridge optimizer steps and checkpoints written: 0;
 - opened validation, reconstruction-test, external, forecast, and untouched
   holdout results: 0.
 
 `test_partition_opened` is **false**.
+
+Provider requests, Kronos checkpoint downloads, checkpoint loads and tokenizer
+encodes are **no longer zero** — the three diagnostic and benchmark studies
+performed all of them against pinned public revisions. Those studies trained
+nothing: every run reported `trainable_parameter_count = 0`, an unchanged
+parameter hash before and after, and `optimizer_constructed = false`.
 
 The remaining user actions are: create Modal and Cloudflare R2 accounts, add the
 API and storage secrets, authorize deployment, and explicitly start the real run.

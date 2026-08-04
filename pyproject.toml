@@ -11,7 +11,7 @@ sentinel-phase2 = ["yfinance==1.5.2"]
 sentinel-phase3 = ['scikit-learn==1.7.2']
 
 [tool.uv.workspace]
-members = ["apps/api", "apps/worker", "packages/*"]
+members = ["packages/*"]
 
 [tool.uv.sources]
 openalpha-bridge = { workspace = true }
@@ -21,7 +21,7 @@ openalpha-sentinel = { workspace = true }
 
 [tool.pytest.ini_options]
 pythonpath = ['.']
-testpaths = ["tests", "packages", "apps"]
+testpaths = ["tests", "packages"]
 markers = ["slow: resource-intensive integration", "network: external network required", "kronos: official checkpoint inference"]
 
 [tool.ruff]

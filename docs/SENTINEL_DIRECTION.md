@@ -58,7 +58,7 @@ Kronos Reality Check correctly identified the credibility problem and establishe
 
 Benchmarking is no longer the product. The product is a forecast-time judgment about whether the forecast should be trusted and what intervention is justified.
 
-The unimplemented Reality Check design and proof-slice plan are archived under `docs/superpowers/{specs,plans}/archive/`. Commit `27f0c69` remains intact as the record of that reasoning.
+The unimplemented Reality Check design and proof-slice plan were never built. Commit `27f0c69` remains intact as the record of that reasoning.
 
 ## Sentinel v0
 

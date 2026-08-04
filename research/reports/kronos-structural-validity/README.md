@@ -48,5 +48,9 @@ preregistered zero-shot forecasting benchmark with a disjoint identity in every 
 - Run-ID namespace `zsb_<8-32 lowercase hex>`
 
 That benchmark asks a different question — external validity of zero-shot forecast skill under
-paper-style horizons — and is not a structural repair experiment. See
-`research/bridge-v0/kronos-zero-shot-benchmark-v1.yaml` and its preregistration.
+paper-style horizons — and is not a structural repair experiment.
+
+**It has since completed.** Run `zsb_25e0256eefb2b07a` concluded `NO_ZERO_SHOT_SKILL`: frozen
+Kronos-base did not beat zero-return persistence under either preregistered temperature, on any
+of the four assets. See [`../kronos-zero-shot-benchmark/`](../kronos-zero-shot-benchmark/) for the
+full report, and [`../README.md`](../README.md) for how the three studies connect.

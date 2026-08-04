@@ -1,27 +1,30 @@
-.PHONY: setup dev test demo benchmark report lint typecheck security reproduce
+.PHONY: help setup test test-smoke lint typecheck verify check reports clean
+
+help:
+	@echo "OpenAlpha - preregistered research on financial foundation models"
+	@echo ""
+	@echo "  make setup       Install pinned Python and Node dependencies"
+	@echo "  make check       Everything CI runs: tests, lint, types, environment"
+	@echo ""
+	@echo "  make test        Full suite (~1,549 tests; no GPU or credentials needed)"
+	@echo "  make test-smoke  Repository and deployment guards only (fast)"
+	@echo "  make lint        ruff"
+	@echo "  make typecheck   pyright"
+	@echo "  make verify      Environment plus every sealed specification digest"
+	@echo "  make reports     Where the completed research reports live"
+	@echo ""
+	@echo "Executing a study needs a Modal account and object-store credentials;"
+	@echo "see docs/BRIDGE_MODAL_DEPLOYMENT.md. No target here starts a run."
 
 setup:
 	uv sync --locked --group dev
 	npm ci
 
-dev:
-	@echo "dev is unavailable until the web application phase is implemented."
-	@exit 1
-
 test:
-	uv run pytest
+	uv run --group sentinel-phase3 pytest -q
 
-demo:
-	@echo "demo is unavailable until the demonstration phase is implemented."
-	@exit 1
-
-benchmark:
-	@echo "benchmark is unavailable until the benchmark phase is implemented."
-	@exit 1
-
-report:
-	@echo "report is unavailable until the reporting phase is implemented."
-	@exit 1
+test-smoke:
+	uv run pytest tests/smoke -q
 
 lint:
 	uv run ruff check .
@@ -29,10 +32,18 @@ lint:
 typecheck:
 	uv run pyright
 
-security:
-	@echo "security scanning is unavailable until the security tooling phase is implemented."
-	@exit 1
+verify:
+	uv run python scripts/verify_environment.py
+	uv run python scripts/verify_specifications.py
 
-reproduce:
-	@echo "reproduce is unavailable until the reproducibility pipeline phase is implemented."
-	@exit 1
+check: test lint typecheck verify
+
+reports:
+	@echo "Completed research reports:"
+	@echo "  research/reports/README.md                    index of all three studies"
+	@echo "  research/reports/kronos-structural-validity/  studies 1 and 2"
+	@echo "  research/reports/kronos-zero-shot-benchmark/  study 3"
+
+clean:
+	rm -rf .pytest_cache .ruff_cache
+	find . -type d -name __pycache__ -prune -exec rm -rf {} +
