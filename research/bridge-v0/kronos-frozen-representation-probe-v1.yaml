@@ -6,33 +6,82 @@ title: >-
 status: development_only_probe_specification
 preregistered_before_execution: true
 # Stated as a verifiable timestamp relation, not as a claim about data
-# existence. Every test session begins strictly after the sealing instant.
+# existence. Every test session opens strictly after the corrected sealing
+# instant recorded in `sealing.sealed_at_utc` below, which is the commit that
+# first contained these corrected design choices.
 all_test_sessions_begin_after_sealing: true
+all_test_sessions_begin_after_commit: 1a6fad7a57cbddbdaeecdb1713dfb7b93f971de0
 
 # The sealing instant. Every test observation is required to occur strictly
 # after it, and the test boundary below is derived from it rather than chosen.
 sealing:
-  preregistration_commit: 7e9395c6536a890b248f1effc62c5d1994105bfb
-  sealed_at_utc: '2026-08-04T03:12:08+00:00'
-  sealed_at_exchange_time: '2026-08-03T23:12:08-04:00'
+  # The corrected design choices below -- the 2026-08-05 boundary, the excluded
+  # gap, the correction chain and the timestamp-relation flag -- were introduced
+  # in commit 1a6fad7, not in the original 7e9395c. The anchor is therefore
+  # 1a6fad7's timestamp: a design cannot be treated as fixed at the timestamp of
+  # a commit that did not contain it.
+  sealed_by_commit: 1a6fad7a57cbddbdaeecdb1713dfb7b93f971de0
+  sealed_at_utc: '2026-08-04T22:06:45+00:00'
+  sealed_at_exchange_time: '2026-08-04T18:06:45-04:00'
+  sealed_at_unix: 1785881205
   exchange_timezone: America/New_York
-  exchange_date_at_sealing: '2026-08-03'
+  exchange_date_at_sealing: '2026-08-04'
   session_state_at_sealing: >-
-    The 2026-08-03 session had already opened and closed. The first XNYS session
-    that had not begun at the sealing instant is 2026-08-04, whose 09:30 ET open
-    is strictly after it.
-  correction_note: >-
-    The first sealed revision of this document set the test boundary at
-    2026-05-13 and claimed the test observations did not exist at sealing. That
-    claim was false: this document was sealed in August 2026, so sessions from
-    2026-05-13 through 2026-08-03 already existed and were in principle
-    observable. The boundary has been moved to the first session that had not
-    begun when the preregistration was sealed, and the justification is now
-    stated in terms of that timestamp rather than in terms of the data not
-    existing. No code had been written, no feature extracted, no model fitted and
-    no test data retrieved or inspected at any point before or after the original
-    sealing.
-  superseded_digest: a3f7b8fe40f41a2315f533d5cf0d393f238d7f57082481a0aa57a712633db6a2
+    The 2026-08-04 session had already opened and closed. The first XNYS session
+    whose 09:30 ET open is strictly after the sealing instant is 2026-08-05.
+
+  boundary_rule: >-
+    test_window.start_inclusive is the first XNYS session whose 09:30 ET open is
+    strictly later than sealed_at_utc. It is derived, never chosen.
+
+  boundary_stability: >-
+    The commit that finalises this text is necessarily later than the anchor it
+    names, which could in principle move the boundary again and recurse. It does
+    not here: no XNYS session opened between 1a6fad7 (2026-08-04T18:06:45-04:00)
+    and the finalising commit, so the boundary rule yields 2026-08-05 for both
+    instants. The claim is therefore true under the finalising commit's own
+    timestamp as well as under the anchor's, and the correction terminates.
+  boundary_stable_under_finalising_commit: true
+
+  correction_chain:
+    - revision: 1
+      commit: 7e9395c6536a890b248f1effc62c5d1994105bfb
+      sealed_at_utc: '2026-08-04T03:12:08+00:00'
+      digest: a3f7b8fe40f41a2315f533d5cf0d393f238d7f57082481a0aa57a712633db6a2
+      test_boundary: '2026-05-13'
+      superseded_because: >-
+        Materially false timing claim. The document asserted that its test
+        observations had not occurred when it was sealed, but it was sealed in
+        August 2026, so sessions from 2026-05-13 through 2026-08-03 already
+        existed and were in principle observable. A preregistration that
+        misstates when its own holdout became unobservable is worse than one
+        with a shorter holdout.
+    - revision: 2
+      commit: 1a6fad7a57cbddbdaeecdb1713dfb7b93f971de0
+      sealed_at_utc: '2026-08-04T22:06:45+00:00'
+      digest: 5003f706f9edbbf5473b7b3e224df6dc454a72d51b1733637c5751be9ef7273c
+      test_boundary: '2026-08-04'
+      superseded_because: >-
+        Anchored to the wrong commit. It derived its boundary from the timestamp
+        of 7e9395c, but 7e9395c sealed a specification with a 2026-05-13
+        boundary; the corrected choices first appeared in this revision itself.
+        A design cannot be treated as fixed at the timestamp of a commit that did
+        not contain it, so the anchor moved to this revision's own timestamp and
+        the boundary advanced from 2026-08-04 to 2026-08-05.
+    - revision: 3
+      commit: recorded_in_git_history_as_the_commit_containing_this_text
+      anchored_to: 1a6fad7a57cbddbdaeecdb1713dfb7b93f971de0
+      test_boundary: '2026-08-05'
+      note: >-
+        Current revision. Anchored to the commit that first contained these
+        corrected choices, with the boundary verified stable under the
+        finalising commit's own timestamp.
+
+  audit_note: >-
+    Both superseded digests are recorded here so every correction is auditable
+    from this document alone, without reading the git history. No implementation
+    code, feature extraction, model fitting, market-data retrieval or test-data
+    inspection occurred before, between or after any of these sealings.
 
 # ---------------------------------------------------------------------------
 # Relationship to prior work
@@ -257,8 +306,9 @@ partitions:
 
   excluded_gap:
     start_inclusive: '2026-05-13'
-    end_exclusive: '2026-08-04'
-    sessions: 56
+    end_exclusive: '2026-08-05'
+    last_session: '2026-08-04'
+    sessions: 57
     belongs_to_no_partition: true
     rationale: >-
       Sessions after the train/validation window but before the sealing boundary.
@@ -268,16 +318,18 @@ partitions:
       between the fitted window and the test window.
 
   test_window:
-    start_inclusive: '2026-08-04'
+    start_inclusive: '2026-08-05'
     start_derivation: >-
-      The first XNYS session whose 09:30 ET open is strictly after the sealing
-      instant 2026-08-04T03:12:08Z. Derived from the sealed timestamp, not chosen.
+      The first XNYS session whose 09:30 ET open is strictly after the corrected
+      sealing instant 2026-08-04T22:06:45Z (commit 1a6fad7). Derived from that
+      timestamp, not chosen, and verified stable under the finalising commit.
     end_exclusive: resolved_at_execution
     status: incomplete_at_sealing
     untouched: true
     untouched_rationale: >-
-      Every test observation occurs strictly after the preregistration was
-      sealed. At the sealing instant no test session had begun, so no test
+      Every test observation occurs strictly after the corrected preregistration
+      was sealed (commit 1a6fad7, 2026-08-04T22:06:45Z). At that instant no test
+      session had begun, so no test
       observation could have been examined, used in any exploratory analysis, or
       selected on when the design was fixed. The guarantee rests on the sealed
       commit timestamp, which is externally checkable, rather than on any claim
@@ -297,13 +349,13 @@ partitions:
         Computed from the XNYS calendar for orientation only. The binding
         condition is the session count resolved from retrieved sessions at
         execution, never this projection.
-      first_test_session: '2026-08-04'
-      context_rows_complete: '2026-09-29'
-      first_test_origin: '2026-09-30'
-      last_test_origin: '2027-06-21'
-      final_target_row: '2027-07-07'
+      first_test_session: '2026-08-05'
+      context_rows_complete: '2026-09-30'
+      first_test_origin: '2026-10-01'
+      last_test_origin: '2027-06-22'
+      final_target_row: '2027-07-08'
     earliest_execution: >-
-      Not before the XNYS calendar supplies 232 sessions on or after 2026-08-04,
+      Not before the XNYS calendar supplies 232 sessions on or after 2026-08-05,
       for every asset in the panel. The exact date is resolved from retrieved
       sessions at execution and is never estimated, rounded or waived. The
       232-session minimum may not be reduced.

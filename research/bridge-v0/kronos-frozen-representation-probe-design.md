@@ -4,19 +4,23 @@
 
 > This note has been formalised as
 > [`kronos-frozen-representation-probe-v1.yaml`](kronos-frozen-representation-probe-v1.yaml)
-> (SHA-256 `5003f706f9edbbf5473b7b3e224df6dc454a72d51b1733637c5751be9ef7273c`),
+> (SHA-256 `3c3656f03e6e0abaef7001cec95f71ca4678943aeea6567aba33a051edb95ece`),
 > which fixes the partitions, horizon, sampling policy, ridge grid, control
 > feature list, thresholds and decision rules. Where the two disagree, the sealed
 > YAML governs. This note is retained as the reasoning and the source audit
 > behind it.
 >
-> No code has been written and nothing has executed. Every test session begins
-> strictly after the sealed preregistration timestamp
-> (`2026-08-04T03:12:08+00:00`); the boundary is derived from that timestamp
-> rather than chosen. An earlier revision, digest `a3f7b8fe…3db6a2`, set the
-> boundary at 2026-05-13 and justified it by claiming the test data did not yet
-> exist. That was false — the document was sealed in August 2026 — and the claim
-> has been replaced by the verifiable timestamp relation.
+> No code has been written and nothing has executed. Every test session opens
+> strictly after the corrected sealing timestamp `2026-08-04T22:06:45+00:00`
+> (commit `1a6fad7`), giving a test boundary of 2026-08-05. The boundary is
+> derived from that timestamp rather than chosen.
+>
+> Two revisions were superseded, both recorded in the specification's
+> `correction_chain`. Digest `a3f7b8fe…3db6a2` set the boundary at 2026-05-13 and
+> justified it by claiming the test data did not yet exist — false, since the
+> document was sealed in August 2026. Digest `5003f706…f7273c` fixed that claim
+> but anchored to commit `7e9395c`, which had sealed the *old* design; a design
+> cannot be fixed at the timestamp of a commit that did not contain it.
 
 This document describes a study that may be run *later*, and only after the
 zero-shot benchmark (`openalpha-kronos-zero-shot-benchmark-v1`) has produced a
