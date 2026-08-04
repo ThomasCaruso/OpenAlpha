@@ -1,0 +1,46 @@
+OpenAlpha
+Copyright (c) 2026 Thomas Caruso
+
+This product is licensed under the MIT License. See LICENSE.
+
+--------------------------------------------------------------------------------
+Third-party source
+--------------------------------------------------------------------------------
+
+Kronos
+    MIT License, Copyright (c) 2025 ShiYu
+    https://github.com/shiyu-coder/Kronos
+
+    Two files are vendored verbatim for offline conformance verification:
+        vendor/kronos/67b630e6/model/kronos.py
+        vendor/kronos/67b630e6/model/module.py
+
+    Vendored at revision 67b630e67f6a18c9e9be918d9b4337c960db1e9a.
+    They are never imported, never executed, and never shipped in any built
+    image. Their digests are verified against the values sealed in the
+    preregistration documents.
+
+    Full license text:  vendor/kronos/LICENSE
+    Provenance, digests and rationale:  vendor/kronos/README.md
+
+--------------------------------------------------------------------------------
+Model weights
+--------------------------------------------------------------------------------
+
+No model weights are redistributed by this repository.
+
+The following checkpoints are fetched at execution time from the Hugging Face
+Hub at pinned revisions and remain subject to their own upstream terms:
+
+    NeoQuasar/Kronos-base             2b554741eca47781b64468546e77fef3e85130e6
+    NeoQuasar/Kronos-Tokenizer-base   0e0117387f39004a9016484a186a908917e22426
+    NeoQuasar/Kronos-mini             f4e68697d9d5aed55cef5c96aabc3376bcad9f81
+    NeoQuasar/Kronos-Tokenizer-2k     26966d0035065a0cae0ebad7af8ece35bc1fb51c
+
+--------------------------------------------------------------------------------
+Market data
+--------------------------------------------------------------------------------
+
+Market data is retrieved at execution time through the pinned yfinance client
+and is never committed to this repository. Only derived manifests, digests,
+reports and synthetic fixtures are stored here. See docs/DATA_POLICY.md.

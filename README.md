@@ -241,7 +241,7 @@ and test suite are in this repository for inspection.
 
 ## License
 
-[MIT](LICENSE). Vendored Kronos source is MIT, © 2025 ShiYu — see
-[`vendor/kronos/LICENSE`](vendor/kronos/LICENSE). Model weights are not
-redistributed; they are fetched at pinned revisions from the Hugging Face Hub and
-remain subject to their upstream terms.
+[MIT](LICENSE). Third-party attributions are in [NOTICE](NOTICE): the two
+vendored Kronos files are MIT, © 2025 ShiYu. Model weights are not redistributed —
+they are fetched at pinned revisions from the Hugging Face Hub and remain subject
+to their upstream terms.

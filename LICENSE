@@ -19,21 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-## Third-party components
-
-This repository vendors two source files from the Kronos project for
-conformance verification only. They are never imported, executed, or shipped.
-
-- Kronos — MIT License, Copyright (c) 2025 ShiYu
-  https://github.com/shiyu-coder/Kronos
-  Vendored at revision 67b630e67f6a18c9e9be918d9b4337c960db1e9a
-  Full license text: vendor/kronos/LICENSE
-  Provenance and digests: vendor/kronos/README.md
-
-Kronos model weights (NeoQuasar/Kronos-base, NeoQuasar/Kronos-Tokenizer-base,
-NeoQuasar/Kronos-mini, NeoQuasar/Kronos-Tokenizer-2k) are not redistributed by
-this repository. They are fetched at execution time from the Hugging Face Hub
-at pinned revisions and remain subject to their own upstream terms.
