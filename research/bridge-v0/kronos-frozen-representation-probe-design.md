@@ -4,14 +4,19 @@
 
 > This note has been formalised as
 > [`kronos-frozen-representation-probe-v1.yaml`](kronos-frozen-representation-probe-v1.yaml)
-> (SHA-256 `a3f7b8fe40f41a2315f533d5cf0d393f238d7f57082481a0aa57a712633db6a2`),
+> (SHA-256 `5003f706f9edbbf5473b7b3e224df6dc454a72d51b1733637c5751be9ef7273c`),
 > which fixes the partitions, horizon, sampling policy, ridge grid, control
 > feature list, thresholds and decision rules. Where the two disagree, the sealed
 > YAML governs. This note is retained as the reasoning and the source audit
 > behind it.
 >
-> No code has been written and nothing has executed. The test partition consists
-> of sessions that had not occurred when the specification was sealed.
+> No code has been written and nothing has executed. Every test session begins
+> strictly after the sealed preregistration timestamp
+> (`2026-08-04T03:12:08+00:00`); the boundary is derived from that timestamp
+> rather than chosen. An earlier revision, digest `a3f7b8fe…3db6a2`, set the
+> boundary at 2026-05-13 and justified it by claiming the test data did not yet
+> exist. That was false — the document was sealed in August 2026 — and the claim
+> has been replaced by the verifiable timestamp relation.
 
 This document describes a study that may be run *later*, and only after the
 zero-shot benchmark (`openalpha-kronos-zero-shot-benchmark-v1`) has produced a

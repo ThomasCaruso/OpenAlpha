@@ -5,7 +5,34 @@ title: >-
   raw and engineered features do not?
 status: development_only_probe_specification
 preregistered_before_execution: true
-preregistered_before_test_data_exists: true
+# Stated as a verifiable timestamp relation, not as a claim about data
+# existence. Every test session begins strictly after the sealing instant.
+all_test_sessions_begin_after_sealing: true
+
+# The sealing instant. Every test observation is required to occur strictly
+# after it, and the test boundary below is derived from it rather than chosen.
+sealing:
+  preregistration_commit: 7e9395c6536a890b248f1effc62c5d1994105bfb
+  sealed_at_utc: '2026-08-04T03:12:08+00:00'
+  sealed_at_exchange_time: '2026-08-03T23:12:08-04:00'
+  exchange_timezone: America/New_York
+  exchange_date_at_sealing: '2026-08-03'
+  session_state_at_sealing: >-
+    The 2026-08-03 session had already opened and closed. The first XNYS session
+    that had not begun at the sealing instant is 2026-08-04, whose 09:30 ET open
+    is strictly after it.
+  correction_note: >-
+    The first sealed revision of this document set the test boundary at
+    2026-05-13 and claimed the test observations did not exist at sealing. That
+    claim was false: this document was sealed in August 2026, so sessions from
+    2026-05-13 through 2026-08-03 already existed and were in principle
+    observable. The boundary has been moved to the first session that had not
+    begun when the preregistration was sealed, and the justification is now
+    stated in terms of that timestamp rather than in terms of the data not
+    existing. No code had been written, no feature extracted, no model fitted and
+    no test data retrieved or inspected at any point before or after the original
+    sealing.
+  superseded_digest: a3f7b8fe40f41a2315f533d5cf0d393f238d7f57082481a0aa57a712633db6a2
 
 # ---------------------------------------------------------------------------
 # Relationship to prior work
@@ -210,7 +237,8 @@ partitions:
       The same 340 sessions the zero-shot benchmark used. Reused deliberately for
       training and validation only, and explicitly NOT as test data: those
       windows have already been examined in aggregate and are no longer
-      untouched.
+      untouched. Sessions between this window and the test boundary belong to
+      neither partition; see excluded_gap.
     origins_per_asset: 25
     origin_index_offsets:
       [40, 52, 64, 76, 88, 100, 112, 124, 136, 148, 160, 172, 184, 196, 208,
@@ -227,25 +255,58 @@ partitions:
       strides. Dropping the four origins before the validation block guarantees
       no training sample's context overlaps any validation target.
 
-  test_window:
+  excluded_gap:
     start_inclusive: '2026-05-13'
+    end_exclusive: '2026-08-04'
+    sessions: 56
+    belongs_to_no_partition: true
+    rationale: >-
+      Sessions after the train/validation window but before the sealing boundary.
+      They existed when this document was sealed, so they cannot serve as
+      untouched test data; they were not used for fitting either. They are
+      excluded from every partition and additionally act as a temporal buffer
+      between the fitted window and the test window.
+
+  test_window:
+    start_inclusive: '2026-08-04'
+    start_derivation: >-
+      The first XNYS session whose 09:30 ET open is strictly after the sealing
+      instant 2026-08-04T03:12:08Z. Derived from the sealed timestamp, not chosen.
     end_exclusive: resolved_at_execution
-    status: does_not_yet_exist
+    status: incomplete_at_sealing
     untouched: true
     untouched_rationale: >-
-      The test partition consists of sessions that had not occurred when this
-      document was sealed. Data from the future cannot have been examined,
-      contaminated by exploratory analysis, or selected on. This is the strongest
-      holdout available to this project and is the reason the study waits.
+      Every test observation occurs strictly after the preregistration was
+      sealed. At the sealing instant no test session had begun, so no test
+      observation could have been examined, used in any exploratory analysis, or
+      selected on when the design was fixed. The guarantee rests on the sealed
+      commit timestamp, which is externally checkable, rather than on any claim
+      that the data did not exist.
+    claim_not_made: >-
+      This specification does NOT claim that all test observations were
+      non-existent at sealing in an absolute sense. It claims the strictly
+      weaker and verifiable thing: none of them had begun when the sealing
+      timestamp was recorded, and the design has not changed since.
     minimum_origins_per_asset: 16
     minimum_test_samples: 64
     minimum_temporal_blocks: 4
     sessions_required_after_start: 232
     sessions_required_derivation: context_candles + minimum_origins_per_asset * stride = 40 + 16 * 12
+    projected_calendar:
+      note: >-
+        Computed from the XNYS calendar for orientation only. The binding
+        condition is the session count resolved from retrieved sessions at
+        execution, never this projection.
+      first_test_session: '2026-08-04'
+      context_rows_complete: '2026-09-29'
+      first_test_origin: '2026-09-30'
+      last_test_origin: '2027-06-21'
+      final_target_row: '2027-07-07'
     earliest_execution: >-
-      Not before the XNYS calendar supplies 232 sessions on or after 2026-05-13,
+      Not before the XNYS calendar supplies 232 sessions on or after 2026-08-04,
       for every asset in the panel. The exact date is resolved from retrieved
-      sessions at execution and is never estimated, rounded or waived.
+      sessions at execution and is never estimated, rounded or waived. The
+      232-session minimum may not be reduced.
     opening_conditions:
       - every asset supplies at least 232 sessions in the test window
       - every asset yields at least 16 complete non-overlapping origins
