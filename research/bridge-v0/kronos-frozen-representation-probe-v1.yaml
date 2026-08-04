@@ -1,0 +1,563 @@
+experiment_id: openalpha-kronos-frozen-representation-probe-v1
+schema_version: openalpha.research.representation_probe.kronos_frozen.v1
+title: >-
+  Do frozen Kronos-base hidden states carry information about future returns that
+  raw and engineered features do not?
+status: development_only_probe_specification
+preregistered_before_execution: true
+preregistered_before_test_data_exists: true
+
+# ---------------------------------------------------------------------------
+# Relationship to prior work
+# ---------------------------------------------------------------------------
+
+relationship_to_prior_work:
+  completed_studies:
+    - study: bridge-v0 frozen inference diagnostic (Kronos-mini)
+      run_id: canary_0a92fde788bd685c
+      primary_conclusion: ROUNDTRIP_MATERIAL_INVALIDITY
+    - study: openalpha-kronos-base-replication-v1
+      run_id: base_03b08cbc706193d6
+      artifact_sha256: 84ec1b197d4bf7a3b8f35a38d0feb8d5be086b61de23df0924d83ec273c731e6
+      primary_conclusion: ROUNDTRIP_MATERIAL_INVALIDITY
+    - study: openalpha-kronos-zero-shot-benchmark-v1
+      run_id: zsb_25e0256eefb2b07a
+      artifact_sha256: 93688f04ab2d887cacc56fad717d1cd2e018635b70e4a36d4e0cf480b265236a
+      primary_conclusion: NO_ZERO_SHOT_SKILL
+      decision_outcome: PROCEED_TO_FROZEN_REPRESENTATION_PROBE
+  authorised_by: >-
+    Rule Z4 of the zero-shot benchmark mapped to
+    PROCEED_TO_FROZEN_REPRESENTATION_PROBE. That outcome names this study; it
+    does not authorise it. This document is that authorisation.
+  is_a_structural_repair_experiment: false
+  is_a_continuation_of_structural_repair: false
+  amends_a_completed_study: false
+  reuses_any_spent_run_id: false
+
+# ---------------------------------------------------------------------------
+# Question
+# ---------------------------------------------------------------------------
+
+question: >-
+  Does the frozen Kronos-base final-layer hidden state contain information about
+  future returns that is not already available from raw OHLCV or from simple
+  engineered return and volatility features, when all are fed to an identical
+  downstream model?
+
+why_this_is_a_different_hypothesis: >-
+  The completed studies measured what the model emits. A sequence model can
+  generate poorly and still encode useful state: sampling noise, tokenizer
+  lossiness and exposure bias all degrade generated paths without necessarily
+  destroying the information in the layers that produced them. This study reads
+  hidden states and fits a small linear model on top. It decodes no candles,
+  enforces no OHLC inequality, repairs and filters nothing, and does not touch
+  the generation path.
+
+predeclared_interpretations:
+  - label: R1
+    statement: >-
+      A favorable result means the frozen representation beat every control
+      under an identical harness on an untouched test partition. It does not
+      mean the model is tradable, profitable after costs, or usable in
+      production.
+  - label: R2
+    statement: >-
+      An unfavorable result means the representation carried no advantage over
+      simple features at this horizon, panel and sample size. Given the
+      deliberately low power declared below, it does not establish that the
+      representation is uninformative in general.
+  - label: R3
+    statement: >-
+      This study cannot reopen the structural-validity question or the zero-shot
+      generation question. Both are closed. No structural quantity enters any
+      decision rule.
+
+# ---------------------------------------------------------------------------
+# Pinned assets - the already verified frozen pair
+# ---------------------------------------------------------------------------
+
+pinned_assets:
+  official_source:
+    repository: https://github.com/shiyu-coder/Kronos
+    revision: 67b630e67f6a18c9e9be918d9b4337c960db1e9a
+    files:
+      model/kronos.py:
+        sha256_crlf_normalized: 638a56e035856c600c9848b368be087cb706a61603a0790124968c95b8c69f3a
+        sha256_as_committed: 0a5f90282e2039c2de0771473419715c845def154896dbd0f5747837e6241032
+      model/module.py:
+        sha256_crlf_normalized: a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f
+        sha256_as_committed: a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f
+  forecast_model:
+    repository: NeoQuasar/Kronos-base
+    revision: 2b554741eca47781b64468546e77fef3e85130e6
+    config_sha256: 77ebc3038b647709b92be002f801d72e1a385f4c8c2c5aa1cc6cf21fcfe44eb2
+    weights_sha256: abff193acab6db1a0368e9773e75799d11403b6d054ee6d5f0a11aeabc5f4b83
+    weights_size_bytes: 409264008
+    total_parameter_count_expected: 106268634
+    trainable_parameter_count_required: 0
+  tokenizer:
+    repository: NeoQuasar/Kronos-Tokenizer-base
+    revision: 0e0117387f39004a9016484a186a908917e22426
+    config_sha256: 2366e7ccfec76cbc19cf3c4c1b9c5d901be336ca1e83f2d2292c9bff381b77a2
+    weights_sha256: 59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee
+  download_location: >-
+    The existing read-only Modal volume openalpha-kronos-base-cache, which
+    already holds exactly these two repositories. No duplicate weight storage is
+    created and no weight is downloaded to a workstation, committed to Git, or
+    written into any artifact.
+  reuses_existing_volume: true
+  creates_new_weight_storage: false
+
+# ---------------------------------------------------------------------------
+# Feature extraction
+# ---------------------------------------------------------------------------
+
+representation:
+  accessor: Kronos.decode_s1
+  accessor_signature: decode_s1(s1_ids, s2_ids, stamp=None, padding_mask=None)
+  returns: tuple of (s1_logits, x)
+  extracted_tensor: x
+  description: >-
+    The post-norm output of the full transformer stack, shape
+    [batch, seq_len, d_model]. Its own upstream docstring calls it "the context
+    representation from the Transformer".
+  dimension: 832
+  layers_in_stack: 12
+  position_used: final
+  position_rationale: >-
+    x[:, -1, :] is the state from which the model would have predicted the next
+    candle. One vector per origin, so a sample is one 832-dimensional feature
+    row.
+  upstream_modification_required: false
+  upstream_modification_permitted: false
+  accessor_is_public: true
+  accessor_used_by_official_inference: true
+  accessor_audit: >-
+    auto_regressive_inference in the pinned source calls
+    `s1_logits, context = model.decode_s1(...)` and passes context into
+    decode_s2. Reading x therefore exercises the same code path the released
+    model runs, not a private detour. Audited in
+    kronos-frozen-representation-probe-design.md.
+  forbidden_alternatives:
+    - per-layer hidden states via forward hooks
+    - pre-quantization tokenizer embeddings via private submodule access
+    - any modification, fork or monkey-patch of the upstream source
+  extraction_mode: inference_mode
+  gradients: never_computed
+  parameters_frozen: true
+  parameter_hash_checked_before_and_after: true
+
+# ---------------------------------------------------------------------------
+# Panel, geometry and partitions
+# ---------------------------------------------------------------------------
+
+assets:
+  panel: [SPY, QQQ, IWM, DIA]
+  rationale: >-
+    Identical to the completed zero-shot benchmark, so the probe answers its
+    question on the same instruments the generation question failed on.
+  substitution_permitted: false
+  fail_closed_code: REPRESENTATION_PROBE_ASSET_PANEL_INCOMPLETE
+
+frequency: 1d
+calendar: XNYS
+
+geometry:
+  context_candles: 40
+  horizon_candles: 12
+  window_candles: 52
+  maximum_context: 512
+  truncation_occurs: false
+  geometry_matches_zero_shot_benchmark: true
+  geometry_rationale: >-
+    Deliberately identical to openalpha-kronos-zero-shot-benchmark-v1. The probe
+    asks whether the representation contains what the generation failed to
+    express AT THE SAME HORIZON. Choosing a different horizon would confound the
+    comparison and would risk selecting a horizon on the strength of that study's
+    exploratory per-step decomposition, which is forbidden below.
+
+forbidden_selection:
+  statement: >-
+    The completed zero-shot benchmark reported an exploratory per-step
+    decomposition in which steps 1-6 beat persistence more often than steps 7-12.
+    That decomposition was not preregistered and MUST NOT influence the horizon,
+    context length, partitioning or any threshold in this study. The horizon here
+    is 12 because the prior study used 12, not because of anything observed.
+
+sampling:
+  policy: non_overlapping_stride_equals_horizon
+  stride: 12
+  rationale: >-
+    Consecutive origins share context sessions. Sampling densely would inflate
+    the nominal sample size, make validation-based ridge selection optimistic,
+    and understate every interval. Spacing origins by the horizon makes target
+    windows exactly disjoint, matching the discipline of the completed benchmark.
+  dense_sampling_permitted: false
+  one_feature_row_per_origin: true
+  origins_defined_as: integer index offsets into the ascending session sequence
+  origin_index_is_first_target_row: true
+
+partitions:
+  policy: strictly_chronological_with_embargo
+  shuffling_permitted: false
+  k_fold_across_time_permitted: false
+
+  train_validation_window:
+    start_inclusive: '2025-01-02'
+    end_exclusive: '2026-05-13'
+    sessions_required: 340
+    sessions_note: >-
+      The same 340 sessions the zero-shot benchmark used. Reused deliberately for
+      training and validation only, and explicitly NOT as test data: those
+      windows have already been examined in aggregate and are no longer
+      untouched.
+    origins_per_asset: 25
+    origin_index_offsets:
+      [40, 52, 64, 76, 88, 100, 112, 124, 136, 148, 160, 172, 184, 196, 208,
+       220, 232, 244, 256, 268, 280, 292, 304, 316, 328]
+    train_origin_ordinals: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    embargo_origin_ordinals: [16, 17, 18, 19]
+    validation_origin_ordinals: [20, 21, 22, 23, 24]
+    train_samples: 64
+    validation_samples: 20
+    embargo_length_origins: 4
+    embargo_derivation: ceil(context_candles / stride) = ceil(40 / 12) = 4
+    embargo_rationale: >-
+      A training origin's 40-session context reaches back through roughly 3.3
+      strides. Dropping the four origins before the validation block guarantees
+      no training sample's context overlaps any validation target.
+
+  test_window:
+    start_inclusive: '2026-05-13'
+    end_exclusive: resolved_at_execution
+    status: does_not_yet_exist
+    untouched: true
+    untouched_rationale: >-
+      The test partition consists of sessions that had not occurred when this
+      document was sealed. Data from the future cannot have been examined,
+      contaminated by exploratory analysis, or selected on. This is the strongest
+      holdout available to this project and is the reason the study waits.
+    minimum_origins_per_asset: 16
+    minimum_test_samples: 64
+    minimum_temporal_blocks: 4
+    sessions_required_after_start: 232
+    sessions_required_derivation: context_candles + minimum_origins_per_asset * stride = 40 + 16 * 12
+    earliest_execution: >-
+      Not before the XNYS calendar supplies 232 sessions on or after 2026-05-13,
+      for every asset in the panel. The exact date is resolved from retrieved
+      sessions at execution and is never estimated, rounded or waived.
+    opening_conditions:
+      - every asset supplies at least 232 sessions in the test window
+      - every asset yields at least 16 complete non-overlapping origins
+      - all four assets align on identical context and target dates at every test ordinal
+      - the train/validation fit is complete and its hyperparameters are frozen
+    test_partition_opened_exactly_once: true
+    reopening_permitted: false
+    early_read_voids_the_partition: true
+    fail_closed_code: REPRESENTATION_PROBE_TEST_PARTITION_NOT_READY
+
+cross_asset_calendar_alignment:
+  required: true
+  proved_from_retrieved_sessions: true
+  assumed_from_calendar_policy: false
+  identical_fields_required:
+    - context_first_session
+    - context_last_session
+    - target_first_session
+    - target_last_session
+  fail_closed_code: REPRESENTATION_PROBE_CROSS_ASSET_ORIGIN_MISALIGNED
+  forbidden_responses:
+    - shrinking the asset panel
+    - shifting an origin
+    - silently clustering windows from different dates
+
+# ---------------------------------------------------------------------------
+# Targets
+# ---------------------------------------------------------------------------
+
+targets:
+  primary_task: regression
+  primary_target: >-
+    Cumulative log return over the 12-session horizon, from the final observed
+    context close to the final target close.
+  secondary_task: classification
+  secondary_target: sign of the same cumulative log return
+  target_access_during_extraction: forbidden
+  target_dependent_hyperparameter_selection: forbidden
+  target_dependent_feature_selection: forbidden
+
+# ---------------------------------------------------------------------------
+# Downstream models - identical harness for every feature set
+# ---------------------------------------------------------------------------
+
+downstream:
+  regression: ridge
+  classification: logistic_l2
+  identical_harness_for_every_feature_set: true
+  harness_note: >-
+    Feature standardization, ridge grid, selection procedure, partitions and
+    metrics are byte-identical across the representation and every control. Only
+    the input features differ. Without that, a positive result says nothing.
+  standardization: >-
+    Features standardized using training-partition statistics only. Validation
+    and test rows are transformed with the training statistics and never refit.
+  ridge_alpha_grid: [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0]
+  logistic_c_grid: [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
+  hyperparameter_selection_partition: validation_only
+  hyperparameter_selection_on_test: forbidden
+  refit_after_selection: >-
+    Once selected on validation, hyperparameters are frozen and the model is
+    refit on train plus validation exactly once before the test partition opens.
+  model_family_changes_after_seeing_results: forbidden
+
+feature_sets:
+  - id: kronos_hidden_state
+    description: Final-position frozen Kronos-base hidden state
+    dimension: 832
+    is_candidate: true
+  - id: raw_ohlcv
+    description: The 40x6 context window, flattened
+    dimension: 240
+    is_control: true
+  - id: engineered_features
+    description: >-
+      Trailing log returns at lags 1, 2, 3, 5, 10 and 20; realized volatility
+      over 5, 10 and 20 sessions; high-low range mean over 5 and 20 sessions;
+      volume z-score over 20 sessions.
+    dimension: 12
+    is_control: true
+  - id: intercept_only
+    description: No features; predicts the training-partition mean
+    dimension: 0
+    is_control: true
+
+# ---------------------------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------------------------
+
+metrics:
+  primary: horizon_return_mae
+  primary_definition: >-
+    Mean absolute error of the predicted 12-session cumulative log return against
+    the realized value, on the untouched test partition.
+  secondary:
+    - horizon_return_rmse
+    - out_of_sample_r2
+    - directional_accuracy
+    - directional_auc
+  aggregation_levels: [asset, pooled, test_origin]
+  statistics_reported:
+    - mean
+    - median
+    - standard_deviation
+    - paired differences against each control
+    - moving-block bootstrap interval
+
+bootstrap:
+  method: paired_percentile_moving_block_bootstrap_over_origin_clusters
+  base_resampling_unit: origin_ordinal_cluster_all_assets
+  temporal_resampling_unit: four_consecutive_origin_clusters
+  block_length: 4
+  block_length_derivation: ceil(context_candles / stride) = ceil(40 / 12) = 4
+  block_length_selected_before_execution: true
+  block_length_tuned_from_results: false
+  assets_per_cluster: 4
+  wraparound: false
+  assets_resampled_within_cluster: false
+  origins_resampled_independently: false
+  resamples: 2000
+  confidence_level: 0.95
+  seed: 20260803
+  rationale: >-
+    Identical in kind to the estimator the zero-shot benchmark settled on after
+    two pre-execution corrections. Cross-sectional dependence is preserved by
+    clustering all four assets at each ordinal; temporal dependence is preserved
+    by resampling consecutive four-origin blocks.
+  reuses_validated_implementation: true
+
+# ---------------------------------------------------------------------------
+# Preregistered decision rules
+# ---------------------------------------------------------------------------
+
+thresholds:
+  minimum_relative_improvement_over_every_control: 0.05
+  bootstrap_confidence_level: 0.95
+  minimum_test_samples: 64
+
+decision_rules:
+  evaluated_on: untouched_test_partition
+  evaluated_for: kronos_hidden_state
+  rule_ids:
+    - id: R0
+      name: PROBE_INCONCLUSIVE
+      matches_only_for_predeclared_limitations:
+        - the test partition did not reach its minimum size
+        - an asset could not be retrieved under identical semantics
+        - cross-asset calendar alignment failed at any test ordinal
+        - a metric was undefined on the test partition
+        - extraction, fitting or scoring did not complete
+      precedence: evaluated first and decisive
+    - id: R1
+      name: REPRESENTATION_ADVANTAGE_OBSERVED
+      matches_only_if_all_hold:
+        - >-
+          the representation's primary-metric relative improvement over EVERY
+          control is at least 0.05
+        - >-
+          the paired moving-block interval against EVERY control excludes zero in
+          the favorable direction
+        - the advantage holds on at least 3 of the 4 assets
+    - id: R2
+      name: ADVANTAGE_OVER_RAW_ONLY
+      matches_if: >-
+        the representation beats raw OHLCV and intercept-only by the margin but
+        does not beat the engineered features
+    - id: R3
+      name: NO_REPRESENTATION_ADVANTAGE
+      matches_if: R1 does not match and R2 does not match
+  alteration_after_results_exist: forbidden
+  structural_validity_used_in_any_rule: false
+
+decision_outcomes:
+  predeclared:
+    - PROCEED_TO_SUPERVISED_ADAPTATION_DESIGN
+    - PROCEED_TO_CONFIRMATION_ON_FRESH_ORIGINS
+    - STOP_KRONOS_REPRESENTATION_DIRECTION
+    - PROBE_INCONCLUSIVE
+  mapping:
+    - when: R0 matched
+      outcome: PROBE_INCONCLUSIVE
+    - when: R1 matched
+      outcome: PROCEED_TO_CONFIRMATION_ON_FRESH_ORIGINS
+    - when: R2 matched
+      outcome: PROCEED_TO_CONFIRMATION_ON_FRESH_ORIGINS
+    - when: R3 matched
+      outcome: STOP_KRONOS_REPRESENTATION_DIRECTION
+  fine_tuning_note: >-
+    No outcome of this study authorises fine-tuning. Even
+    PROCEED_TO_SUPERVISED_ADAPTATION_DESIGN authorises only a DESIGN, which would
+    require its own preregistration. Fine-tuning is considered only if this probe
+    succeeds and a confirmation on fresh origins also succeeds.
+
+# ---------------------------------------------------------------------------
+# Declared power limitation
+# ---------------------------------------------------------------------------
+
+power:
+  declared_before_execution: true
+  test_samples_minimum: 64
+  independent_temporal_blocks_minimum: 4
+  feature_dimension: 832
+  statement: >-
+    This probe is deliberately underpowered. Sixty-four non-overlapping test
+    samples across four highly correlated ETFs, resampled as four temporal
+    blocks, can detect only a large and consistent advantage. Ridge can fit 832
+    features to 84 training samples, but the honest uncertainty is wide.
+  consequence: >-
+    A negative result must therefore be reported as "no advantage detectable at
+    this power", never as "the representation is uninformative". R2 and R3 both
+    carry that qualification.
+  power_may_not_be_revised_after_results_exist: true
+
+# ---------------------------------------------------------------------------
+# Leakage and chronology
+# ---------------------------------------------------------------------------
+
+leakage_controls:
+  extraction_normalization: context_only_refit_per_origin
+  feature_standardization: training_partition_statistics_only
+  target_access_during_extraction: forbidden
+  target_access_during_hyperparameter_selection: forbidden
+  future_information_in_controls: forbidden
+  overlapping_samples_between_partitions: prevented_by_embargo
+  test_partition_reads_before_final_scoring: forbidden
+  trading_backtest: not_performed
+  transaction_cost_claim: not_made
+  result_label: development_probe_until_test_partition_opens
+
+# ---------------------------------------------------------------------------
+# Execution architecture
+# ---------------------------------------------------------------------------
+
+execution:
+  functions:
+    - verify_representation_probe_deployment
+    - verify_representation_probe_runtime
+    - run_representation_probe_fit
+    - run_representation_probe_test
+    - inventory_representation_probe_artifacts
+  two_phase_execution: true
+  two_phase_rationale: >-
+    Fitting and test scoring are separate functions with separate artifacts. The
+    fit artifact records the selected hyperparameters and is published BEFORE the
+    test partition is touched, so the frozen hyperparameters are a matter of
+    record rather than of trust.
+  reuses_completed_study_function_names: false
+  worker_contract:
+    checks_for_existing_terminal_artifact_before_loading_weights: true
+    run_ids_per_execution: 1
+    retries: 0
+    terminal_artifacts_written: 1
+    immutable: true
+    weights_stored_in_artifact: false
+    stops_after_publication: true
+
+artifacts:
+  namespace: openalpha-compatibility/kronos-representation-probe
+  fit_object_name: kronos_representation_probe_fit.json
+  test_object_name: kronos_representation_probe_terminal.json
+  run_id_pattern: '^frp_[0-9a-f]{8,32}$'
+  success_schema: openalpha.bridge.representation_probe.kronos_frozen_probe.v1
+  failure_schema: openalpha.bridge.representation_probe.kronos_frozen_failure.v1
+  runtime_probe_schema: openalpha.bridge.representation_probe.runtime_probe.v1
+  immutability: write_once_never_overwritten
+  namespace_separation: >-
+    Shares no prefix with openalpha-compatibility/bridge-phase2,
+    openalpha-compatibility/kronos-base-diagnostic or
+    openalpha-compatibility/kronos-zero-shot-benchmark. The run-id prefix frp_ is
+    disjoint from canary_, base_ and zsb_ by construction.
+  disjoint_from:
+    - openalpha-compatibility/bridge-phase2
+    - openalpha-compatibility/kronos-base-diagnostic
+    - openalpha-compatibility/kronos-zero-shot-benchmark
+
+# ---------------------------------------------------------------------------
+# Prohibitions
+# ---------------------------------------------------------------------------
+
+prohibitions:
+  - fine-tuning or updating any Kronos parameter
+  - constructing an optimizer over Kronos parameters
+  - modifying, forking or patching the upstream Kronos source
+  - per-layer hidden-state extraction via forward hooks
+  - decoding candles, enforcing OHLC inequalities, repairing or projecting paths
+  - filtering or selecting samples on structural validity
+  - using any structural quantity in a decision rule
+  - dense or overlapping sampling
+  - shuffled or non-chronological partitioning
+  - selecting hyperparameters, features, horizon or partitions on test data
+  - reading the test partition before the fit artifact is published
+  - reopening the test partition after it has been scored
+  - amending, retrying or reinterpreting any completed study
+  - reusing a spent run identifier
+  - trading backtests, transaction-cost claims or production inference
+
+# ---------------------------------------------------------------------------
+# Claim boundary and authorizations
+# ---------------------------------------------------------------------------
+
+claim_boundary: DEVELOPMENT PROBE - NOT TRADING EVIDENCE
+
+evidence_class: development_compatibility_canary
+
+authorizations:
+  authorizes_training: false
+  authorizes_fine_tuning: false
+  authorizes_supervised_adaptation: false
+  authorizes_production_inference: false
+  authorizes_trading_claims: false
+  scientific_result_available: false
+  note: >-
+    A downstream ridge or logistic head fitted on frozen features is not training
+    Kronos. No Kronos parameter is updated, the parameter hash is checked before
+    and after extraction, and trainable_parameter_count must be zero throughout.

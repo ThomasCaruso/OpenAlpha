@@ -1,6 +1,17 @@
 # Frozen-Representation Probe — Design Note
 
-**Status: design note only. Not implemented, not preregistered, not authorized.**
+**Status: superseded by a sealed preregistration. Not implemented, not executed.**
+
+> This note has been formalised as
+> [`kronos-frozen-representation-probe-v1.yaml`](kronos-frozen-representation-probe-v1.yaml)
+> (SHA-256 `a3f7b8fe40f41a2315f533d5cf0d393f238d7f57082481a0aa57a712633db6a2`),
+> which fixes the partitions, horizon, sampling policy, ridge grid, control
+> feature list, thresholds and decision rules. Where the two disagree, the sealed
+> YAML governs. This note is retained as the reasoning and the source audit
+> behind it.
+>
+> No code has been written and nothing has executed. The test partition consists
+> of sessions that had not occurred when the specification was sealed.
 
 This document describes a study that may be run *later*, and only after the
 zero-shot benchmark (`openalpha-kronos-zero-shot-benchmark-v1`) has produced a
