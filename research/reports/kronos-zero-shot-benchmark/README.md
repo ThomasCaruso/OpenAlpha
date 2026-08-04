@@ -36,6 +36,7 @@ zero on the *unfavorable* side.
 | `results-summary.json` | Complete machine-readable results — per-asset, per-origin, per-step, all 25 bootstrap clusters. Generated from the artifact payload, not transcribed. |
 | `artifact-manifest.json` | Immutable object key, digest, run ID, specification and commit provenance. |
 | `reproduction.md` | Exactly how the run was produced and how to re-derive it. |
+| [`../../artifacts/kronos_zero_shot_benchmark_terminal.json`](../../artifacts/kronos_zero_shot_benchmark_terminal.json) | **The immutable terminal artifact itself**, committed byte for byte. Verify with `python scripts/verify_artifacts.py`. |
 | `limitations.md` | Full limitation and non-claim inventory. |
 
 ## Scale

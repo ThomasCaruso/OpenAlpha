@@ -16,7 +16,7 @@ that falsified this project's own original thesis.
 Every conclusion was reached under decision rules fixed and cryptographically
 sealed **before** the data was touched.
 
-📊 **[Read the research reports →](research/reports/)**
+📊 **[Read the research reports →](research/reports/)** · 🔒 **[Verify the raw artifacts →](research/artifacts/)**
 
 ---
 
@@ -176,16 +176,23 @@ Kronos-mini          f4e68697d9d5aed55cef5c96aabc3376bcad9f81
 Kronos-Tokenizer-2k  26966d0035065a0cae0ebad7af8ece35bc1fb51c
 ```
 
-Terminal artifacts live in a private object store, so their bytes are not
-publicly fetchable. Each report therefore mirrors its **complete** numeric
-results into `results-summary.json`, generated directly from the artifact payload
-rather than transcribed.
+Two of the three immutable terminal artifacts are committed **byte for byte** in
+[`research/artifacts/`](research/artifacts/) — the exact object-store bodies, not
+summaries. Verify them yourself:
 
-Checkable by anyone: specification digests, vendored source digests, model and
-tokenizer digests against public Hugging Face revisions, and the entire analysis
-and decision code with its test suite. Requires bucket access: byte-level
-confirmation of an artifact against its recorded SHA-256. That line is drawn
-explicitly in every report rather than glossed over.
+```bash
+python scripts/verify_artifacts.py     # recomputes SHA-256 against the published digests
+```
+
+The Kronos-mini artifact is recorded but not committed; its body was not retained
+locally and retrieving it needs object-store credentials. Its key and digest are
+in [`research/artifacts/manifest.json`](research/artifacts/manifest.json).
+
+Every study additionally mirrors its **complete** numeric results into
+`results-summary.json`, generated directly from the artifact payload rather than
+transcribed. All three studies are verifiable at the level of reported numbers;
+two of three are verifiable at the byte level. That line is drawn explicitly in
+every report rather than glossed over.
 
 Raw provider data, caches and checkpoints are never committed.
 

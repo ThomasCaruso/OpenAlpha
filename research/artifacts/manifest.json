@@ -1,0 +1,65 @@
+{
+  "schema": "openalpha.research.artifacts.manifest.v1",
+  "purpose": "Content-addressed index of the immutable terminal artifacts published by the completed studies. Each committed file is the exact object-store body, byte for byte, so its SHA-256 can be recomputed and compared against the digest recorded at publication.",
+  "verification": {
+    "command": "python scripts/verify_artifacts.py",
+    "manual": "sha256sum research/artifacts/<file>  and compare against artifact_sha256 below",
+    "note": "The committed bytes are canonical JSON exactly as written by the publisher: sorted keys, no whitespace, no trailing newline. Reformatting a file will break its digest. .gitattributes marks them -text so git never rewrites line endings."
+  },
+  "artifacts": [
+    {
+      "study": "Kronos-base structural replication",
+      "experiment_id": "openalpha-kronos-base-replication-v1",
+      "run_id": "base_03b08cbc706193d6",
+      "committed_file": "kronos_base_diagnostic_terminal.json",
+      "object_store_key": "openalpha-compatibility/kronos-base-diagnostic/runs/base_03b08cbc706193d6/kronos_base_diagnostic_terminal.json",
+      "artifact_sha256": "84ec1b197d4bf7a3b8f35a38d0feb8d5be086b61de23df0924d83ec273c731e6",
+      "size_bytes": 955965,
+      "schema_version": "openalpha.bridge.base_study.kronos_base_diagnostic.v1",
+      "outcome": "KRONOS_BASE_DIAGNOSTIC_COMPLETED",
+      "primary_conclusion": "ROUNDTRIP_MATERIAL_INVALIDITY",
+      "source_commit": "0e6193baabd747dc0b2610a0ab80c3320e32fdd0",
+      "specification": "research/bridge-v0/kronos-base-replication-v1.yaml",
+      "specification_sha256": "47ad7956adce368d5c6c69e54aea939ab6497bb4d411c96f894a4e30b7be58dd",
+      "report": "research/reports/kronos-structural-validity/"
+    },
+    {
+      "study": "Kronos-base zero-shot forecasting benchmark",
+      "experiment_id": "openalpha-kronos-zero-shot-benchmark-v1",
+      "run_id": "zsb_25e0256eefb2b07a",
+      "committed_file": "kronos_zero_shot_benchmark_terminal.json",
+      "object_store_key": "openalpha-compatibility/kronos-zero-shot-benchmark/runs/zsb_25e0256eefb2b07a/kronos_zero_shot_benchmark_terminal.json",
+      "artifact_sha256": "93688f04ab2d887cacc56fad717d1cd2e018635b70e4a36d4e0cf480b265236a",
+      "size_bytes": 1340771,
+      "schema_version": "openalpha.bridge.zero_shot.kronos_zero_shot_benchmark.v1",
+      "outcome": "KRONOS_ZERO_SHOT_BENCHMARK_COMPLETED",
+      "primary_conclusion": "NO_ZERO_SHOT_SKILL",
+      "source_commit": "8a438cc5cf64462fcb04fcad995ef12ea4779246",
+      "specification": "research/bridge-v0/kronos-zero-shot-benchmark-v1.yaml",
+      "specification_sha256": "6832c0f7befc54cd7ccec382db8cac1e6314f3fb356eb5eed8e9e9eca9a6fd07",
+      "report": "research/reports/kronos-zero-shot-benchmark/"
+    }
+  ],
+  "not_committed": [
+    {
+      "study": "Kronos-mini frozen-inference diagnostic",
+      "run_id": "canary_0a92fde788bd685c",
+      "object_store_key": "openalpha-compatibility/bridge-phase2/runs/canary_0a92fde788bd685c/frozen-inference-diagnostic/frozen_inference_diagnostic_terminal.json",
+      "artifact_sha256": "8e3d8a333c11c1939c5d182db73012fc3e0fc01da42368eb23f71661aadab18c",
+      "schema_version": "openalpha.bridge.diagnostic.*",
+      "primary_conclusion": "ROUNDTRIP_MATERIAL_INVALIDITY",
+      "specification": "research/bridge-v0/phase2-frozen-inference-diagnostic-v4.yaml",
+      "specification_sha256": "bd407722adfc3ebf92eb187828d42c2c9cfa57b2fdc0406121f27d39a5c44977",
+      "report": "research/reports/kronos-structural-validity/",
+      "reason_not_committed": "This run predates the working session in which the other two artifacts were captured, and its object body was not retained locally. Retrieving it requires object-store credentials. Its digest and key are recorded here so it can be added later and verified against this manifest, and its complete numeric results are already mirrored in research/reports/kronos-structural-validity/results-summary.json.",
+      "status": "recorded but not yet independently verifiable from this repository"
+    }
+  ],
+  "coverage": {
+    "studies_completed": 3,
+    "artifacts_committed": 2,
+    "artifacts_recorded_only": 1,
+    "numeric_results_mirrored_for_all_studies": true
+  },
+  "immutability_notice": "These are published research records. They must never be edited, reformatted, regenerated or replaced. Any change to their bytes invalidates the digest recorded at publication and breaks the link between a result and the code that produced it."
+}

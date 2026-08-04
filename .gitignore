@@ -45,6 +45,10 @@ research/sentinel-v1/private/
 
 # Generated research artifacts
 artifacts/
+# ...but research/artifacts/ holds published, content-addressed terminal
+# artifacts that are deliberately committed. Without this exception the
+# pattern above silently swallows them and `git add` appears to succeed.
+!research/artifacts/
 reports/generated/
 benchmarks/results/
 research/sentinel-v0/results/generated/

@@ -10,7 +10,7 @@ help:
 	@echo "  make test-smoke  Repository and deployment guards only (fast)"
 	@echo "  make lint        ruff"
 	@echo "  make typecheck   pyright"
-	@echo "  make verify      Environment plus every sealed specification digest"
+	@echo "  make verify      Environment, sealed specifications, published artifacts"
 	@echo "  make reports     Where the completed research reports live"
 	@echo ""
 	@echo "Executing a study needs a Modal account and object-store credentials;"
@@ -35,6 +35,7 @@ typecheck:
 verify:
 	uv run python scripts/verify_environment.py
 	uv run python scripts/verify_specifications.py
+	uv run python scripts/verify_artifacts.py
 
 check: test lint typecheck verify
 

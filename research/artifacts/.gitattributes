@@ -1,0 +1,3 @@
+# Content-addressed evidence. Never rewrite these bytes: any line-ending or
+# whitespace change breaks the recorded SHA-256.
+*.json -text

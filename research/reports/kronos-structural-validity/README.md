@@ -21,10 +21,18 @@ hypothesis is closed. This directory is a record, not an open line of work.
 | `reproduction.md` | How each result was produced and how a third party would re-derive it. |
 | `limitations.md` | The full limitation and non-claim inventory, expanded beyond the summary in `report.md`. |
 
-## What this directory deliberately does not contain
+## The terminal artifacts
 
-- **No terminal artifacts.** The two terminal objects live in the immutable object store.
-  `artifact-manifest.json` records their keys and digests; the bytes are not copied into Git.
+The Kronos-base terminal artifact is committed byte for byte at
+[`../../artifacts/kronos_base_diagnostic_terminal.json`](../../artifacts/kronos_base_diagnostic_terminal.json)
+(SHA-256 `84ec1b19…c731e6`). Verify it with `python scripts/verify_artifacts.py`.
+
+The Kronos-mini artifact (`canary_0a92fde788bd685c`) is recorded but not committed — its body
+was not retained locally and retrieving it needs object-store credentials. Its key and digest
+are in [`../../artifacts/manifest.json`](../../artifacts/manifest.json), and its complete
+numeric results are mirrored in `results-summary.json` here.
+
+## What this directory deliberately does not contain
 - **No model weights**, in any form, in Git, Git LFS, test fixtures or CI artifacts.
 - **No amendment** to either completed study. Both are frozen. Their specifications, schemas,
   run IDs, source pins, model pins, thresholds, seeds, conclusions and terminal objects are

@@ -72,16 +72,25 @@ than by convention:
 
 ## Verifiability
 
-Terminal artifacts live in a private S3-compatible bucket, so their bytes are not
-publicly fetchable. Each report therefore mirrors its complete numeric results
-into `results-summary.json`, generated directly from the artifact payload rather
-than transcribed by hand.
+Two of the three terminal artifacts are committed **byte for byte** under
+[`../artifacts/`](../artifacts/), as the exact object-store bodies. Recompute
+their digests yourself:
 
-What any reader can check without credentials: the specification digests, the
-vendored upstream source digests, the model and tokenizer digests against public
-Hugging Face revisions, and the entire analysis, bootstrap and decision code with
-its test suite. What requires bucket access: byte-level confirmation of an
-artifact against its recorded SHA-256. That boundary is stated in each report
+```bash
+python scripts/verify_artifacts.py
+```
+
+The Kronos-mini artifact is recorded but not committed — its body was not
+retained locally and retrieving it needs object-store credentials. Its key and
+digest are in [`../artifacts/manifest.json`](../artifacts/manifest.json), and its
+numeric results are mirrored like every other study's.
+
+Each report also mirrors its complete numeric results into
+`results-summary.json`, generated directly from the artifact payload rather than
+transcribed by hand.
+
+So: all three studies are verifiable at the level of reported numbers, and two of
+three are verifiable at the byte level. That boundary is stated in each report
 rather than glossed.
 
 ## Boundary
