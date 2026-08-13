@@ -35,7 +35,6 @@ interval type the decision layer accepts.
 from __future__ import annotations
 
 import math
-import random
 import statistics
 from typing import Final, Literal
 
@@ -44,6 +43,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..diagnostic.metrics import DirectionalAccuracy, directional_accuracy
 from ..diagnostic.official_input import OfficialRow
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
+from ..resampling import moving_block_percentile_interval
 from .spec import ASSET_PANEL, CONTEXT_CANDLES, ORIGIN_STRIDE, ORIGINS_PER_ASSET
 
 __all__ = [
@@ -408,66 +408,39 @@ def paired_origin_moving_block_bootstrap(
             field="confidence_level",
         )
 
-    cluster_count = len(clusters)
-    per_cluster_totals = [sum(cluster.paired_differences) for cluster in clusters]
-    observations = cluster_count * BOOTSTRAP_ASSETS_PER_CLUSTER
-
-    starts = block_starts(cluster_count, block_length)
-    start_count = len(starts)
-    blocks_per_resample = -(-cluster_count // block_length)
-
-    # Precompute each block's total once. A block is 4 consecutive ordinals in
-    # chronological order; summing it here does not reorder anything, it just
-    # avoids re-walking the same four clusters 2000 times.
-    block_totals = [
-        sum(per_cluster_totals[start : start + block_length]) for start in starts
-    ]
-    # The truncated tail: the 7th block contributes only its first
-    # (25 - 6*4) = 1 cluster, so its partial total is precomputed too.
-    retained_in_last = cluster_count - block_length * (blocks_per_resample - 1)
-    partial_totals = [
-        sum(per_cluster_totals[start : start + retained_in_last]) for start in starts
-    ]
-
-    generator = random.Random(seed)
-    means: list[float] = []
-    for _ in range(resamples):
-        total = 0.0
-        for block in range(blocks_per_resample):
-            drawn = generator.randrange(start_count)
-            # Whole blocks except the last, which is truncated so exactly 25
-            # cluster positions are retained.
-            if block < blocks_per_resample - 1:
-                total += block_totals[drawn]
-            else:
-                total += partial_totals[drawn]
-        means.append(total / observations)
-    means.sort()
-
-    tail = (1.0 - confidence_level) / 2.0
-    lower = means[math.floor(tail * (resamples - 1))]
-    upper = means[math.ceil((1.0 - tail) * (resamples - 1))]
-    point = sum(per_cluster_totals) / observations
-    excludes = (lower > 0.0 and upper > 0.0) or (lower < 0.0 and upper < 0.0)
-    return MovingBlockBootstrapInterval(
-        defined=True,
-        cluster_count=cluster_count,
-        assets_per_cluster=BOOTSTRAP_ASSETS_PER_CLUSTER,
-        observation_count=observations,
+    # The arithmetic lives in the study-neutral core. Everything above this line
+    # is this study's own contract -- exactly 25 clusters, exactly the four
+    # preregistered assets, block length fixed by ceil(40 / 12) -- and stays
+    # here, so sharing the estimator cannot relax a guard that a published
+    # result depends on. A regression test recomputes the intervals recorded in
+    # the terminal artifact and requires them bit-identical.
+    core = moving_block_percentile_interval(
+        [sum(cluster.paired_differences) for cluster in clusters],
+        observations=len(clusters) * BOOTSTRAP_ASSETS_PER_CLUSTER,
         block_length=block_length,
-        available_block_starts=start_count,
-        blocks_drawn_per_resample=blocks_per_resample,
-        clusters_retained_per_resample=cluster_count,
+        seed=seed,
         resamples=resamples,
         confidence_level=confidence_level,
-        seed=seed,
-        point_estimate=point,
-        lower=lower,
-        upper=upper,
-        excludes_zero=excludes,
+    )
+    return MovingBlockBootstrapInterval(
+        defined=True,
+        cluster_count=core.cluster_count,
+        assets_per_cluster=BOOTSTRAP_ASSETS_PER_CLUSTER,
+        observation_count=core.observation_count,
+        block_length=core.block_length,
+        available_block_starts=core.available_block_starts,
+        blocks_drawn_per_resample=core.blocks_drawn_per_resample,
+        clusters_retained_per_resample=core.cluster_count,
+        resamples=core.resamples,
+        confidence_level=core.confidence_level,
+        seed=core.seed,
+        point_estimate=core.point_estimate,
+        lower=core.lower,
+        upper=core.upper,
+        excludes_zero=core.excludes_zero,
         # Favorable means the whole interval sits above zero: the candidate beat
         # persistence by a margin the block resampling did not erase.
-        excludes_zero_favorably=lower > 0.0,
+        excludes_zero_favorably=core.excludes_zero_favorably,
     )
 
 
