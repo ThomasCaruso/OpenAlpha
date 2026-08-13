@@ -286,12 +286,12 @@ class DeterministicFakeProvider:
             open_price = level
             close_price = max(
                 1.0,
-                level * (1.0 + (self._unit(request.symbol, session, "close") - 0.5) * 0.02),
+                level * (1.0 + (self._unit(request.symbol, session, "c") - 0.5) * 0.02),
             )
-            spread = 1.0 + 0.01 * self._unit(request.symbol, session, "spread")
+            spread = 1.0 + 0.01 * self._unit(request.symbol, session, "s")
             high = max(open_price, close_price) * spread
             low = min(open_price, close_price) / spread
-            volume = 1.0e6 * (1.0 + self._unit(request.symbol, session, "volume"))
+            volume = 1.0e6 * (1.0 + self._unit(request.symbol, session, "v"))
             candles.append(
                 Candle(
                     session=session,

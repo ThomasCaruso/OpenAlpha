@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 from datetime import UTC, date, datetime
+from unittest import mock
 
 import pytest
 from openalpha_research.calendars import CalendarName, sessions_in_half_open_range
@@ -29,7 +31,11 @@ from openalpha_research.providers import (
     validate_series,
 )
 from openalpha_research.redaction import REDACTED, SecretRedactor
-from openalpha_research.resampling import moving_block_percentile_interval
+from openalpha_research.resampling import (
+    block_start_count,
+    blocks_per_resample,
+    moving_block_percentile_interval,
+)
 from openalpha_research.runtime import directory_bytes, gpu_snapshot, scoped_timer
 from openalpha_research.safe_logging import log_operational_failure
 
@@ -276,6 +282,28 @@ def test_deterministic_fake_provider_is_repeatable() -> None:
     validate_series(first)
 
 
+def test_deterministic_fake_provider_preserves_the_original_compatibility_vector() -> None:
+    request = RetrievalRequest(
+        symbol="TEST",
+        start=date(2025, 1, 2),
+        end=date(2025, 1, 8),
+        maximum_candles=10,
+    )
+    series = DeterministicFakeProvider(seed=11).fetch(request)
+    assert series.normalized_sha256 == (
+        "3aafa56ae13a13ef101b0dc9a31664bfffbbb435848c07f6b61fa0d052c453c0"
+    )
+    assert series.candles[0] == Candle(
+        session=date(2025, 1, 2),
+        open=139.44023590029812,
+        high=140.90620657804592,
+        low=138.37564548342743,
+        close=139.83042385125935,
+        volume=1806155.8126559674,
+        amount=252208216.47117415,
+    )
+
+
 def test_exchange_calendar_helpers_support_weekdays_and_continuous_days() -> None:
     assert sessions_in_half_open_range(
         date(2025, 1, 3), date(2025, 1, 7), calendar=CalendarName.XNYS
@@ -324,6 +352,64 @@ def test_constant_moving_block_panel_reproduces_its_mean(total: float) -> None:
     assert interval.point_estimate == pytest.approx(expected)
     assert interval.lower == pytest.approx(expected)
     assert interval.upper == pytest.approx(expected)
+
+
+def test_moving_block_draws_block_starts_for_each_required_block() -> None:
+    calls: list[int] = []
+    original = random.Random.randrange
+
+    def recording(generator: random.Random, *args: int) -> int:
+        calls.append(args[0])
+        return original(generator, *args)
+
+    with mock.patch.object(random.Random, "randrange", recording):
+        moving_block_percentile_interval(
+            [0.001] * 8,
+            observations=16,
+            block_length=2,
+            seed=3,
+            resamples=10,
+            confidence_level=0.9,
+        )
+    assert set(calls) == {7}
+    assert len(calls) == 40
+
+
+def test_moving_block_never_wraps_around() -> None:
+    totals = [0.0] * 9
+    totals[-1] = 1.0
+    interval = moving_block_percentile_interval(
+        totals,
+        observations=18,
+        block_length=4,
+        seed=3,
+        resamples=2_000,
+        confidence_level=0.9,
+    )
+    assert interval.available_block_starts == 6
+    assert interval.upper <= 2.0 / 18 + 1e-12
+
+
+def test_moving_block_geometry_helpers_match_contiguous_arithmetic() -> None:
+    assert block_start_count(8, 2) == 7
+    assert block_start_count(9, 4) == 6
+    assert blocks_per_resample(8, 2) == 4
+    assert blocks_per_resample(9, 4) == 3
+
+
+def test_moving_block_rejects_non_finite_totals() -> None:
+    totals = [0.001] * 8
+    totals[3] = math.nan
+    with pytest.raises(ResearchFailureError) as excinfo:
+        moving_block_percentile_interval(
+            totals,
+            observations=16,
+            block_length=2,
+            seed=3,
+            resamples=10,
+            confidence_level=0.9,
+        )
+    assert excinfo.value.failures[0].code == "RESAMPLING_NON_FINITE_TOTAL"
 
 
 @pytest.mark.parametrize(
