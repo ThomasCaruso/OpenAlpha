@@ -4,10 +4,11 @@ import hashlib
 import importlib
 import json
 import threading
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .failures import FailureCategory, ResearchFailure, ResearchFailureError
 from .identity import canonical_json
@@ -57,6 +58,13 @@ class ObjectMetadata(BaseModel):
     prior_journal_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     created_at: datetime
     evidence_class: str = Field(min_length=1)
+
+    @field_validator("created_at")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("created_at must be timezone-aware")
+        return value
 
 
 class StoredObject(BaseModel):
@@ -331,7 +339,23 @@ class S3CompatibleObjectStore:
                 response = self._boto().list_objects_v2(**arguments)
             except Exception as error:
                 raise _request_failure("list", prefix, error) from error
-            keys.extend(item["Key"] for item in response.get("Contents", ()))
+            contents = response.get("Contents", ())
+            if not isinstance(contents, Sequence) or isinstance(contents, (str, bytes)):
+                raise _fail(
+                    "OBJECT_STORE_RESPONSE_INVALID",
+                    f"object listing returned invalid contents for {prefix}",
+                    field=prefix,
+                )
+            page_keys: list[str] = []
+            for item in contents:
+                if not isinstance(item, Mapping) or not isinstance(item.get("Key"), str):
+                    raise _fail(
+                        "OBJECT_STORE_RESPONSE_INVALID",
+                        f"object listing returned an invalid key entry for {prefix}",
+                        field=prefix,
+                    )
+                page_keys.append(item["Key"])
+            keys.extend(page_keys)
             if not response.get("IsTruncated"):
                 return tuple(sorted(keys))
             next_token = response.get("NextContinuationToken")

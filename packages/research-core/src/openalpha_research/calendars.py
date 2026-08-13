@@ -64,9 +64,11 @@ def xnys_holidays(year: int) -> frozenset[date]:
     start = date(year, 1, 1)
     end = date(year, 12, 31)
     _validate_xnys_range(start, end)
+    calendar = _xnys_calendar()
+    query_start = max(start, calendar.first_session.date())
+    query_end = min(end, calendar.last_session.date())
     sessions = {
-        timestamp.date()
-        for timestamp in _xnys_calendar().sessions_in_range(start, end)
+        timestamp.date() for timestamp in calendar.sessions_in_range(query_start, query_end)
     }
     span = (end - start).days + 1
     return frozenset(
@@ -95,8 +97,12 @@ def sessions_in_half_open_range(
     _validate_xnys_range(start, end)
     if start == end:
         return ()
-    inclusive_end = end - timedelta(days=1)
+    official_calendar = _xnys_calendar()
+    query_start = max(start, official_calendar.first_session.date())
+    inclusive_end = min(end - timedelta(days=1), official_calendar.last_session.date())
+    if inclusive_end < query_start:
+        return ()
     return tuple(
         timestamp.date()
-        for timestamp in _xnys_calendar().sessions_in_range(start, inclusive_end)
+        for timestamp in official_calendar.sessions_in_range(query_start, inclusive_end)
     )

@@ -249,6 +249,22 @@ def test_object_store_rejects_body_metadata_hash_mismatch_before_persistence() -
     assert not store.exists("result.json")
 
 
+def test_object_metadata_requires_timezone_aware_creation_time() -> None:
+    common = {
+        "schema_version": "study.result.v1",
+        "run_id": "run_1",
+        "experiment_hash": "0" * 64,
+        "content_sha256": canonical_sha256({}),
+        "evidence_class": "development",
+    }
+    naive_created_at = datetime(2025, 1, 2, tzinfo=UTC).replace(tzinfo=None)
+    with pytest.raises(ValidationError, match="timezone-aware"):
+        ObjectMetadata(created_at=naive_created_at, **common)
+
+    created_at = datetime(2025, 1, 2, tzinfo=UTC)
+    assert ObjectMetadata(created_at=created_at, **common).created_at == created_at
+
+
 def test_s3_store_rejects_objects_with_missing_provenance_metadata() -> None:
     class Body:
         def read(self) -> bytes:
@@ -260,6 +276,32 @@ def test_s3_store_rejects_objects_with_missing_provenance_metadata() -> None:
 
     store = S3CompatibleObjectStore(bucket="research")
     store._client = MetadataFreeClient()
+    with pytest.raises(ResearchFailureError) as excinfo:
+        store.get("result.json")
+    assert excinfo.value.failures[0].code == "OBJECT_METADATA_INVALID"
+
+
+def test_s3_store_rejects_timezone_naive_provenance_metadata() -> None:
+    class Body:
+        def read(self) -> bytes:
+            return b"{}"
+
+    class NaiveMetadataClient:
+        def get_object(self, **_: object) -> dict[str, object]:
+            return {
+                "Body": Body(),
+                "Metadata": {
+                    "schema-version": "study.result.v1",
+                    "run-id": "run_1",
+                    "experiment-hash": "0" * 64,
+                    "content-sha256": canonical_sha256({}),
+                    "created-at": "2025-01-02T00:00:00",
+                    "evidence-class": "development",
+                },
+            }
+
+    store = S3CompatibleObjectStore(bucket="research")
+    store._client = NaiveMetadataClient()
     with pytest.raises(ResearchFailureError) as excinfo:
         store.get("result.json")
     assert excinfo.value.failures[0].code == "OBJECT_METADATA_INVALID"
@@ -346,6 +388,35 @@ def test_s3_listing_rejects_repeated_pagination_tokens_without_looping() -> None
         store.list_keys("runs/")
     assert excinfo.value.failures[0].code == "OBJECT_STORE_PAGINATION_INVALID"
     assert client.calls == 2
+
+
+@pytest.mark.parametrize(
+    "contents",
+    [
+        None,
+        "credential=response-secret",
+        {"Key": "credential=response-secret"},
+        [None],
+        [{}],
+        [{"Key": 7}],
+    ],
+    ids=["none", "string", "mapping", "malformed-item", "missing-key", "non-string-key"],
+)
+def test_s3_listing_rejects_malformed_contents_without_leaking_response(
+    contents: object,
+) -> None:
+    class MalformedListingClient:
+        def list_objects_v2(self, **_: object) -> dict[str, object]:
+            return {"Contents": contents, "IsTruncated": False}
+
+    store = S3CompatibleObjectStore(bucket="research")
+    store._client = MalformedListingClient()
+    with pytest.raises(ResearchFailureError) as excinfo:
+        store.list_keys("runs/")
+    assert excinfo.value.failures[0].code == "OBJECT_STORE_RESPONSE_INVALID"
+    assert "credential=response-secret" not in str(excinfo.value)
+    assert "TypeError" not in str(excinfo.value)
+    assert "KeyError" not in str(excinfo.value)
 
 
 def test_provider_models_and_validation_are_subject_neutral() -> None:
@@ -492,6 +563,37 @@ def test_xnys_calendar_includes_the_2001_emergency_closures() -> None:
         date(2001, 9, 10),
         date(2001, 9, 17),
     )
+
+
+@pytest.mark.parametrize(
+    ("end", "expected"),
+    [
+        (date(2000, 1, 1), ()),
+        (date(2000, 1, 2), ()),
+        (date(2000, 1, 3), ()),
+        (date(2000, 1, 4), (date(2000, 1, 3),)),
+    ],
+)
+def test_xnys_calendar_supports_ranges_from_the_exact_lower_boundary(
+    end: date,
+    expected: tuple[date, ...],
+) -> None:
+    assert sessions_in_half_open_range(date(2000, 1, 1), end) == expected
+
+
+def test_xnys_holidays_supports_the_lower_boundary_year() -> None:
+    holidays = xnys_holidays(2000)
+    assert date(2000, 1, 17) in holidays
+    assert date(2000, 1, 1) not in holidays
+    assert date(2000, 1, 2) not in holidays
+
+
+def test_xnys_calendar_supports_the_exact_upper_boundary() -> None:
+    assert sessions_in_half_open_range(date(2030, 12, 31), date(2030, 12, 31)) == ()
+    assert sessions_in_half_open_range(date(2030, 12, 31), date(2031, 1, 1)) == (
+        date(2030, 12, 31),
+    )
+    assert date(2030, 12, 25) in xnys_holidays(2030)
 
 
 @pytest.mark.parametrize(
