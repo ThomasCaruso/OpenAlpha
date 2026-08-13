@@ -22,19 +22,20 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
+from openalpha_research.failures import FailureCategory, ResearchFailure, ResearchFailureError
+from openalpha_research.objectstore import ObjectStore
+from openalpha_research.providers import MarketDataProvider, RetrievalRequest, validate_series
+from openalpha_research.runtime import gpu_snapshot, reset_gpu_statistics
+from pydantic import BaseModel, ConfigDict
+
 from openalpha_kronos.model.input import OfficialRow, official_stamp
 from openalpha_kronos.model.normalization import fit_context_state
+from openalpha_kronos.studies.provenance import EvidenceClass
 from openalpha_kronos.studies.structural_validity.mini.safe_logging import (
     StageTracker,
     log_operational_failure,
 )
-from pydantic import BaseModel, ConfigDict
 
-from ..cloud.objectstore import ObjectStore
-from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
-from ..phase2.measurement import gpu_snapshot, reset_gpu_statistics
-from ..phase2.provider import Phase2Provider, RetrievalRequest, validate_series
-from ..phase2.states import EvidenceClass
 from .artifact import (
     ProbeTerminalArtifact,
     load_verified_fit_artifact,
@@ -104,9 +105,9 @@ from .test import (
 __all__ = ["ProbeWorkerResult", "run_probe_fit_worker", "run_probe_test_worker"]
 
 
-def _fail(code: str, message: str, *, field: str | None = None) -> BridgeTransformError:
-    return BridgeTransformError(
-        BridgeFailure(
+def _fail(code: str, message: str, *, field: str | None = None) -> ResearchFailureError:
+    return ResearchFailureError(
+        ResearchFailure(
             category=FailureCategory.INVALID_CONFIGURATION,
             code=code,
             field=field,
@@ -148,7 +149,7 @@ class _CountingProvider:
 
     __slots__ = ("_inner", "requests")
 
-    def __init__(self, inner: Phase2Provider) -> None:
+    def __init__(self, inner: MarketDataProvider) -> None:
         self._inner = inner
         self.requests: list[RetrievalRequest] = []
 
@@ -446,7 +447,7 @@ def run_probe_fit_worker(
     def execute_and_log() -> dict[str, Any]:
         try:
             return execute()
-        except BridgeTransformError:
+        except ResearchFailureError:
             raise
         except Exception as error:
             log_operational_failure(
@@ -720,7 +721,7 @@ def run_probe_test_worker(
     def execute_and_log() -> dict[str, Any]:
         try:
             return execute()
-        except BridgeTransformError:
+        except ResearchFailureError:
             raise
         except Exception as error:
             log_operational_failure(

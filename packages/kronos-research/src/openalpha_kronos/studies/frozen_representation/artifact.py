@@ -16,13 +16,14 @@ import hashlib
 from datetime import UTC, datetime
 from typing import Any, Final, Literal
 
-from openalpha_kronos.studies.structural_validity.mini.safe_logging import StageTracker
+from openalpha_research.failures import FailureCategory, ResearchFailure, ResearchFailureError
+from openalpha_research.identity import canonical_json
+from openalpha_research.objectstore import ObjectStore, get_json, put_json
 from pydantic import BaseModel, ConfigDict
 
-from ..cloud.objectstore import ObjectStore, get_json, put_json
-from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
-from ..phase2.identity import canonical_json
-from ..phase2.states import EvidenceClass
+from openalpha_kronos.studies.provenance import EvidenceClass
+from openalpha_kronos.studies.structural_validity.mini.safe_logging import StageTracker
+
 from .invocation import ProbeInvocation
 from .spec import (
     PROBE_CLAIM_BOUNDARY,
@@ -69,9 +70,9 @@ _SCHEMA_FOR_OUTCOME: Final[dict[str, str]] = {
 }
 
 
-def _fail(code: str, message: str) -> BridgeTransformError:
-    return BridgeTransformError(
-        BridgeFailure(category=FailureCategory.INVALID_CONFIGURATION, code=code, message=message)
+def _fail(code: str, message: str) -> ResearchFailureError:
+    return ResearchFailureError(
+        ResearchFailure(category=FailureCategory.INVALID_CONFIGURATION, code=code, message=message)
     )
 
 
@@ -157,7 +158,7 @@ def _write(
             evidence_class=EvidenceClass.DEVELOPMENT_COMPATIBILITY_CANARY,
             immutable=True,
         )
-    except BridgeTransformError as error:
+    except ResearchFailureError as error:
         if error.failures[0].code != "OBJECT_ALREADY_EXISTS":
             raise
         tracker.enter("verify_existing_artifact")
@@ -303,7 +304,7 @@ def publish_probe_fit(
     stamped = now or datetime.now(UTC)
     try:
         payload: dict[str, Any] = execute()
-    except BridgeTransformError as error:
+    except ResearchFailureError as error:
         failure = ProbeFailure(
             outcome=PROBE_FAILURE_CODE,
             phase="fit",
@@ -373,7 +374,7 @@ def publish_probe_test(
     stamped = now or datetime.now(UTC)
     try:
         payload: dict[str, Any] = execute()
-    except BridgeTransformError as error:
+    except ResearchFailureError as error:
         failure = ProbeFailure(
             outcome=PROBE_FAILURE_CODE,
             phase="test",

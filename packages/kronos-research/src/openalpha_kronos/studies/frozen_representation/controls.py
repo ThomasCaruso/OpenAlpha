@@ -16,9 +16,10 @@ import statistics
 from collections.abc import Callable
 from typing import Final
 
+from openalpha_research.failures import FailureCategory, ResearchFailure, ResearchFailureError
+
 from openalpha_kronos.model.input import OFFICIAL_COLUMNS, OfficialRow
 
-from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from .spec import (
     CONTEXT_CANDLES,
     ENGINEERED_FEATURE_NAMES,
@@ -40,9 +41,9 @@ __all__ = [
 _EPSILON: Final[float] = 1e-12
 
 
-def _fail(code: str, message: str) -> BridgeTransformError:
-    return BridgeTransformError(
-        BridgeFailure(category=FailureCategory.INVALID_CONFIGURATION, code=code, message=message)
+def _fail(code: str, message: str) -> ResearchFailureError:
+    return ResearchFailureError(
+        ResearchFailure(category=FailureCategory.INVALID_CONFIGURATION, code=code, message=message)
     )
 
 

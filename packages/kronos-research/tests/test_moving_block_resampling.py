@@ -21,22 +21,15 @@ import random
 from pathlib import Path
 
 import pytest
-from openalpha_bridge.errors import BridgeTransformError
-from openalpha_bridge.representation_probe.spec import MINIMUM_TEST_ORIGINS_PER_ASSET
-from openalpha_bridge.representation_probe.test import (
+from openalpha_kronos.studies.frozen_representation.spec import MINIMUM_TEST_ORIGINS_PER_ASSET
+from openalpha_kronos.studies.frozen_representation.test import (
     PROBE_CLUSTER_COUNT,
 )
-from openalpha_bridge.representation_probe.test import (
+from openalpha_kronos.studies.frozen_representation.test import (
     OriginCluster as ProbeCluster,
 )
-from openalpha_bridge.representation_probe.test import (
+from openalpha_kronos.studies.frozen_representation.test import (
     paired_moving_block_bootstrap as probe_bootstrap,
-)
-from openalpha_bridge.resampling import (
-    MovingBlockCore,
-    block_start_count,
-    blocks_per_resample,
-    moving_block_percentile_interval,
 )
 from openalpha_kronos.studies.zero_shot.aggregation import (
     BOOTSTRAP_ASSETS_PER_CLUSTER,
@@ -56,6 +49,12 @@ from openalpha_kronos.studies.zero_shot.spec import (
     BOOTSTRAP_SEED,
 )
 from openalpha_research.failures import ResearchFailureError
+from openalpha_research.resampling import (
+    MovingBlockCore,
+    block_start_count,
+    blocks_per_resample,
+    moving_block_percentile_interval,
+)
 
 REPO = Path(__file__).resolve().parents[3]
 ARTIFACT = REPO / "research" / "artifacts" / "kronos_zero_shot_benchmark_terminal.json"
@@ -200,7 +199,7 @@ def test_the_probe_wrapper_demands_exactly_sixteen(count: int) -> None:
         ProbeCluster(ordinal=i, assets=ASSET_PANEL, paired_differences=(0.1, 0.1, 0.1, 0.1))
         for i in range(count)
     )
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         probe_bootstrap(clusters, resamples=100)
     assert excinfo.value.failures[0].code == "PROBE_BOOTSTRAP_CLUSTER_COUNT_INVALID"
     assert "exactly 16" in excinfo.value.failures[0].message
@@ -359,7 +358,7 @@ def test_the_core_validates_what_it_needs(kwargs: dict, code: str) -> None:
         "resamples": 10,
         "confidence_level": 0.95,
     }
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         moving_block_percentile_interval([0.001] * 25, **{**base, **kwargs})
     assert excinfo.value.failures[0].code == code
 
@@ -367,7 +366,7 @@ def test_the_core_validates_what_it_needs(kwargs: dict, code: str) -> None:
 def test_the_core_refuses_a_non_finite_total() -> None:
     totals = [0.001] * 25
     totals[3] = math.nan
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         moving_block_percentile_interval(
             totals, observations=100, block_length=4, seed=1, resamples=10,
             confidence_level=0.95,
@@ -378,7 +377,7 @@ def test_the_core_refuses_a_non_finite_total() -> None:
 def test_the_core_is_study_neutral() -> None:
     """It must not know about assets, ordinals, or either study."""
     source = (
-        REPO / "packages" / "bridge" / "src" / "openalpha_bridge" / "resampling.py"
+        REPO / "packages" / "research-core" / "src" / "openalpha_research" / "resampling.py"
     ).read_text(encoding="utf-8")
     for term in ("SPY", "QQQ", "IWM", "DIA", "zero_shot", "representation_probe",
                  "ASSET_PANEL", "kronos", "Kronos"):

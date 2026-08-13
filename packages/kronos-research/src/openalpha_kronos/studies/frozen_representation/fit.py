@@ -17,9 +17,9 @@ import math
 from typing import Any, Final, Literal
 
 import numpy as np
+from openalpha_research.failures import FailureCategory, ResearchFailure, ResearchFailureError
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from .spec import LOGISTIC_C_GRID, RIDGE_ALPHA_GRID
 
 __all__ = [
@@ -40,9 +40,9 @@ LOGISTIC_TOLERANCE: Final[float] = 1e-8
 LOGISTIC_RIDGE_FLOOR: Final[float] = 1e-10
 
 
-def _fail(code: str, message: str, *, field: str | None = None) -> BridgeTransformError:
-    return BridgeTransformError(
-        BridgeFailure(
+def _fail(code: str, message: str, *, field: str | None = None) -> ResearchFailureError:
+    return ResearchFailureError(
+        ResearchFailure(
             category=FailureCategory.INVALID_CONFIGURATION,
             code=code,
             field=field,
@@ -406,7 +406,7 @@ def digest_of(value: Any) -> str:
     """Canonical digest of a fitted object, for artifact cross-checks."""
     import hashlib
 
-    from ..phase2.identity import canonical_json
+    from openalpha_research.identity import canonical_json
 
     return hashlib.sha256(canonical_json(value)).hexdigest()
 

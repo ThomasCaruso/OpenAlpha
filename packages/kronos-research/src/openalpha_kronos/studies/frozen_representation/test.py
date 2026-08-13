@@ -20,10 +20,10 @@ from enum import StrEnum
 from typing import Any, Final
 
 import numpy as np
+from openalpha_research.failures import FailureCategory, ResearchFailure, ResearchFailureError
+from openalpha_research.resampling import moving_block_percentile_interval
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
-from ..resampling import moving_block_percentile_interval
 from .spec import (
     ASSET_PANEL,
     BOOTSTRAP_BLOCK_LENGTH,
@@ -56,9 +56,9 @@ __all__ = [
 PROBE_CLUSTER_COUNT: Final[int] = MINIMUM_TEST_ORIGINS_PER_ASSET
 
 
-def _fail(code: str, message: str, *, field: str | None = None) -> BridgeTransformError:
-    return BridgeTransformError(
-        BridgeFailure(
+def _fail(code: str, message: str, *, field: str | None = None) -> ResearchFailureError:
+    return ResearchFailureError(
+        ResearchFailure(
             category=FailureCategory.INVALID_CONFIGURATION,
             code=code,
             field=field,

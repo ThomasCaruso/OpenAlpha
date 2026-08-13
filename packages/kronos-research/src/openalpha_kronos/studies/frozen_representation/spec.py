@@ -18,10 +18,10 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Final, Literal
 
-from openalpha_kronos.model.assets import KRONOS_BASE_SPEC, KRONOS_BASE_TOKENIZER_SPEC
+from openalpha_research.failures import FailureCategory, ResearchFailure, ResearchFailureError
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
+from openalpha_kronos.model.assets import KRONOS_BASE_SPEC, KRONOS_BASE_TOKENIZER_SPEC
 
 __all__ = [
     "ASSET_PANEL",
@@ -253,9 +253,9 @@ def probe_test_key(run_id: str) -> str:
     return f"{PROBE_ARTIFACT_ROOT}/runs/{run_id}/{PROBE_TEST_OBJECT_NAME}"
 
 
-def _fail(code: str, message: str, *, field: str | None = None) -> BridgeTransformError:
-    return BridgeTransformError(
-        BridgeFailure(
+def _fail(code: str, message: str, *, field: str | None = None) -> ResearchFailureError:
+    return ResearchFailureError(
+        ResearchFailure(
             category=FailureCategory.INVALID_CONFIGURATION,
             code=code,
             field=field,

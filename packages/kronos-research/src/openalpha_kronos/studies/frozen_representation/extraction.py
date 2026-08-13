@@ -23,12 +23,13 @@ from __future__ import annotations
 
 from typing import Any, Final, Protocol, runtime_checkable
 
+from openalpha_research.failures import FailureCategory, ResearchFailure, ResearchFailureError
+from pydantic import BaseModel, ConfigDict, Field
+
 from openalpha_kronos.model.input import OfficialRow, TimeStamp
 from openalpha_kronos.model.normalization import NormalizationState
 from openalpha_kronos.model.official import _rows_to_tensor, _stamps_to_tensor
-from pydantic import BaseModel, ConfigDict, Field
 
-from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from .spec import CONTEXT_CANDLES, REPRESENTATION_DIMENSION
 
 __all__ = [
@@ -42,9 +43,9 @@ __all__ = [
 _CLIP: Final[float] = 5.0
 
 
-def _fail(code: str, message: str, *, field: str | None = None) -> BridgeTransformError:
-    return BridgeTransformError(
-        BridgeFailure(
+def _fail(code: str, message: str, *, field: str | None = None) -> ResearchFailureError:
+    return ResearchFailureError(
+        ResearchFailure(
             category=FailureCategory.INVALID_CONFIGURATION,
             code=code,
             field=field,

@@ -15,10 +15,11 @@ import math
 from datetime import date
 from typing import Final
 
-from openalpha_kronos.model.input import OfficialRow
+from openalpha_research.failures import FailureCategory, ResearchFailure, ResearchFailureError
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
+from openalpha_kronos.model.input import OfficialRow
+
 from .spec import ASSET_PANEL, CONTEXT_CANDLES, HORIZON_CANDLES, STRIDE
 
 __all__ = [
@@ -33,9 +34,9 @@ __all__ = [
 _MINIMUM_CONTEXT_FOR_FIRST_ORIGIN: Final[int] = CONTEXT_CANDLES
 
 
-def _fail(code: str, message: str, *, field: str | None = None) -> BridgeTransformError:
-    return BridgeTransformError(
-        BridgeFailure(
+def _fail(code: str, message: str, *, field: str | None = None) -> ResearchFailureError:
+    return ResearchFailureError(
+        ResearchFailure(
             category=FailureCategory.INVALID_CONFIGURATION,
             code=code,
             field=field,

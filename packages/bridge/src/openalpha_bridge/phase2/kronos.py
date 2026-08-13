@@ -326,7 +326,7 @@ class OfficialKronosBackend:
         import os
         from pathlib import Path as _Path
 
-        from .official_source import load_official_kronos
+        from openalpha_kronos.model.official_source import load_official_kronos
 
         root = self._source_path or os.environ.get("OPENALPHA_KRONOS_SOURCE_PATH")
         if not root:

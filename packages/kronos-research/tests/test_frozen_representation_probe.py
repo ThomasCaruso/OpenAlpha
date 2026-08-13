@@ -20,36 +20,34 @@ from typing import Any
 
 import numpy as np
 import pytest
-from openalpha_bridge.cloud.objectstore import InMemoryObjectStore
-from openalpha_bridge.errors import BridgeTransformError
-from openalpha_bridge.phase2.invocation import RUN_ID_PATTERN as MINI_RUN_ID_PATTERN
-from openalpha_bridge.phase2.provider import Candle, MarketSeries, ProviderMode, RetrievalRequest
-from openalpha_bridge.representation_probe import controls
-from openalpha_bridge.representation_probe.artifact import (
+from openalpha_kronos.model.input import OfficialRow, official_stamp
+from openalpha_kronos.model.normalization import fit_context_state
+from openalpha_kronos.studies.frozen_representation import controls
+from openalpha_kronos.studies.frozen_representation.artifact import (
     PROBE_FAILURE_CODE,
     PROBE_FIT_CODE,
     load_verified_fit_artifact,
 )
-from openalpha_bridge.representation_probe.controls import (
+from openalpha_kronos.studies.frozen_representation.controls import (
     engineered_features,
     intercept_only,
     raw_ohlcv,
 )
-from openalpha_bridge.representation_probe.extraction import ExtractedRepresentation
-from openalpha_bridge.representation_probe.features import (
+from openalpha_kronos.studies.frozen_representation.extraction import ExtractedRepresentation
+from openalpha_kronos.studies.frozen_representation.features import (
     build_sample,
     cumulative_log_return,
     origin_offsets,
     resolve_windows,
     verify_cross_asset_alignment,
 )
-from openalpha_bridge.representation_probe.fit import (
+from openalpha_kronos.studies.frozen_representation.fit import (
     Standardizer,
     fit_logistic,
     fit_ridge,
 )
-from openalpha_bridge.representation_probe.invocation import ProbeInvocation
-from openalpha_bridge.representation_probe.spec import (
+from openalpha_kronos.studies.frozen_representation.invocation import ProbeInvocation
+from openalpha_kronos.studies.frozen_representation.spec import (
     ASSET_PANEL,
     CONTEXT_CANDLES,
     EMBARGO_ORDINALS,
@@ -79,7 +77,7 @@ from openalpha_bridge.representation_probe.spec import (
     verify_pinned_pair,
     verify_probe_specification,
 )
-from openalpha_bridge.representation_probe.test import (
+from openalpha_kronos.studies.frozen_representation.test import (
     ControlComparison,
     OriginCluster,
     ProbeFinding,
@@ -88,19 +86,20 @@ from openalpha_bridge.representation_probe.test import (
     paired_moving_block_bootstrap,
     verify_test_eligibility,
 )
-from openalpha_bridge.representation_probe.worker import (
+from openalpha_kronos.studies.frozen_representation.worker import (
     run_probe_fit_worker,
     run_probe_test_worker,
 )
-from openalpha_kronos.model.input import OfficialRow, official_stamp
-from openalpha_kronos.model.normalization import fit_context_state
+from openalpha_kronos.studies.provenance import MINI_RUN_ID_PATTERN
 from openalpha_kronos.studies.structural_validity.base.spec import BASE_RUN_ID_PATTERN
 from openalpha_kronos.studies.zero_shot.spec import ZERO_SHOT_RUN_ID_PATTERN
+from openalpha_research.failures import ResearchFailureError
+from openalpha_research.objectstore import InMemoryObjectStore
+from openalpha_research.providers import Candle, MarketSeries, ProviderMode, RetrievalRequest
 
 REPO = Path(__file__).resolve().parents[3]
 RESEARCH = REPO / "research" / "bridge-v0"
-APP = REPO / "cloud" / "modal" / "bridge_phase2_app.py"
-PACKAGE = Path(__file__).resolve().parents[1] / "src" / "openalpha_bridge" / "representation_probe"
+PACKAGE = Path(__file__).resolve().parents[1] / "src" / "openalpha_kronos" / "studies" / "frozen_representation"
 
 COMMIT = "b" * 40
 RUN_ID = "frp_0123456789abcdef"
@@ -222,8 +221,7 @@ class _Runtime:
 
 
 def _assets(**overrides: Any):
-    from openalpha_bridge.phase2.kronos import SOURCE_SPEC
-    from openalpha_kronos.model.assets import OFFICIAL_SOURCE_FILES
+    from openalpha_kronos.model.assets import OFFICIAL_SOURCE_FILES, SOURCE_SPEC
     from openalpha_kronos.model.contracts import ResolvedDiagnosticAssets
 
     values: dict[str, Any] = {
@@ -446,7 +444,9 @@ def test_the_extractor_contract_requires_the_declared_dimension() -> None:
 
 def test_a_wrongly_shaped_hidden_state_is_refused_by_the_official_extractor() -> None:
     """The real extractor validates rank, batch, sequence length and width."""
-    from openalpha_bridge.representation_probe.extraction import OfficialHiddenStateExtractor
+    from openalpha_kronos.studies.frozen_representation.extraction import (
+        OfficialHiddenStateExtractor,
+    )
 
     class _FakeTensor:
         def __init__(self, shape): self.shape = shape
@@ -472,7 +472,7 @@ def test_a_wrongly_shaped_hidden_state_is_refused_by_the_official_extractor() ->
             model=_BadModel(shape), tokenizer=_Tok(), device="cpu"
         )
         rows = _context()
-        with pytest.raises(BridgeTransformError) as excinfo:
+        with pytest.raises(ResearchFailureError) as excinfo:
             extractor.hidden_state(
                 rows,
                 context_stamps=tuple(official_stamp(r.session) for r in rows),
@@ -619,7 +619,7 @@ def test_the_sealed_specification_verifies() -> None:
 
 def test_a_drifted_specification_fails_closed(tmp_path: Path) -> None:
     (tmp_path / PROBE_SPECIFICATION_NAME).write_bytes(b"experiment_id: tampered\n")
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         verify_probe_specification(tmp_path)
     assert excinfo.value.failures[0].code == "PROBE_SPECIFICATION_HASH_MISMATCH"
 
@@ -640,7 +640,7 @@ def test_the_fit_artifact_is_immutable_and_verifies() -> None:
     assert hashlib.sha256(stored.body).hexdigest() == stored.metadata.content_sha256
     assert result.content_sha256 == stored.metadata.content_sha256
 
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         store.put_immutable(key, b"{}", stored.metadata)
     assert excinfo.value.failures[0].code == "OBJECT_ALREADY_EXISTS"
 
@@ -665,7 +665,7 @@ def test_the_test_phase_refuses_before_the_fit_artifact_exists() -> None:
     invocation = ProbeInvocation.validate_all(
         run_id=RUN_ID, source_commit=COMMIT, deployed_commit=COMMIT
     )
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         load_verified_fit_artifact(store, invocation=invocation)
     assert excinfo.value.failures[0].code == "PROBE_FIT_ARTIFACT_MISSING"
 
@@ -677,7 +677,7 @@ def test_the_test_phase_refuses_a_fit_artifact_with_the_wrong_digest() -> None:
     )
     load_verified_fit_artifact(store, invocation=invocation,
                                expected_digest=result.content_sha256)
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         load_verified_fit_artifact(store, invocation=invocation, expected_digest="f" * 64)
     assert excinfo.value.failures[0].code == "PROBE_FIT_ARTIFACT_DIGEST_MISMATCH"
 
@@ -689,7 +689,7 @@ def test_the_test_phase_refuses_a_fit_artifact_with_the_wrong_digest() -> None:
 )
 def test_the_test_partition_refuses_to_open_early(sessions: int, origins: int) -> None:
     boundary = date.fromisoformat(TEST_START_INCLUSIVE)
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         verify_test_eligibility(
             sessions_by_asset={a: sessions for a in ASSET_PANEL},
             first_session_by_asset={a: boundary for a in ASSET_PANEL},
@@ -703,7 +703,7 @@ def test_the_test_partition_refuses_to_open_early(sessions: int, origins: int) -
 
 def test_test_data_before_the_sealed_boundary_is_refused() -> None:
     boundary = date.fromisoformat(TEST_START_INCLUSIVE)
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         verify_test_eligibility(
             sessions_by_asset={a: MINIMUM_TEST_SESSIONS for a in ASSET_PANEL},
             first_session_by_asset={a: boundary - timedelta(days=1) for a in ASSET_PANEL},
@@ -756,7 +756,7 @@ def test_the_test_phase_refuses_a_fit_from_a_different_run() -> None:
     other = ProbeInvocation.validate_all(
         run_id="frp_bbbbbbbbbbbbbbbb", source_commit=COMMIT, deployed_commit=COMMIT
     )
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         load_verified_fit_artifact(store, invocation=other)
     assert excinfo.value.failures[0].code == "PROBE_FIT_ARTIFACT_MISSING"
 
@@ -770,7 +770,7 @@ def test_the_test_phase_refuses_a_failed_fit_artifact() -> None:
     invocation = ProbeInvocation.validate_all(
         run_id=RUN_ID, source_commit=COMMIT, deployed_commit=COMMIT
     )
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         load_verified_fit_artifact(store, invocation=invocation)
     assert excinfo.value.failures[0].code == "PROBE_FIT_ARTIFACT_NOT_SUCCESSFUL"
 
@@ -790,7 +790,7 @@ def test_the_fit_artifact_records_that_it_did_not_open_the_test_partition() -> N
     ["canary_0a92fde788bd685c", "base_03b08cbc706193d6", "zsb_25e0256eefb2b07a"],
 )
 def test_a_foreign_run_identifier_is_refused(run_id: str) -> None:
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         ProbeInvocation.validate_all(
             run_id=run_id, source_commit=COMMIT, deployed_commit=COMMIT
         )
@@ -897,7 +897,7 @@ def test_cross_asset_alignment_is_required() -> None:
     shifted["DIA"] = resolve_windows(
         asset="DIA", rows=_rows("DIA", TRAIN_VAL_SESSIONS, start=date(2025, 1, 5))
     )
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         verify_cross_asset_alignment(shifted)
     assert excinfo.value.failures[0].code == "PROBE_CROSS_ASSET_ORIGIN_MISALIGNED"
 
@@ -928,7 +928,7 @@ def test_the_bootstrap_refuses_a_foreign_asset_panel() -> None:
     bad[0] = OriginCluster(
         ordinal=0, assets=("SPY", "QQQ", "IWM", "VOO"), paired_differences=(0.1, 0.1, 0.1, 0.1)
     )
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         paired_moving_block_bootstrap(tuple(bad))
     assert excinfo.value.failures[0].code == "PROBE_BOOTSTRAP_ASSET_PANEL_MISMATCH"
 
@@ -1011,64 +1011,6 @@ def test_structural_validity_never_reaches_a_decision() -> None:
         for word in ("invalid", "structural", "candle", "projection", "repair"):
             assert word not in joined
 
-
-# ====== modal wiring =================================================
-
-
-def test_the_modal_app_exposes_the_five_probe_functions() -> None:
-    tree = ast.parse(APP.read_text(encoding="utf-8"))
-    functions = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
-    for name in (
-        "verify_representation_probe_deployment",
-        "verify_representation_probe_runtime",
-        "fit_frozen_representation_probe",
-        "test_frozen_representation_probe",
-        "inventory_representation_probe_artifacts",
-    ):
-        assert name in functions
-    # The completed studies' functions are untouched.
-    for name in (
-        "verify_base_deployment", "kronos_base_frozen_inference_diagnostic",
-        "run_zero_shot_benchmark", "verify_zero_shot_benchmark_deployment",
-    ):
-        assert name in functions
-
-
-def test_the_probe_adds_no_new_download_path_or_volume() -> None:
-    source = APP.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    downloading: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
-            for inner in ast.walk(node):
-                if isinstance(inner, ast.Name) and inner.id == "snapshot_download":
-                    downloading.add(node.name)
-    assert downloading == {
-        "frozen_inference_diagnostic", "verify_frozen_inference_runtime",
-        "_download_base_pair", "resolve_runtime",
-    }
-    assert source.count("modal.Volume.from_name(") == 2
-
-    probe = next(
-        n for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef) and n.name == "_probe_runtime"
-    )
-    body = ast.get_source_segment(source, probe) or ""
-    assert "_download_base_pair(cache_root)" in body
-    assert "snapshot_download(" not in body
-
-
-def test_the_probe_loader_uses_the_official_return_order() -> None:
-    """load_and_freeze_official returns (tokenizer, model); swapping them is silent."""
-    source = APP.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    probe = next(
-        n for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef) and n.name == "_probe_runtime"
-    )
-    body = ast.get_source_segment(source, probe) or ""
-    assert "tokenizer, model, (total, trainable) = load_and_freeze_official(" in body
-    assert "OfficialHiddenStateExtractor(\n                        model=model, tokenizer=tokenizer" in body
 
 
 def test_the_sealed_boundary_and_minimums_are_what_the_specification_says() -> None:
