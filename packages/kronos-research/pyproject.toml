@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openalpha-kronos-research"
+version = "0.1.0"
+description = "Reproducible empirical studies of the Kronos financial foundation model"
+requires-python = ">=3.13,<3.14"
+dependencies = ["numpy>=2.5,<3", "openalpha-research-core", "pydantic>=2.11,<3"]
+
+[project.optional-dependencies]
+yahoo = ["openalpha-research-core[yahoo]"]
+runtime = ["huggingface-hub>=0.34,<1", "safetensors>=0.4,<1", "einops>=0.8,<1", "tqdm>=4.66,<5", "pandas>=2.2,<4"]
+gpu = ["torch>=2.5,<3"]
+modal = ["modal>=0.64,<2", "openalpha-research-core[s3]"]
+
+[tool.uv.sources]
+openalpha-research-core = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openalpha_kronos"]

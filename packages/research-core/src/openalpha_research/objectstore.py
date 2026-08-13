@@ -145,7 +145,6 @@ class InMemoryObjectStore:
         body: bytes,
         metadata: ObjectMetadata,
     ) -> ObjectMetadata:
-        _verify_body_metadata(key, body, metadata)
         with self._lock:
             if key in self._objects:
                 raise _fail(
@@ -153,6 +152,7 @@ class InMemoryObjectStore:
                     f"immutable object already exists and cannot be replaced: {key}",
                     field=key,
                 )
+            _verify_body_metadata(key, body, metadata)
             self._objects[key] = StoredObject(key=key, body=body, metadata=metadata)
         return metadata
 
