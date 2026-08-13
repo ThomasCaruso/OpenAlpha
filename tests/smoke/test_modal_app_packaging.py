@@ -15,15 +15,36 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+from packaging.version import Version
 
 ROOT = Path(__file__).resolve().parents[2]
 APP_PATH = ROOT / "cloud" / "modal" / "kronos_research.py"
 PACKAGE_SOURCES = (
     ROOT / "packages" / "kronos-research" / "src",
     ROOT / "packages" / "research-core" / "src",
+)
+PACKAGE_MANIFESTS = (
+    ROOT / "packages" / "research-core" / "pyproject.toml",
+    ROOT / "packages" / "kronos-research" / "pyproject.toml",
+)
+SELECTED_KRONOS_EXTRAS = frozenset({"yahoo", "runtime", "gpu", "modal"})
+PLATFORM_SDK_EXEMPTIONS = frozenset({"modal"})
+S3_CLIENT_STACK = frozenset(
+    {
+        "boto3",
+        "botocore",
+        "s3transfer",
+        "jmespath",
+        "python-dateutil",
+        "urllib3",
+        "six",
+    }
 )
 
 
@@ -331,58 +352,154 @@ def test_image_source_constants_match_the_locked_spec() -> None:
 
 
 def _image_pins() -> dict[str, str]:
-    """Read CANARY_RUNTIME_PINS from the Modal app without importing modal."""
+    """Read RESEARCH_RUNTIME_PINS without importing the Modal SDK."""
     tree = ast.parse(_source())
     for node in tree.body:
         if isinstance(node, ast.AnnAssign | ast.Assign):
             targets = [node.target] if isinstance(node, ast.AnnAssign) else node.targets
             names = [t.id for t in targets if isinstance(t, ast.Name)]
-            if "CANARY_RUNTIME_PINS" in names and node.value is not None:
+            if "RESEARCH_RUNTIME_PINS" in names and node.value is not None:
                 return ast.literal_eval(node.value)
-    pytest.fail("the Modal app declares no CANARY_RUNTIME_PINS")
+    pytest.fail("the Modal app declares no RESEARCH_RUNTIME_PINS")
 
 
-def test_every_canary_dependency_is_pinned_exactly() -> None:
-    pins = _image_pins()
-    required = {
-        "torch",
+def _manifest_requirements() -> dict[str, list[Requirement]]:
+    """Resolve direct requirements through selected workspace-package extras."""
+    manifests: dict[str, dict[str, object]] = {}
+    for path in PACKAGE_MANIFESTS:
+        document = tomllib.loads(path.read_text(encoding="utf-8"))
+        project = document["project"]
+        assert isinstance(project, dict)
+        manifests[canonicalize_name(str(project["name"]))] = document
+
+    root = canonicalize_name("openalpha-kronos-research")
+    selected: dict[str, set[str]] = {root: set(SELECTED_KRONOS_EXTRAS)}
+    external: dict[str, list[Requirement]] = {}
+    changed = True
+    while changed:
+        changed = False
+        external.clear()
+        for package_name, extras in tuple(selected.items()):
+            project = manifests[package_name]["project"]
+            assert isinstance(project, dict)
+            raw = list(project.get("dependencies", []))
+            optional = project.get("optional-dependencies", {})
+            assert isinstance(optional, dict)
+            for extra in extras:
+                raw.extend(optional[extra])
+            for text in raw:
+                requirement = Requirement(str(text))
+                name = canonicalize_name(requirement.name)
+                if name not in manifests:
+                    external.setdefault(name, []).append(requirement)
+                    continue
+                prior = selected.setdefault(name, set())
+                discovered = set(requirement.extras) - prior
+                if discovered:
+                    prior.update(discovered)
+                    changed = True
+    return external
+
+
+def _installed_pin_names() -> set[str]:
+    tree = ast.parse(_source())
+    builder = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_build_image"
+    )
+    return {
+        canonicalize_name(ast.literal_eval(node.args[0]))
+        for node in ast.walk(builder)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_pin"
+        and len(node.args) == 1
+    }
+
+
+def _lock_versions() -> dict[str, str]:
+    document = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    return {
+        canonicalize_name(package["name"]): package["version"]
+        for package in document["package"]
+    }
+
+
+def test_selected_manifest_dependency_closure_is_installed_and_satisfied() -> None:
+    requirements = _manifest_requirements()
+    assert set(requirements) == {
+        "boto3",
+        "einops",
+        "exchange-calendars",
+        "huggingface-hub",
+        "modal",
         "numpy",
         "pandas",
-        "tqdm",
-        "einops",
-        "huggingface-hub",
-        "safetensors",
-        "yfinance",
         "pydantic",
+        "safetensors",
+        "torch",
+        "tqdm",
+        "yfinance",
     }
-    assert required <= set(pins)
-    for name, version in pins.items():
-        assert version[0].isdigit(), f"{name} pin {version!r} is not an exact version"
-        for operator in (">=", "<=", "~=", ">", "<", "*"):
-            assert operator not in version, f"{name} pin {version!r} is a range"
+
+    special = PLATFORM_SDK_EXEMPTIONS | {"torch"}
+    required_pins = set(requirements) - special
+    pins = _image_pins()
+    installed = _installed_pin_names()
+    assert not required_pins - installed, (
+        f"selected manifest dependencies missing from image: {required_pins - installed}"
+    )
+    for name in required_pins:
+        version = Version(pins[name])
+        assert all(version in requirement.specifier for requirement in requirements[name])
 
 
-def test_image_installs_no_ranged_canary_dependency() -> None:
-    """A ranged specifier for a canary package would defeat the pinning."""
-    source = _source()
-    for name in ("numpy", "pandas", "tqdm", "einops", "safetensors", "yfinance"):
-        assert f'"{name}>=' not in source, f"{name} is installed with a range"
+def test_modal_is_a_platform_sdk_exemption_not_an_in_image_pip_install() -> None:
+    """Modal supplies its own SDK; installing Modal inside its image is redundant."""
+    assert "modal" in _manifest_requirements()
+    assert "modal" not in _image_pins()
+    assert "modal" not in _installed_pin_names()
+    assert "import modal" in _source()
 
 
-def test_pins_match_the_lockfile() -> None:
-    """uv.lock is the source of authority; the manifest must agree with it."""
-    import re
+def test_torch_uses_the_hashed_wheel_at_the_locked_version() -> None:
+    assert "torch" in _manifest_requirements()
+    lock_version = _lock_versions()["torch"]
+    match = re.search(r"torch-([0-9.]+)%2B", _source())
+    assert match is not None
+    assert match.group(1) == lock_version == _image_pins()["torch"]
+    assert all(
+        Version(lock_version) in requirement.specifier
+        for requirement in _manifest_requirements()["torch"]
+    )
+    assert ".pip_install(TORCH_WHEEL_SPECIFIER)" in _source()
+    assert "#sha256=" in _source()
+    assert _source().index(".pip_install(TORCH_WHEEL_SPECIFIER)") < _source().index(
+        ".pip_install(", _source().index(".pip_install(TORCH_WHEEL_SPECIFIER)") + 1
+    )
 
-    text = (ROOT / "uv.lock").read_text(encoding="utf-8")
-    resolved: dict[str, str] = {}
-    for block in text.split("[[package]]"):
-        name = re.search(r'^name = "([^"]+)"', block, re.MULTILINE)
-        version = re.search(r'^version = "([^"]+)"', block, re.MULTILINE)
-        if name and version:
-            resolved[name.group(1)] = version.group(1)
 
-    for name, pinned in _image_pins().items():
-        assert name in resolved, f"{name} is pinned but absent from uv.lock"
-        assert resolved[name] == pinned, (
-            f"{name} pinned {pinned} but uv.lock resolves {resolved[name]}"
+def test_s3_client_stack_is_explicitly_frozen_without_a_ranged_literal() -> None:
+    assert S3_CLIENT_STACK <= _installed_pin_names()
+    ranged_boto3_literals = [
+        node.value
+        for node in ast.walk(ast.parse(_source()))
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.startswith("boto3")
+        and node.value != "boto3"
+    ]
+    assert not ranged_boto3_literals
+
+
+def test_every_explicit_runtime_pin_is_exact_installed_and_matches_lock() -> None:
+    pins = _image_pins()
+    installed = _installed_pin_names()
+    assert installed == set(pins) - {"torch"}
+    lock = _lock_versions()
+    for name, pinned in pins.items():
+        Version(pinned)
+        assert pinned == lock[name], (
+            f"{name} pinned {pinned} but uv.lock resolves {lock[name]}"
         )

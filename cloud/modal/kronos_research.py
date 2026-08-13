@@ -13,7 +13,7 @@ import modal
 
 APP_NAME = "openalpha-kronos-research"
 PYTHON_VERSION = "3.13"
-CANARY_RUNTIME_PINS: dict[str, str] = {
+RESEARCH_RUNTIME_PINS: dict[str, str] = {
     "torch": "2.13.0",
     "numpy": "2.5.1",
     "pandas": "3.0.5",
@@ -23,15 +23,23 @@ CANARY_RUNTIME_PINS: dict[str, str] = {
     "safetensors": "0.8.0",
     "yfinance": "1.5.2",
     "pydantic": "2.13.4",
+    "exchange-calendars": "4.13.2",
+    "boto3": "1.43.62",
+    "botocore": "1.43.62",
+    "s3transfer": "0.19.2",
+    "jmespath": "1.1.0",
+    "python-dateutil": "2.9.0.post0",
+    "urllib3": "2.7.0",
+    "six": "1.17.0",
 }
-TORCH_VERSION = CANARY_RUNTIME_PINS["torch"]
+TORCH_VERSION = RESEARCH_RUNTIME_PINS["torch"]
 TORCH_WHEEL_URL = "https://download.pytorch.org/whl/cu126/torch-2.13.0%2Bcu126-cp313-cp313-manylinux_2_28_x86_64.whl"
 TORCH_WHEEL_SHA256 = "4198c8d7478ab47ad2569309387d88b21fb553a1cf8ab06260fbd5a6ab9b9712"
 TORCH_WHEEL_SPECIFIER = f"{TORCH_WHEEL_URL}#sha256={TORCH_WHEEL_SHA256}"
 
 
 def _pin(name: str) -> str:
-    return f"{name}=={CANARY_RUNTIME_PINS[name]}"
+    return f"{name}=={RESEARCH_RUNTIME_PINS[name]}"
 
 
 KRONOS_SOURCE_REPOSITORY = "https://github.com/shiyu-coder/Kronos"
@@ -90,7 +98,14 @@ def _build_image() -> Any:
             _pin("pandas"),
             _pin("tqdm"),
             _pin("einops"),
-            "boto3>=1.35,<2",
+            _pin("exchange-calendars"),
+            _pin("boto3"),
+            _pin("botocore"),
+            _pin("s3transfer"),
+            _pin("jmespath"),
+            _pin("python-dateutil"),
+            _pin("urllib3"),
+            _pin("six"),
         )
         .run_commands(
             f"git clone --no-checkout {KRONOS_SOURCE_REPOSITORY} {KRONOS_SOURCE_ROOT}",
