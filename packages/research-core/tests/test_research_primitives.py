@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+import json
 import logging
 import math
+import os
 import random
+import subprocess
+import sys
 from datetime import UTC, date, datetime
+from pathlib import Path
 from unittest import mock
 
 import pytest
-from openalpha_research.calendars import CalendarName, sessions_in_half_open_range
+from openalpha_research.calendars import (
+    CalendarName,
+    sessions_in_half_open_range,
+    xnys_holidays,
+)
 from openalpha_research.failures import (
     FailureCategory,
     ResearchFailure,
@@ -38,6 +47,7 @@ from openalpha_research.resampling import (
 )
 from openalpha_research.runtime import directory_bytes, gpu_snapshot, scoped_timer
 from openalpha_research.safe_logging import log_operational_failure
+from pydantic import ValidationError
 
 
 def _series(*sessions: date) -> MarketSeries:
@@ -62,6 +72,34 @@ def _series(*sessions: date) -> MarketSeries:
         retrieval_timestamp=None,
         candles=candles,
     )
+
+
+class _S3Error(Exception):
+    def __init__(self, message: str, *, response: dict[str, object] | None = None) -> None:
+        super().__init__(message)
+        self.response = response
+
+
+class _FailingS3Client:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def get_object(self, **_: object) -> dict[str, object]:
+        raise self.error
+
+    def head_object(self, **_: object) -> dict[str, object]:
+        raise self.error
+
+
+def _not_found_error(signal: str) -> Exception:
+    if signal == "http-status":
+        return _S3Error(
+            "hidden",
+            response={"ResponseMetadata": {"HTTPStatusCode": 404}},
+        )
+    if signal == "exception-string":
+        return _S3Error("404")
+    return _S3Error("hidden", response={"Error": {"Code": signal}})
 
 
 def test_core_names_and_schemas_are_subject_neutral() -> None:
@@ -227,6 +265,89 @@ def test_s3_store_rejects_objects_with_missing_provenance_metadata() -> None:
     assert excinfo.value.failures[0].code == "OBJECT_METADATA_INVALID"
 
 
+@pytest.mark.parametrize(
+    "signal",
+    ["NoSuchKey", "NotFound", "404", "http-status", "exception-string"],
+)
+def test_s3_get_maps_only_definite_not_found_signals(signal: str) -> None:
+    store = S3CompatibleObjectStore(bucket="research")
+    store._client = _FailingS3Client(_not_found_error(signal))
+    with pytest.raises(ResearchFailureError) as excinfo:
+        store.get("result.json")
+    assert excinfo.value.failures[0].code == "OBJECT_NOT_FOUND"
+
+
+@pytest.mark.parametrize(
+    "signal",
+    ["NoSuchKey", "NotFound", "404", "http-status", "exception-string"],
+)
+def test_s3_exists_returns_false_only_for_definite_not_found_signals(signal: str) -> None:
+    store = S3CompatibleObjectStore(bucket="research")
+    store._client = _FailingS3Client(_not_found_error(signal))
+    assert store.exists("result.json") is False
+
+
+@pytest.mark.parametrize("operation", ["get", "exists"])
+def test_s3_read_failures_are_typed_without_copying_exception_text(operation: str) -> None:
+    secret = "credential=abcdefghijklmnop"
+    cause = _S3Error(
+        secret,
+        response={"Error": {"Code": "AccessDenied"}, "ResponseMetadata": {"HTTPStatusCode": 403}},
+    )
+    store = S3CompatibleObjectStore(bucket="research")
+    store._client = _FailingS3Client(cause)
+
+    with pytest.raises(ResearchFailureError) as excinfo:
+        getattr(store, operation)("result.json")
+    assert excinfo.value.failures[0].code == "OBJECT_STORE_REQUEST_FAILED"
+    assert secret not in str(excinfo.value)
+    assert excinfo.value.__cause__ is cause
+
+
+def test_s3_listing_rejects_missing_pagination_tokens_without_looping() -> None:
+    class MissingTokenClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def list_objects_v2(self, **_: object) -> dict[str, object]:
+            self.calls += 1
+            if self.calls > 1:
+                raise AssertionError("pagination looped after a missing token")
+            return {"Contents": (), "IsTruncated": True}
+
+    client = MissingTokenClient()
+    store = S3CompatibleObjectStore(bucket="research")
+    store._client = client
+    with pytest.raises(ResearchFailureError) as excinfo:
+        store.list_keys("runs/")
+    assert excinfo.value.failures[0].code == "OBJECT_STORE_PAGINATION_INVALID"
+    assert client.calls == 1
+
+
+def test_s3_listing_rejects_repeated_pagination_tokens_without_looping() -> None:
+    class RepeatedTokenClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def list_objects_v2(self, **_: object) -> dict[str, object]:
+            self.calls += 1
+            if self.calls > 2:
+                raise AssertionError("pagination looped after a repeated token")
+            return {
+                "Contents": ({"Key": f"runs/{self.calls}.json"},),
+                "IsTruncated": True,
+                "NextContinuationToken": "same-token",
+            }
+
+    client = RepeatedTokenClient()
+    store = S3CompatibleObjectStore(bucket="research")
+    store._client = client
+    with pytest.raises(ResearchFailureError) as excinfo:
+        store.list_keys("runs/")
+    assert excinfo.value.failures[0].code == "OBJECT_STORE_PAGINATION_INVALID"
+    assert client.calls == 2
+
+
 def test_provider_models_and_validation_are_subject_neutral() -> None:
     request = RetrievalRequest(
         symbol="TEST",
@@ -238,6 +359,46 @@ def test_provider_models_and_validation_are_subject_neutral() -> None:
 
     series = _series(date(2025, 1, 2), date(2025, 1, 3))
     assert validate_series(series) is None
+
+
+@pytest.mark.parametrize("symbol", ["BAD|SYMBOL", "BAD\rSYMBOL", "BAD\nSYMBOL"])
+def test_retrieval_request_rejects_hash_delimiter_collisions(symbol: str) -> None:
+    with pytest.raises(ValidationError):
+        RetrievalRequest(
+            symbol=symbol,
+            start=date(2025, 1, 2),
+            end=date(2025, 1, 4),
+            maximum_candles=10,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("symbol", "BAD|SYMBOL"),
+        ("symbol", "BAD\rSYMBOL"),
+        ("symbol", "BAD\nSYMBOL"),
+        ("interval", "1|d"),
+        ("interval", "1\rd"),
+        ("interval", "1\nd"),
+    ],
+)
+def test_market_series_rejects_hash_delimiter_collisions(field: str, value: str) -> None:
+    payload = _series(date(2025, 1, 2)).model_dump(mode="python")
+    payload[field] = value
+    with pytest.raises(ValidationError):
+        MarketSeries.model_validate(payload)
+
+
+@pytest.mark.parametrize("symbol", ["BRK-B", "^GSPC", "BTC-USD", "EURUSD=X"])
+def test_retrieval_request_preserves_ordinary_finance_symbols(symbol: str) -> None:
+    request = RetrievalRequest(
+        symbol=symbol,
+        start=date(2025, 1, 2),
+        end=date(2025, 1, 4),
+        maximum_candles=10,
+    )
+    assert request.symbol == symbol
 
 
 def test_non_monotonic_market_sessions_fail_closed() -> None:
@@ -316,6 +477,34 @@ def test_exchange_calendar_helpers_support_weekdays_and_continuous_days() -> Non
         date(2025, 1, 5),
         date(2025, 1, 6),
     )
+
+
+def test_xnys_calendar_includes_the_2001_emergency_closures() -> None:
+    holidays = xnys_holidays(2001)
+    emergency_closures = {
+        date(2001, 9, 11),
+        date(2001, 9, 12),
+        date(2001, 9, 13),
+        date(2001, 9, 14),
+    }
+    assert emergency_closures <= holidays
+    assert sessions_in_half_open_range(date(2001, 9, 10), date(2001, 9, 18)) == (
+        date(2001, 9, 10),
+        date(2001, 9, 17),
+    )
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [
+        (date(1999, 12, 31), date(2000, 1, 3)),
+        (date(2030, 12, 31), date(2031, 1, 2)),
+    ],
+)
+def test_xnys_calendar_fails_closed_outside_supported_bounds(start: date, end: date) -> None:
+    with pytest.raises(ResearchFailureError) as excinfo:
+        sessions_in_half_open_range(start, end)
+    assert excinfo.value.failures[0].code == "XNYS_RANGE_UNSUPPORTED"
 
 
 def test_moving_block_arithmetic_is_generic_and_deterministic() -> None:
@@ -462,6 +651,38 @@ def test_redaction_scrubs_registered_values_and_credential_shapes() -> None:
     }
 
 
+def test_redaction_replaces_entire_values_under_sensitive_structured_keys() -> None:
+    redactor = SecretRedactor()
+    payload = {
+        "Api-Key": "short",
+        "TOKEN": 7,
+        "PassWord": None,
+        "AuthoriZation": {"nested": "must not leak"},
+        "safe": {
+            "secret-key": ["must", "not", "leak"],
+            "items": ({"api_key": "abcdefghijklmnop", "label": "visible"},),
+        },
+    }
+    assert redactor.scrub(payload) == {
+        "Api-Key": REDACTED,
+        "TOKEN": REDACTED,
+        "PassWord": REDACTED,
+        "AuthoriZation": REDACTED,
+        "safe": {
+            "secret-key": REDACTED,
+            "items": ({"api_key": REDACTED, "label": "visible"},),
+        },
+    }
+
+
+def test_text_redaction_preserves_quotes_around_json_credential_values() -> None:
+    redactor = SecretRedactor()
+    source = '{"api_key": "abcdefghijklmnop", "safe": "visible"}'
+    scrubbed = redactor.scrub_text(source)
+    assert scrubbed == '{"api_key": "[REDACTED]", "safe": "visible"}'
+    assert json.loads(scrubbed) == {"api_key": REDACTED, "safe": "visible"}
+
+
 def test_safe_logging_never_emits_exception_text_or_full_paths(caplog) -> None:
     logger = logging.getLogger("test.openalpha_research.safe")
     with caplog.at_level(logging.ERROR, logger=logger.name):
@@ -494,3 +715,112 @@ def test_runtime_measurement_uses_observed_files_and_scope_time(tmp_path) -> Non
 
 def test_runtime_probe_is_safe_offline() -> None:
     assert gpu_snapshot().cuda_available in {True, False}
+
+
+def _run_isolated_python(source: str, *, pythonpath: Path | None = None) -> None:
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "AWS_ACCESS_KEY_ID": "test-access-key",
+            "AWS_SECRET_ACCESS_KEY": "test-secret-key",
+            "AWS_EC2_METADATA_DISABLED": "true",
+            "AWS_DEFAULT_REGION": "us-east-1",
+        }
+    )
+    if pythonpath is not None:
+        inherited = environment.get("PYTHONPATH")
+        environment["PYTHONPATH"] = (
+            f"{pythonpath}{os.pathsep}{inherited}" if inherited else str(pythonpath)
+        )
+    completed = subprocess.run(
+        [sys.executable, "-c", source],
+        capture_output=True,
+        check=False,
+        env=environment,
+        text=True,
+        timeout=60,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_optional_integrations_are_not_loaded_by_import_or_construction() -> None:
+    _run_isolated_python(
+        """
+import sys
+from openalpha_research.calendars import CalendarName
+from openalpha_research.objectstore import S3CompatibleObjectStore
+from openalpha_research.providers import YahooDailyProvider
+
+YahooDailyProvider()
+S3CompatibleObjectStore(bucket="research")
+assert CalendarName.XNYS.value == "XNYS"
+for name in ("yfinance", "boto3", "exchange_calendars"):
+    assert name not in sys.modules, name
+"""
+    )
+
+
+@pytest.mark.parametrize(
+    ("module", "source"),
+    [
+        (
+            "exchange_calendars",
+            """
+from datetime import date
+from openalpha_research.calendars import sessions_in_half_open_range
+sessions_in_half_open_range(date(2025, 1, 2), date(2025, 1, 4))
+""",
+        ),
+    ],
+)
+def test_optional_integrations_load_only_when_their_capability_is_used(
+    module: str,
+    source: str,
+) -> None:
+    _run_isolated_python(
+        f"""
+import sys
+assert {module!r} not in sys.modules
+{source}
+assert {module!r} in sys.modules
+"""
+    )
+
+
+@pytest.mark.parametrize(
+    ("module", "stub", "capability"),
+    [
+        (
+            "yfinance",
+            '__version__ = "test-version"\n',
+            """
+from openalpha_research.providers import YahooDailyProvider
+assert YahooDailyProvider().client_version == "test-version"
+""",
+        ),
+        (
+            "boto3",
+            "def client(*args, **kwargs):\n    return object()\n",
+            """
+from openalpha_research.objectstore import S3CompatibleObjectStore
+S3CompatibleObjectStore(bucket="research")._boto()
+""",
+        ),
+    ],
+)
+def test_optional_extra_capabilities_resolve_modules_lazily_in_isolation(
+    tmp_path: Path,
+    module: str,
+    stub: str,
+    capability: str,
+) -> None:
+    (tmp_path / f"{module}.py").write_text(stub, encoding="utf-8")
+    _run_isolated_python(
+        f"""
+import sys
+assert {module!r} not in sys.modules
+{capability}
+assert {module!r} in sys.modules
+""",
+        pythonpath=tmp_path,
+    )

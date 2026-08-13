@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+import importlib
 from datetime import date, timedelta
 from enum import StrEnum
 from functools import lru_cache
+from typing import Any
 
 from .failures import FailureCategory, ResearchFailure, ResearchFailureError
 
 __all__ = [
-    "XNYS_AD_HOC_CLOSURES",
     "CalendarName",
     "sessions_in_half_open_range",
     "xnys_holidays",
 ]
+
+_XNYS_START = date(2000, 1, 1)
+_XNYS_END = date(2030, 12, 31)
+_XNYS_END_EXCLUSIVE = _XNYS_END + timedelta(days=1)
 
 
 class CalendarName(StrEnum):
@@ -19,69 +24,56 @@ class CalendarName(StrEnum):
     CONTINUOUS = "CONTINUOUS"
 
 
-XNYS_AD_HOC_CLOSURES: frozenset[date] = frozenset(
-    {
-        date(2012, 10, 29),
-        date(2012, 10, 30),
-        date(2018, 12, 5),
-        date(2025, 1, 9),
-    }
-)
-
-_JUNETEENTH_FIRST_OBSERVED_YEAR = 2022
+def _fail(code: str, message: str) -> ResearchFailureError:
+    return ResearchFailureError(
+        ResearchFailure(
+            category=FailureCategory.INVALID_CONFIGURATION,
+            code=code,
+            message=message,
+        )
+    )
 
 
-def _easter_sunday(year: int) -> date:
-    a = year % 19
-    b, c = divmod(year, 100)
-    d, e = divmod(b, 4)
-    f = (b + 8) // 25
-    g = (b - f + 1) // 3
-    h = (19 * a + b - d - g + 15) % 30
-    i, k = divmod(c, 4)
-    lunar = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * lunar) // 451
-    month, day = divmod(h + lunar - 7 * m + 114, 31)
-    return date(year, month, day + 1)
+@lru_cache(maxsize=1)
+def _xnys_calendar() -> Any:
+    """Load the pinned official calendar only when XNYS behavior is requested."""
+    try:
+        calendars = importlib.import_module("exchange_calendars")
+    except ImportError as error:
+        raise _fail(
+            "CALENDAR_DEPENDENCY_MISSING",
+            "the pinned exchange calendar dependency is unavailable",
+        ) from error
+    return calendars.get_calendar("XNYS", start=_XNYS_START, end=_XNYS_END)
 
 
-def _nth_weekday(year: int, month: int, weekday: int, ordinal: int) -> date:
-    first = date(year, month, 1)
-    first += timedelta(days=(weekday - first.weekday()) % 7)
-    return first + timedelta(weeks=ordinal - 1)
+def _validate_xnys_range(start: date, end: date) -> None:
+    if start < _XNYS_START or start > _XNYS_END or end > _XNYS_END_EXCLUSIVE:
+        raise _fail(
+            "XNYS_RANGE_UNSUPPORTED",
+            (
+                "XNYS dates must lie within the supported range "
+                f"{_XNYS_START.isoformat()} through {_XNYS_END.isoformat()}"
+            ),
+        )
 
 
-def _last_weekday(year: int, month: int, weekday: int) -> date:
-    end = date(year, 12, 31) if month == 12 else date(year, month + 1, 1) - timedelta(days=1)
-    return end - timedelta(days=(end.weekday() - weekday) % 7)
-
-
-def _weekend_observed(day: date) -> date:
-    if day.weekday() == 5:
-        return day - timedelta(days=1)
-    if day.weekday() == 6:
-        return day + timedelta(days=1)
-    return day
-
-
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=31)
 def xnys_holidays(year: int) -> frozenset[date]:
-    """Return observed full-day XNYS closures for a calendar year."""
-    observed: set[date] = set()
-    new_year = date(year, 1, 1)
-    observed.add(new_year + timedelta(days=1) if new_year.weekday() == 6 else new_year)
-    observed.add(_nth_weekday(year, 1, 0, 3))
-    observed.add(_nth_weekday(year, 2, 0, 3))
-    observed.add(_easter_sunday(year) - timedelta(days=2))
-    observed.add(_last_weekday(year, 5, 0))
-    if year >= _JUNETEENTH_FIRST_OBSERVED_YEAR:
-        observed.add(_weekend_observed(date(year, 6, 19)))
-    observed.add(_weekend_observed(date(year, 7, 4)))
-    observed.add(_nth_weekday(year, 9, 0, 1))
-    observed.add(_nth_weekday(year, 11, 3, 4))
-    observed.add(_weekend_observed(date(year, 12, 25)))
-    in_year = {day for day in observed if day.year == year}
-    return frozenset(in_year | {day for day in XNYS_AD_HOC_CLOSURES if day.year == year})
+    """Return weekday XNYS non-sessions from the pinned official calendar."""
+    start = date(year, 1, 1)
+    end = date(year, 12, 31)
+    _validate_xnys_range(start, end)
+    sessions = {
+        timestamp.date()
+        for timestamp in _xnys_calendar().sessions_in_range(start, end)
+    }
+    span = (end - start).days + 1
+    return frozenset(
+        day
+        for offset in range(span)
+        if (day := start + timedelta(days=offset)).weekday() < 5 and day not in sessions
+    )
 
 
 def sessions_in_half_open_range(
@@ -92,23 +84,19 @@ def sessions_in_half_open_range(
 ) -> tuple[date, ...]:
     """Return sessions in ``[start, end)`` for an exchange or continuous calendar."""
     if end < start:
-        raise ResearchFailureError(
-            ResearchFailure(
-                category=FailureCategory.INVALID_CONFIGURATION,
-                code="INVERTED_DATE_RANGE",
-                message=f"end {end.isoformat()} precedes start {start.isoformat()}",
-            )
+        raise _fail(
+            "INVERTED_DATE_RANGE",
+            f"end {end.isoformat()} precedes start {start.isoformat()}",
         )
     span = (end - start).days
     if calendar is CalendarName.CONTINUOUS:
         return tuple(start + timedelta(days=offset) for offset in range(span))
 
-    holidays: set[date] = set()
-    for year in range(start.year, end.year + 1):
-        holidays.update(xnys_holidays(year))
+    _validate_xnys_range(start, end)
+    if start == end:
+        return ()
+    inclusive_end = end - timedelta(days=1)
     return tuple(
-        start + timedelta(days=offset)
-        for offset in range(span)
-        if (start + timedelta(days=offset)).weekday() < 5
-        and (start + timedelta(days=offset)) not in holidays
+        timestamp.date()
+        for timestamp in _xnys_calendar().sessions_in_range(start, inclusive_end)
     )

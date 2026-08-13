@@ -15,6 +15,21 @@ __all__ = [
 
 REDACTED = "[REDACTED]"
 _MINIMUM_SECRET_LENGTH = 8
+_SENSITIVE_KEY_NAMES = frozenset(
+    {
+        "accesskey",
+        "apikey",
+        "apisecret",
+        "authorization",
+        "password",
+        "secretkey",
+        "token",
+    }
+)
+_SENSITIVE_KEY_PATTERN = (
+    r"(?:api[_-]?(?:key|secret)|access[_-]?key|secret[_-]?key|token|"
+    r"pass[_-]?word|authori[sz]ation)"
+)
 
 SECRET_ENVIRONMENT_NAMES: tuple[str, ...] = (
     "AWS_ACCESS_KEY_ID",
@@ -35,6 +50,10 @@ _PATTERNS: tuple[re.Pattern[str], ...] = (
         r"(\s*[:=]\s*)([^\s,;&\x22\x27]{6,})"
     ),
     re.compile(r"(?i)([?&](?:key|token|secret|apikey|api_key)=)[^&\s]+"),
+)
+_QUOTED_CREDENTIAL_PATTERN = re.compile(
+    rf"(?i)([\x22\x27]{_SENSITIVE_KEY_PATTERN}[\x22\x27]\s*:\s*)"
+    rf"([\x22\x27])(?:\\.|(?!\2).)*\2"
 )
 
 
@@ -63,9 +82,20 @@ class SecretRedactor:
         result = text
         for secret in sorted(self._values, key=len, reverse=True):
             result = result.replace(secret, REDACTED)
+        result = _QUOTED_CREDENTIAL_PATTERN.sub(
+            lambda match: f"{match.group(1)}{match.group(2)}{REDACTED}{match.group(2)}",
+            result,
+        )
         for pattern in _PATTERNS:
             result = self._apply(pattern, result)
         return result
+
+    @staticmethod
+    def _is_sensitive_key(key: object) -> bool:
+        if not isinstance(key, str):
+            return False
+        normalized = key.casefold().replace("_", "").replace("-", "")
+        return normalized in _SENSITIVE_KEY_NAMES
 
     @staticmethod
     def _apply(pattern: re.Pattern[str], text: str) -> str:
@@ -85,7 +115,10 @@ class SecretRedactor:
         if isinstance(value, str):
             return self.scrub_text(value)
         if isinstance(value, dict):
-            return {key: self.scrub(item) for key, item in value.items()}
+            return {
+                key: REDACTED if self._is_sensitive_key(key) else self.scrub(item)
+                for key, item in value.items()
+            }
         if isinstance(value, list):
             return [self.scrub(item) for item in value]
         if isinstance(value, tuple):

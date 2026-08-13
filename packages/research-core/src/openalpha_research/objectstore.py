@@ -270,9 +270,11 @@ class S3CompatibleObjectStore:
         client = self._boto()
         try:
             response = client.get_object(Bucket=self._bucket, Key=key)
+            body = response["Body"].read()
         except Exception as error:
-            raise _fail("OBJECT_NOT_FOUND", f"no object at {key}", field=key) from error
-        body = response["Body"].read()
+            if _is_not_found(error):
+                raise _fail("OBJECT_NOT_FOUND", f"no object at {key}", field=key) from error
+            raise _request_failure("read", key, error) from error
         raw = response.get("Metadata", {})
         required = (
             "schema-version",
@@ -311,22 +313,40 @@ class S3CompatibleObjectStore:
         client = self._boto()
         try:
             client.head_object(Bucket=self._bucket, Key=key)
-        except Exception:  # noqa: BLE001
-            return False
+        except Exception as error:
+            if _is_not_found(error):
+                return False
+            raise _request_failure("metadata read", key, error) from error
         return True
 
     def list_keys(self, prefix: str) -> tuple[str, ...]:
         keys: list[str] = []
         token: str | None = None
+        seen_tokens: set[str] = set()
         while True:
             arguments: dict[str, Any] = {"Bucket": self._bucket, "Prefix": prefix}
             if token:
                 arguments["ContinuationToken"] = token
-            response = self._boto().list_objects_v2(**arguments)
+            try:
+                response = self._boto().list_objects_v2(**arguments)
+            except Exception as error:
+                raise _request_failure("list", prefix, error) from error
             keys.extend(item["Key"] for item in response.get("Contents", ()))
             if not response.get("IsTruncated"):
                 return tuple(sorted(keys))
-            token = response.get("NextContinuationToken")
+            next_token = response.get("NextContinuationToken")
+            if (
+                not isinstance(next_token, str)
+                or not next_token
+                or next_token in seen_tokens
+            ):
+                raise _fail(
+                    "OBJECT_STORE_PAGINATION_INVALID",
+                    f"object listing returned an invalid continuation token for {prefix}",
+                    field=prefix,
+                )
+            seen_tokens.add(next_token)
+            token = next_token
 
     def delete(self, key: str) -> None:
         self._boto().delete_object(Bucket=self._bucket, Key=key)
@@ -349,6 +369,33 @@ def _is_precondition_failure(error: Exception) -> bool:
         if code in {"PreconditionFailed", "ConditionalRequestConflict"} or status == 412:
             return True
     return "PreconditionFailed" in type(error).__name__
+
+
+def _is_not_found(error: Exception) -> bool:
+    response = getattr(error, "response", None)
+    code = ""
+    status: object = None
+    if isinstance(response, dict):
+        raw_error = response.get("Error")
+        if isinstance(raw_error, dict):
+            code = str(raw_error.get("Code", ""))
+        raw_metadata = response.get("ResponseMetadata")
+        if isinstance(raw_metadata, dict):
+            status = raw_metadata.get("HTTPStatusCode")
+    return (
+        code in {"NoSuchKey", "NotFound", "404"}
+        or status == 404
+        or type(error).__name__ in {"NoSuchKey", "NotFound"}
+        or str(error).strip() == "404"
+    )
+
+
+def _request_failure(operation: str, key: str, error: Exception) -> ResearchFailureError:
+    return _fail(
+        "OBJECT_STORE_REQUEST_FAILED",
+        f"object store {operation} failed for {key} ({type(error).__name__})",
+        field=key,
+    )
 
 
 def put_json(

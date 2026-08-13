@@ -27,6 +27,7 @@ __all__ = [
 _MAX_PRICE = 1.0e12
 _MIN_PRICE = 1.0e-12
 _MAX_VOLUME = 1.0e15
+_HASH_COMPONENT_PATTERN = r"^[^|\r\n]+$"
 
 
 class ProviderMode(StrEnum):
@@ -74,7 +75,7 @@ class Candle(BaseModel):
 class RetrievalRequest(BaseModel):
     model_config = ConfigDict(allow_inf_nan=False, extra="forbid", frozen=True, strict=True)
 
-    symbol: str = Field(min_length=1)
+    symbol: str = Field(min_length=1, pattern=_HASH_COMPONENT_PATTERN)
     interval: Literal["1d"] = "1d"
     start: date
     end: date
@@ -90,8 +91,8 @@ class MarketSeries(BaseModel):
     schema_version: Literal["openalpha.research.market-series.v1"] = (
         "openalpha.research.market-series.v1"
     )
-    symbol: str
-    interval: str
+    symbol: str = Field(min_length=1, pattern=_HASH_COMPONENT_PATTERN)
+    interval: str = Field(min_length=1, pattern=_HASH_COMPONENT_PATTERN)
     provider: str
     provider_mode: ProviderMode
     client_version: str

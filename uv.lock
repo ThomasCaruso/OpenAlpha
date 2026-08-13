@@ -1088,11 +1088,26 @@ name = "openalpha-research-core"
 version = "0.1.0"
 source = { editable = "packages/research-core" }
 dependencies = [
+    { name = "exchange-calendars" },
     { name = "pydantic" },
 ]
 
+[package.optional-dependencies]
+s3 = [
+    { name = "boto3" },
+]
+yahoo = [
+    { name = "yfinance" },
+]
+
 [package.metadata]
-requires-dist = [{ name = "pydantic", specifier = ">=2.11,<3" }]
+requires-dist = [
+    { name = "boto3", marker = "extra == 's3'", specifier = ">=1.35,<2" },
+    { name = "exchange-calendars", specifier = "==4.13.2" },
+    { name = "pydantic", specifier = ">=2.11,<3" },
+    { name = "yfinance", marker = "extra == 'yahoo'", specifier = "==1.5.2" },
+]
+provides-extras = ["yahoo", "s3"]
 
 [[package]]
 name = "openalpha-sentinel"
