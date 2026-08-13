@@ -34,7 +34,7 @@ from openalpha_kronos.studies.structural_validity.mini.runtime_probe import (
 )
 from openalpha_research.failures import ResearchFailureError
 
-APP = Path(__file__).resolve().parents[3] / "cloud" / "modal" / "bridge_phase2_app.py"
+APP = Path(__file__).resolve().parents[3] / "cloud" / "modal" / "kronos_research.py"
 NOW = datetime(2026, 8, 2, tzinfo=UTC)
 COMMIT = "a" * 40
 
@@ -272,7 +272,7 @@ def _probe_function() -> str:
     function = next(
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "verify_frozen_inference_runtime"
+        if isinstance(node, ast.FunctionDef) and node.name == "verify_mini_runtime"
     )
     return ast.get_source_segment(source, function) or ""
 
@@ -280,9 +280,9 @@ def _probe_function() -> str:
 def test_the_modal_probe_exists_and_is_its_own_function() -> None:
     tree = ast.parse(_app_source())
     names = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
-    assert "verify_frozen_inference_runtime" in names
-    assert "frozen_inference_diagnostic" in names
-    assert "verify_deployment" in names
+    assert "verify_mini_runtime" in names
+    assert "run_mini_structural_validity" in names
+    assert "verify_deployment" not in names
 
 
 def test_the_modal_probe_restricts_both_downloads() -> None:

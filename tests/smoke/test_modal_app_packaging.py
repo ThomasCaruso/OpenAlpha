@@ -1,10 +1,8 @@
 """Packaging guards for the Modal application.
 
 `modal deploy` runs from an isolated environment in which the workspace packages
-are not installed. Anything that resolves a package by importing it therefore
-fails at deploy time with "openalpha_bridge has no spec - might not be
-installed?", which no local test catches because the development environment has
-the workspace installed.
+are not installed. The research shell must therefore copy its workspace
+packages by explicit path without importing them in the deploying process.
 
 These are static and subprocess checks. They deploy nothing and contact no cloud
 provider.
@@ -15,15 +13,18 @@ from __future__ import annotations
 import ast
 import os
 import re
-import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-APP_PATH = ROOT / "cloud" / "modal" / "bridge_phase2_app.py"
-BRIDGE_SRC = ROOT / "packages" / "bridge" / "src"
+APP_PATH = ROOT / "cloud" / "modal" / "kronos_research.py"
+PACKAGE_SOURCES = (
+    ROOT / "packages" / "kronos-research" / "src",
+    ROOT / "packages" / "research-core" / "src",
+)
 
 
 def _source() -> str:
@@ -71,27 +72,35 @@ def test_declared_local_packages_exist_and_are_real_packages() -> None:
         )
 
 
-def test_the_four_workspace_packages_are_mounted() -> None:
+def test_exactly_the_two_research_workspace_packages_are_mounted() -> None:
     mounted = {remote.rsplit("/", 1)[-1] for _, remote in _declared_local_packages()}
-    assert {
-        "openalpha_bridge",
-        "openalpha_kronos",
-        "openalpha_sentinel",
-        "openalpha_research",
-    } <= mounted
+    assert mounted == {"openalpha_kronos", "openalpha_research"}
 
 
-def test_every_sibling_package_the_bridge_imports_is_mounted() -> None:
+def test_every_workspace_package_the_research_code_imports_is_mounted() -> None:
     """A runtime import of an unmounted package would fail only in the cloud."""
     pattern = re.compile(r"^\s*(?:from|import)\s+(openalpha_[a-z_]+)", re.MULTILINE)
     imported: set[str] = set()
-    for path in BRIDGE_SRC.rglob("*.py"):
-        imported.update(pattern.findall(path.read_text(encoding="utf-8")))
-    siblings = {name for name in imported if name != "openalpha_bridge"}
+    for source_root in PACKAGE_SOURCES:
+        for path in source_root.rglob("*.py"):
+            imported.update(pattern.findall(path.read_text(encoding="utf-8")))
+    siblings = set(imported)
 
     mounted = {remote.rsplit("/", 1)[-1] for _, remote in _declared_local_packages()}
     missing = sorted(siblings - mounted)
-    assert not missing, f"openalpha_bridge imports unmounted package(s): {missing}"
+    assert not missing, f"research code imports unmounted package(s): {missing}"
+
+
+def test_only_completed_study_secrets_are_attached() -> None:
+    tree = ast.parse(_source())
+    names = next(
+        ast.literal_eval(node.value)
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "SECRET_NAMES"
+    )
+    assert names == ("openalpha-storage", "openalpha-huggingface")
 
 
 def test_local_paths_are_resolved_against_the_repository_root() -> None:
@@ -143,19 +152,22 @@ def test_bytecode_is_excluded_from_the_image() -> None:
     pytest.fail("the image does not declare an ignore list for bytecode")
 
 
-@pytest.mark.network
 def test_app_imports_where_the_workspace_is_not_installed() -> None:
-    """Reproduce the deploy runner: modal present, workspace packages absent."""
-    if shutil.which("uvx") is None and shutil.which("uv") is None:
-        pytest.skip("uv is required to build an isolated environment")
+    """Import with a local Modal double and no workspace module import."""
 
     probe = "\n".join(
         (
-            "import importlib.util",
-            (
-                "assert importlib.util.find_spec('openalpha_bridge') is None, "
-                "'workspace leaked into the isolated environment'"
-            ),
+            "import importlib.util, sys, types",
+            "assert importlib.util.find_spec('openalpha_kronos') is None",
+            "assert importlib.util.find_spec('openalpha_research') is None",
+            "class Fake:",
+            "    def __getattr__(self, name): return self",
+            "    def __call__(self, *args, **kwargs):",
+            "        return args[0] if len(args) == 1 and callable(args[0]) and not kwargs else self",
+            "fake = Fake()",
+            "modal = types.ModuleType('modal')",
+            "modal.Image = modal.App = modal.Volume = modal.Secret = fake",
+            "sys.modules['modal'] = modal",
             f"spec = importlib.util.spec_from_file_location('app', r'{APP_PATH}')",
             "mod = importlib.util.module_from_spec(spec)",
             "spec.loader.exec_module(mod)",
@@ -164,7 +176,7 @@ def test_app_imports_where_the_workspace_is_not_installed() -> None:
     )
 
     result = subprocess.run(
-        ["uvx", "--from", "modal>=0.64,<2", "python", "-c", probe],
+        [sys.executable, "-S", "-c", probe],
         capture_output=True,
         text=True,
         cwd=ROOT,
@@ -179,30 +191,36 @@ def test_app_imports_where_the_workspace_is_not_installed() -> None:
         "the Modal app could not be imported without the workspace installed:\n"
         f"{result.stdout}\n{result.stderr}"
     )
-    assert "OK 4" in result.stdout
+    assert "OK 2" in result.stdout
 
 
-@pytest.mark.network
 def test_app_imports_when_flattened_like_the_container(tmp_path: Path) -> None:
     """Reproduce the container layout exactly: the module alone at /root.
 
     The previous isolated-import test ran the file from its repository location,
     where parents[2] resolves, so it could not catch the flattening failure.
     """
-    if shutil.which("uvx") is None and shutil.which("uv") is None:
-        pytest.skip("uv is required to build an isolated environment")
-
     # A temporary directory is far too deep to reproduce this: the container
     # path /root/<name>.py has exactly two parents, which is what makes
     # parents[2] raise. Rebinding the module's __file__ reproduces that depth
     # faithfully on both Linux and Windows.
     probe = "\n".join(
         (
-            "import importlib.util",
+            "import importlib.util, sys, types",
+            "assert importlib.util.find_spec('openalpha_kronos') is None",
+            "assert importlib.util.find_spec('openalpha_research') is None",
+            "class Fake:",
+            "    def __getattr__(self, name): return self",
+            "    def __call__(self, *args, **kwargs):",
+            "        return args[0] if len(args) == 1 and callable(args[0]) and not kwargs else self",
+            "fake = Fake()",
+            "modal = types.ModuleType('modal')",
+            "modal.Image = modal.App = modal.Volume = modal.Secret = fake",
+            "sys.modules['modal'] = modal",
             f"spec = importlib.util.spec_from_file_location('app', r'{APP_PATH}')",
             "mod = importlib.util.module_from_spec(spec)",
             "spec.loader.exec_module(mod)",
-            "mod.__file__ = '/root/bridge_phase2_app.py'",
+            "mod.__file__ = '/root/kronos_research.py'",
             "assert mod._repo_root() is None, 'a flattened module must find no repository'",
             "img = mod._build_image()",
             "assert img is not None, 'image construction must survive flattening'",
@@ -211,7 +229,7 @@ def test_app_imports_when_flattened_like_the_container(tmp_path: Path) -> None:
     )
 
     result = subprocess.run(
-        ["uvx", "--from", "modal>=0.64,<2", "python", "-c", probe],
+        [sys.executable, "-S", "-c", probe],
         capture_output=True,
         text=True,
         cwd=tmp_path,
@@ -275,9 +293,16 @@ def test_the_image_normalizes_line_endings_before_hashing_the_source() -> None:
 
 def test_image_pins_official_runtime_dependencies_explicitly() -> None:
     """The official source imports these; none may be transitive."""
-    source = _source()
+    pinned = {
+        ast.literal_eval(node.args[0])
+        for node in ast.walk(ast.parse(_source()))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_pin"
+        and len(node.args) == 1
+    }
     for package in ("pandas", "tqdm", "einops"):
-        assert f'"{package}' in source, f"{package} is not pinned in the image"
+        assert package in pinned, f"{package} is not pinned in the image"
 
 
 def test_image_source_constants_match_the_locked_spec() -> None:
@@ -315,18 +340,6 @@ def _image_pins() -> dict[str, str]:
             if "CANARY_RUNTIME_PINS" in names and node.value is not None:
                 return ast.literal_eval(node.value)
     pytest.fail("the Modal app declares no CANARY_RUNTIME_PINS")
-
-
-def test_image_pins_match_the_runtime_manifest() -> None:
-    """The image literals and the package manifest must never drift."""
-    import sys
-
-    sys.path.insert(0, str(ROOT / "packages" / "bridge" / "src"))
-    try:
-        from openalpha_bridge.phase2.runtime_pins import CANARY_RUNTIME_PINS
-    finally:
-        sys.path.pop(0)
-    assert _image_pins() == CANARY_RUNTIME_PINS
 
 
 def test_every_canary_dependency_is_pinned_exactly() -> None:

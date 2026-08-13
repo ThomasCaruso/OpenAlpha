@@ -6,6 +6,25 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
+APP_PATH = ROOT / "cloud" / "modal" / "kronos_research.py"
+ALLOWED_PUBLIC_MODAL_FUNCTIONS = {
+    "inventory_base_artifacts",
+    "inventory_zero_shot_artifacts",
+    "run_base_structural_validity",
+    "run_mini_structural_validity",
+    "run_zero_shot_benchmark",
+    "verify_base_runtime",
+    "verify_mini_runtime",
+    "verify_zero_shot_runtime",
+}
+_FORBIDDEN_RESEARCH_SHELL_IDENTITIES = (
+    "control_api",
+    "frozen_representation",
+    "official_protocol",
+    "representation_probe",
+    "test_opening",
+    "training",
+)
 
 _FORBIDDEN_IDENTITIES = ("representation_probe", "frozen_representation")
 _TEXT_EXTENSIONS = frozenset(
@@ -304,6 +323,49 @@ def _write_text(root: Path, relative: str, text: str) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _decorator_name(node: ast.expr) -> str:
+    if isinstance(node, ast.Call):
+        return _decorator_name(node.func)
+    if isinstance(node, ast.Attribute):
+        parent = _decorator_name(node.value)
+        return f"{parent}.{node.attr}" if parent else node.attr
+    if isinstance(node, ast.Name):
+        return node.id
+    return ""
+
+
+def test_completed_study_modal_shell_has_exactly_the_supported_surface() -> None:
+    assert APP_PATH.is_file(), "the completed-study Modal shell is missing"
+    source = APP_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    decorated_functions = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        and any(_decorator_name(item) == "app.function" for item in node.decorator_list)
+    }
+    assert decorated_functions == ALLOWED_PUBLIC_MODAL_FUNCTIONS
+
+    decorator_names = {
+        _decorator_name(item)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+        for item in node.decorator_list
+    }
+    assert "app.cls" not in decorator_names
+    assert "app.local_entrypoint" not in decorator_names
+    assert not {name for name in decorator_names if name.endswith("asgi_app")}
+
+    normalized_source = source.casefold()
+    offenders = {
+        identity
+        for identity in _FORBIDDEN_RESEARCH_SHELL_IDENTITIES
+        if identity in normalized_source
+    }
+    assert offenders == set()
 
 
 def test_dormant_surface_scan_ignores_cache_generated_and_binary_files(tmp_path: Path) -> None:

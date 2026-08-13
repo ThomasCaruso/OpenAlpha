@@ -17,7 +17,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 MODAL_DIR = ROOT / "cloud" / "modal"
-APP = MODAL_DIR / "bridge_phase2_app.py"
+APP = MODAL_DIR / "kronos_research.py"
 
 
 def _load() -> Any:
@@ -166,18 +166,20 @@ def test_the_image_bakes_the_binding_at_build_time() -> None:
 
 def test_the_worker_requires_the_binding_and_passes_it_through() -> None:
     source = _app_source()
-    # The worker body now lives in openalpha_bridge.phase2.canary_worker, so the
-    # shell reads the binding out of the image and hands it straight over.
-    assert "deployed_commit=_require_deployed_commit()," in source
-    # Never accepted from the caller, and never defaulted away.
-    assert "def stage_a_official_canary(source_commit: str, run_id: str)" in source
+    assert source.count("deployed_commit=_require_deployed_commit()") == 8
+    for name in (
+        "run_mini_structural_validity",
+        "run_base_structural_validity",
+        "run_zero_shot_benchmark",
+    ):
+        assert f"def {name}(source_commit: str, run_id: str)" in source
     assert 'os.environ.get(DEPLOYED_COMMIT_VARIABLE, "")' in source
     assert "setdefault(DEPLOYED_COMMIT_VARIABLE" not in source
 
 
-def test_the_deployment_check_fails_when_the_binding_is_absent() -> None:
+def test_every_completed_study_entrypoint_requires_the_binding() -> None:
     source = _app_source()
-    assert '"deployed_commit": _require_deployed_commit(),' in source
+    assert source.count("deployed_commit=_require_deployed_commit()") == 8
 
 
 @pytest.mark.parametrize(
@@ -241,7 +243,7 @@ def test_an_untracked_file_under_a_shipped_package_blocks_deployment(
     An untracked .py file under a shipped package is built into the image and
     imported at runtime, while the image still claims to be HEAD.
     """
-    _shipped_file(repository, "packages/bridge/src/openalpha_bridge/sneaky.py").write_text(
+    _shipped_file(repository, "packages/kronos-research/src/openalpha_kronos/sneaky.py").write_text(
         "SHIPPED = True\n", encoding="utf-8"
     )
     with pytest.raises(binding.DeploymentBindingError) as excinfo:
@@ -249,6 +251,17 @@ def test_an_untracked_file_under_a_shipped_package_blocks_deployment(
     message = str(excinfo.value)
     assert "DEPLOYED_COMMIT_UNTRACKED_IN_IMAGE" in message
     assert "sneaky.py" in message
+
+
+def test_an_untracked_modal_entrypoint_blocks_deployment(repository: Path) -> None:
+    _shipped_file(repository, "cloud/modal/kronos_research.py").write_text(
+        "SHIPPED = True\n", encoding="utf-8"
+    )
+    with pytest.raises(binding.DeploymentBindingError) as excinfo:
+        binding.resolve_deploying_commit(repository)
+    message = str(excinfo.value)
+    assert "DEPLOYED_COMMIT_UNTRACKED_IN_IMAGE" in message
+    assert "cloud/modal/kronos_research.py" in message.replace(chr(92), "/")
 
 
 def test_an_untracked_file_under_the_research_directory_blocks_deployment(
@@ -266,9 +279,9 @@ def test_an_untracked_file_in_a_nested_untracked_directory_is_still_seen(
     repository: Path,
 ) -> None:
     """--untracked-files=all, so a new directory is not collapsed to one entry."""
-    _shipped_file(repository, "packages/sentinel/src/openalpha_sentinel/newpkg/mod.py").write_text(
-        "x = 1\n", encoding="utf-8"
-    )
+    _shipped_file(
+        repository, "packages/research-core/src/openalpha_research/newpkg/mod.py"
+    ).write_text("x = 1\n", encoding="utf-8")
     with pytest.raises(binding.DeploymentBindingError) as excinfo:
         binding.resolve_deploying_commit(repository)
     assert "newpkg/mod.py" in str(excinfo.value).replace("\\", "/")
@@ -277,9 +290,11 @@ def test_an_untracked_file_in_a_nested_untracked_directory_is_still_seen(
 def test_untracked_bytecode_does_not_block_deployment(repository: Path) -> None:
     """add_local_dir ignores these, so they cannot reach the image."""
     _shipped_file(
-        repository, "packages/bridge/src/openalpha_bridge/__pycache__/mod.cpython-313.pyc"
+        repository, "packages/kronos-research/src/openalpha_kronos/__pycache__/mod.cpython-313.pyc"
     ).write_bytes(b"\x00")
-    _shipped_file(repository, "packages/bridge/src/openalpha_bridge/stale.pyc").write_bytes(b"\x00")
+    _shipped_file(
+        repository, "packages/kronos-research/src/openalpha_kronos/stale.pyc"
+    ).write_bytes(b"\x00")
     assert binding.COMMIT_PATTERN.fullmatch(binding.resolve_deploying_commit(repository))
 
 
@@ -313,6 +328,7 @@ def test_the_shipped_roots_match_what_the_image_actually_copies() -> None:
         and node.value is not None
     )
     copied = {local for local, _ in packages}
+    copied.add("cloud/modal/kronos_research.py")
     copied.add("research/bridge-v0")
     assert set(binding.IMAGE_SOURCE_ROOTS) == copied
 

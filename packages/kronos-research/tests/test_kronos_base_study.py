@@ -70,7 +70,7 @@ from test_diagnostic_worker import COMMIT, NOW, _shift, _SingleWindowProvider
 from test_frozen_inference_diagnostic import RESEARCH, TRUE_TARGET
 
 REPO = Path(__file__).resolve().parents[3]
-APP = REPO / "cloud" / "modal" / "bridge_phase2_app.py"
+APP = REPO / "cloud" / "modal" / "kronos_research.py"
 BASE_RUN_ID = "base_0f1e2d3c4b5a6978"
 
 # The identities resolved independently from the Hub during implementation.
@@ -288,8 +288,8 @@ def test_every_snapshot_download_lives_in_modal_execution_code() -> None:
     }
     downloading = {name for name, body in functions.items() if "snapshot_download(" in body}
     assert downloading == {
-        "frozen_inference_diagnostic",
-        "verify_frozen_inference_runtime",
+        "run_mini_structural_validity",
+        "verify_mini_runtime",
         "_download_base_pair",
     }, downloading
 
@@ -309,7 +309,7 @@ def test_every_base_download_is_restricted_to_the_two_allowed_files() -> None:
     assert str(EXPECTED_BASE_WEIGHTS_BYTES) not in body, "no weight is materialised here"
 
     # Both base functions route their downloads through that one helper.
-    for name in ("verify_base_frozen_inference_runtime", "kronos_base_frozen_inference_diagnostic"):
+    for name in ("verify_base_runtime", "run_base_structural_validity"):
         target = next(
             n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name
         )
@@ -754,9 +754,9 @@ def test_the_base_modal_functions_use_the_base_volume_only() -> None:
         if isinstance(node, ast.FunctionDef)
     }
     for name in (
-        "verify_base_frozen_inference_runtime",
-        "kronos_base_frozen_inference_diagnostic",
-        "inventory_base_remote_cache",
+        "verify_base_runtime",
+        "run_base_structural_validity",
+        "inventory_base_artifacts",
     ):
         body = bodies[name]
         assert "BASE_CACHE_ROOT" in body
@@ -764,7 +764,7 @@ def test_the_base_modal_functions_use_the_base_volume_only() -> None:
         assert "CACHE_ROOT)" not in body.replace("BASE_CACHE_ROOT)", "")
 
     # And the mini functions were not repointed at the base volume.
-    for name in ("frozen_inference_diagnostic", "verify_frozen_inference_runtime"):
+    for name in ("run_mini_structural_validity", "verify_mini_runtime"):
         assert "BASE_CACHE_ROOT" not in bodies[name]
         assert "KRONOS_BASE" not in bodies[name]
 
@@ -778,7 +778,7 @@ def test_the_cache_inventory_is_read_only_and_not_on_the_control_api() -> None:
     node = next(
         n
         for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef) and n.name == "inventory_base_remote_cache"
+        if isinstance(n, ast.FunctionDef) and n.name == "inventory_base_artifacts"
     )
     body = ast.get_source_segment(app_source, node) or ""
     for destructive in ("rmtree", "unlink(", "os.remove", "shutil.rm", ".delete("):
@@ -804,15 +804,7 @@ def test_the_cache_inventory_is_read_only_and_not_on_the_control_api() -> None:
     assert payload["deletion_supported"] is False
     assert payload["reloaded_before_inspection"] is True
     assert "build_base_cache_inventory(" in body
-    # Not exposed through the ASGI control plane.
-    control = ast.get_source_segment(
-        app_source,
-        next(
-            n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "control_api"
-        ),
-    )
-    assert control is not None
-    assert "inventory_base_remote_cache" not in control
+    assert "control_api" not in app_source
 
 
 def test_the_modal_base_pins_agree_with_the_specification() -> None:
@@ -834,10 +826,9 @@ def test_the_base_functions_are_named_for_the_family_they_run() -> None:
     tree = ast.parse(app_source)
     names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
     assert {
-        "verify_base_deployment",
-        "verify_base_frozen_inference_runtime",
-        "kronos_base_frozen_inference_diagnostic",
-        "inventory_base_remote_cache",
+        "verify_base_runtime",
+        "run_base_structural_validity",
+        "inventory_base_artifacts",
     } <= names
     # No top-level function whose name implies mini touches a base pin.
     # Nested helpers inherit their enclosing function's identity, so only

@@ -128,7 +128,7 @@ from pydantic import ValidationError
 REPO = Path(__file__).resolve().parents[3]
 RESEARCH = REPO / "research" / "bridge-v0"
 REPORT = REPO / "research" / "reports" / "kronos-structural-validity"
-APP = REPO / "cloud" / "modal" / "bridge_phase2_app.py"
+APP = REPO / "cloud" / "modal" / "kronos_research.py"
 PACKAGE = Path(__file__).resolve().parents[1] / "src" / "openalpha_kronos" / "studies" / "zero_shot"
 
 COMMIT = "a" * 40
@@ -714,14 +714,13 @@ def test_every_snapshot_download_still_lives_in_modal_execution_code() -> None:
     # The pre-existing downloaders, plus the nested resolver inside the mini
     # diagnostic that calls the hub directly. This benchmark adds none of them.
     assert downloading == {
-        "frozen_inference_diagnostic",
-        "verify_frozen_inference_runtime",
+        "run_mini_structural_validity",
+        "verify_mini_runtime",
         "_download_base_pair",
         "resolve_runtime",
     }
     for name in (
-        "verify_zero_shot_benchmark_deployment",
-        "verify_zero_shot_benchmark_runtime",
+        "verify_zero_shot_runtime",
         "run_zero_shot_benchmark",
         "inventory_zero_shot_artifacts",
     ):
@@ -2261,12 +2260,11 @@ def test_the_new_files_are_source_sized() -> None:
         assert (RESEARCH / name).stat().st_size < limit
 
 
-def test_the_modal_app_exposes_the_four_benchmark_functions() -> None:
+def test_the_modal_app_exposes_the_three_benchmark_functions() -> None:
     tree = ast.parse(APP.read_text(encoding="utf-8"))
     functions = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
     for name in (
-        "verify_zero_shot_benchmark_deployment",
-        "verify_zero_shot_benchmark_runtime",
+        "verify_zero_shot_runtime",
         "run_zero_shot_benchmark",
         "inventory_zero_shot_artifacts",
     ):
@@ -2274,10 +2272,9 @@ def test_the_modal_app_exposes_the_four_benchmark_functions() -> None:
 
     # The completed studies' functions are untouched and still present.
     for name in (
-        "verify_base_deployment",
-        "verify_base_frozen_inference_runtime",
-        "kronos_base_frozen_inference_diagnostic",
-        "inventory_base_remote_cache",
+        "verify_base_runtime",
+        "run_base_structural_validity",
+        "inventory_base_artifacts",
     ):
         assert name in functions
 

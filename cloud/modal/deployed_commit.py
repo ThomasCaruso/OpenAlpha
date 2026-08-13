@@ -77,18 +77,17 @@ def _git(root: Path, *arguments: str) -> str:
 #: Directories copied into the image by add_local_dir. An untracked file under
 #: any of these is shipped and executed while the image claims to be HEAD, so
 #: it is as fatal as an uncommitted edit. Must stay in step with
-#: bridge_phase2_app.LOCAL_PACKAGES and the research directory it adds; a test
+#: kronos_research.LOCAL_PACKAGES and the research directory it adds; a test
 #: asserts they agree.
 IMAGE_SOURCE_ROOTS: tuple[str, ...] = (
-    "packages/bridge/src/openalpha_bridge",
-    "packages/sentinel/src/openalpha_sentinel",
+    "cloud/modal/kronos_research.py",
     "packages/research-core/src/openalpha_research",
     "packages/kronos-research/src/openalpha_kronos",
     "research/bridge-v0",
 )
 
 #: Ignored by add_local_dir, so an untracked file matching these never reaches
-#: the image and must not block a deployment. Mirrors bridge_phase2_app._IGNORE.
+#: the image and must not block a deployment. Mirrors kronos_research._IGNORE.
 IMAGE_IGNORED_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo")
 IMAGE_IGNORED_DIRECTORY = "__pycache__"
 

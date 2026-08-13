@@ -34,7 +34,7 @@ from openalpha_kronos.studies.structural_validity.base.spec import (
 )
 
 REPO = Path(__file__).resolve().parents[3]
-APP = REPO / "cloud" / "modal" / "bridge_phase2_app.py"
+APP = REPO / "cloud" / "modal" / "kronos_research.py"
 RESEARCH = REPO / "research" / "bridge-v0"
 NOW = datetime(2026, 8, 3, tzinfo=UTC)
 COMMIT = "f" * 40
@@ -368,7 +368,7 @@ def _modal_function(name: str) -> ast.FunctionDef:
 
 def test_the_modal_inventory_passes_the_real_volume_reload_and_observes_nothing() -> None:
     source = APP.read_text(encoding="utf-8")
-    node = _modal_function("inventory_base_remote_cache")
+    node = _modal_function("inventory_base_artifacts")
     body = ast.get_source_segment(source, node) or ""
 
     assert "reload=base_cache_volume.reload" in body
@@ -398,7 +398,7 @@ def test_the_modal_inventory_passes_the_real_volume_reload_and_observes_nothing(
 
 def test_the_modal_inventory_is_still_read_only_and_off_the_control_api() -> None:
     source = APP.read_text(encoding="utf-8")
-    body = ast.get_source_segment(source, _modal_function("inventory_base_remote_cache")) or ""
+    body = ast.get_source_segment(source, _modal_function("inventory_base_artifacts")) or ""
     for destructive in (
         "rmtree",
         "unlink(",
@@ -409,13 +409,12 @@ def test_the_modal_inventory_is_still_read_only_and_off_the_control_api() -> Non
     ):
         assert destructive not in body
 
-    control = ast.get_source_segment(source, _modal_function("control_api")) or ""
-    assert "inventory_base_remote_cache" not in control
+    assert "control_api" not in source
 
 
 def test_the_probe_and_diagnostic_were_not_changed_to_work_around_inventory() -> None:
     source = APP.read_text(encoding="utf-8")
-    for name in ("verify_base_frozen_inference_runtime", "kronos_base_frozen_inference_diagnostic"):
+    for name in ("verify_base_runtime", "run_base_structural_validity"):
         body = ast.get_source_segment(source, _modal_function(name)) or ""
         assert body.count("base_cache_volume.commit()") == 1
         assert "base_cache_volume.reload()" not in body
@@ -505,8 +504,8 @@ def test_snapshot_download_behaviour_is_untouched() -> None:
         and "snapshot_download(" in (ast.get_source_segment(source, n) or "")
     }
     assert downloading == {
-        "frozen_inference_diagnostic",
-        "verify_frozen_inference_runtime",
+        "run_mini_structural_validity",
+        "verify_mini_runtime",
         "_download_base_pair",
     }
     helper = ast.get_source_segment(source, _modal_function("_download_base_pair")) or ""

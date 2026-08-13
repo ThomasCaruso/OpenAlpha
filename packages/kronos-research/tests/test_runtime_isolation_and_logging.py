@@ -36,7 +36,7 @@ from openalpha_research.failures import ResearchFailureError
 
 ROOT = Path(__file__).resolve().parents[3]
 VENDOR = ROOT / "vendor" / "kronos" / "67b630e6"
-APP = ROOT / "cloud" / "modal" / "bridge_phase2_app.py"
+APP = ROOT / "cloud" / "modal" / "kronos_research.py"
 
 SENTINEL_MODULE = "openalpha_isolation_probe_module"
 
@@ -240,8 +240,8 @@ def _modal_function(name: str) -> str:
 
 def test_probe_and_diagnostic_share_one_loader_and_lifecycle() -> None:
     """Fails if either reverts to its own loader or its own import context."""
-    probe = _modal_function("verify_frozen_inference_runtime")
-    diagnostic = _modal_function("frozen_inference_diagnostic")
+    probe = _modal_function("verify_mini_runtime")
+    diagnostic = _modal_function("run_mini_structural_validity")
     for body in (probe, diagnostic):
         assert "official_runtime(" in body
         assert "load_official_components(" not in body
@@ -254,8 +254,8 @@ def test_probe_and_diagnostic_share_one_loader_and_lifecycle() -> None:
 
 
 def test_both_functions_restrict_both_downloads_identically() -> None:
-    probe = _modal_function("verify_frozen_inference_runtime")
-    diagnostic = _modal_function("frozen_inference_diagnostic")
+    probe = _modal_function("verify_mini_runtime")
+    diagnostic = _modal_function("run_mini_structural_validity")
     for body in (probe, diagnostic):
         assert body.count("snapshot_download(") == 2
         assert body.count("allow_patterns=list(OFFICIAL_SNAPSHOT_ALLOW_PATTERNS)") == 2

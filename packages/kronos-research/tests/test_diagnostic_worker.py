@@ -283,7 +283,8 @@ def test_exactly_one_retrieval_of_the_specified_window() -> None:
 def test_the_session_count_is_required_to_be_512() -> None:
     source = inspect.getsource(
         __import__(
-            "openalpha_kronos.studies.structural_validity.mini.runner", fromlist=["run_frozen_inference_diagnostic"]
+            "openalpha_kronos.studies.structural_validity.mini.runner",
+            fromlist=["run_frozen_inference_diagnostic"],
         ).run_frozen_inference_diagnostic
     )
     assert "DIAGNOSTIC_UNEXPECTED_SESSION_COUNT" in source
@@ -614,13 +615,13 @@ def test_no_held_out_partition_is_reachable() -> None:
 
 
 def test_the_modal_function_only_delegates() -> None:
-    app = Path(__file__).resolve().parents[3] / "cloud" / "modal" / "bridge_phase2_app.py"
+    app = Path(__file__).resolve().parents[3] / "cloud" / "modal" / "kronos_research.py"
     source = app.read_text(encoding="utf-8")
     tree = ast.parse(source)
     function = next(
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "frozen_inference_diagnostic"
+        if isinstance(node, ast.FunctionDef) and node.name == "run_mini_structural_validity"
     )
     body = ast.get_source_segment(source, function) or ""
     assert "run_diagnostic_worker(" in body
@@ -631,17 +632,18 @@ def test_the_modal_function_only_delegates() -> None:
 
 
 def test_the_modal_diagnostic_is_its_own_function() -> None:
-    app = Path(__file__).resolve().parents[3] / "cloud" / "modal" / "bridge_phase2_app.py"
+    app = Path(__file__).resolve().parents[3] / "cloud" / "modal" / "kronos_research.py"
     tree = ast.parse(app.read_text(encoding="utf-8"))
     names = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
-    assert "frozen_inference_diagnostic" in names
-    assert "stage_a_official_canary" in names
+    assert "run_mini_structural_validity" in names
+    assert "verify_mini_runtime" in names
+    assert "stage_a_official_canary" not in names
 
 
 def test_the_modal_model_pin_agrees_with_the_specification() -> None:
     from openalpha_kronos.studies.structural_validity.mini.spec import KRONOS_MINI_SPEC
 
-    app = Path(__file__).resolve().parents[3] / "cloud" / "modal" / "bridge_phase2_app.py"
+    app = Path(__file__).resolve().parents[3] / "cloud" / "modal" / "kronos_research.py"
     tree = ast.parse(app.read_text(encoding="utf-8"))
     constants = {
         node.targets[0].id: ast.literal_eval(node.value)

@@ -16,22 +16,20 @@ import re
 from pathlib import Path
 
 import pytest
-from openalpha_bridge.phase2.runtime_pins import (
-    CANARY_RUNTIME_PINS,
-    TORCH_WHEEL_FILENAME,
-    TORCH_WHEEL_INDEX,
-    TORCH_WHEEL_MINIMUM_DRIVER,
-    TORCH_WHEEL_MINIMUM_GLIBC,
-    TORCH_WHEEL_PLATFORM_TAG,
-    TORCH_WHEEL_PYTHON_TAG,
-    TORCH_WHEEL_SHA256,
-    TORCH_WHEEL_SIZE_BYTES,
-    TORCH_WHEEL_SPECIFIER,
-    TORCH_WHEEL_URL,
-)
 
 ROOT = Path(__file__).resolve().parents[2]
-APP = ROOT / "cloud" / "modal" / "bridge_phase2_app.py"
+APP = ROOT / "cloud" / "modal" / "kronos_research.py"
+CANARY_RUNTIME_PINS = {"torch": "2.13.0"}
+TORCH_WHEEL_PYTHON_TAG = "cp313"
+TORCH_WHEEL_PLATFORM_TAG = "manylinux_2_28_x86_64"
+TORCH_WHEEL_FILENAME = "torch-2.13.0%2Bcu126-cp313-cp313-manylinux_2_28_x86_64.whl"
+TORCH_WHEEL_INDEX = "https://download.pytorch.org/whl/cu126"
+TORCH_WHEEL_URL = f"{TORCH_WHEEL_INDEX}/{TORCH_WHEEL_FILENAME}"
+TORCH_WHEEL_SHA256 = "4198c8d7478ab47ad2569309387d88b21fb553a1cf8ab06260fbd5a6ab9b9712"
+TORCH_WHEEL_SIZE_BYTES = 843_741_728
+TORCH_WHEEL_SPECIFIER = f"{TORCH_WHEEL_URL}#sha256={TORCH_WHEEL_SHA256}"
+TORCH_WHEEL_MINIMUM_GLIBC = "2.28"
+TORCH_WHEEL_MINIMUM_DRIVER = "525.60.13"
 
 
 def _app_constant(name: str) -> str:
@@ -120,5 +118,4 @@ def test_the_image_never_resolves_torch_from_an_index() -> None:
 
 @pytest.mark.parametrize("stale", ["cu124", "torch==2.5.1"])
 def test_no_stale_cuda_reference_is_executable(stale: str) -> None:
-    for path in (APP, ROOT / "packages/bridge/src/openalpha_bridge/phase2/runtime_pins.py"):
-        assert stale not in _executable_lines(path)
+    assert stale not in _executable_lines(APP)
