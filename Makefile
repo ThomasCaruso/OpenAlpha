@@ -13,8 +13,7 @@ help:
 	@echo "  make verify      Environment, sealed specifications, published artifacts"
 	@echo "  make reports     Where the completed research reports live"
 	@echo ""
-	@echo "Executing a study needs a Modal account and object-store credentials;"
-	@echo "see docs/BRIDGE_MODAL_DEPLOYMENT.md. No target here starts a run."
+	@echo "All targets are local verification commands; none starts a research run."
 
 setup:
 	uv sync --locked --group dev

@@ -57,29 +57,36 @@ def test_workflow_declares_a_name_and_trigger(path: Path) -> None:
     assert "\non:" in text, f"{path.name} must declare an `on:` trigger block"
 
 
-def test_phase2_workflows_are_present() -> None:
-    names = {path.name for path in _workflows()}
-    assert "deploy-bridge-phase2-cloud.yml" in names
-    assert "start-bridge-phase2-run.yml" in names
+def test_research_integrity_workflow_is_complete_and_verification_only() -> None:
+    path = WORKFLOW_DIR / "research-integrity.yml"
+    assert path.is_file(), "the research-integrity workflow is missing"
+    text = path.read_text(encoding="utf-8")
 
+    assert text.startswith("name: Research Integrity\n")
+    assert "actions/checkout@v4" in text
+    assert "astral-sh/setup-uv@v6" in text
+    assert "uv python install 3.13" in text
+    assert "uv sync --locked --group dev --group sentinel-phase3" in text
+    assert "importlib.util.find_spec('torch') is None" in text
+    assert 'uv run pytest -q -m "not network and not kronos"' in text
+    assert "uv run python scripts/verify_specifications.py" in text
+    assert "uv run python scripts/verify_artifacts.py" in text
+    assert "uv run ruff check packages cloud tests scripts" in text
+    assert "uv run pyright" in text
 
-def test_run_workflow_is_manual_only_and_requires_confirmations() -> None:
-    """Starting a real run must never be automatic."""
-    text = (WORKFLOW_DIR / "start-bridge-phase2-run.yml").read_text(encoding="utf-8")
-    assert "workflow_dispatch:" in text
-    for automatic_trigger in ("\n  push:", "\n  schedule:", "\n  pull_request:"):
-        assert automatic_trigger not in text, (
-            "the run-start workflow must be manual only"
-        )
-    assert "confirm_real_evidence" in text
-    assert "confirm_open_test_partition" in text
-
-
-def test_deploy_workflow_never_starts_a_run() -> None:
-    text = (WORKFLOW_DIR / "deploy-bridge-phase2-cloud.yml").read_text(encoding="utf-8")
-    assert "phase2_gpu_worker" not in text
-    assert "/v1/bridge/phase2/runs" not in text
-    assert "modal deploy" in text
+    lowered = text.casefold()
+    for forbidden in (
+        "workflow_dispatch",
+        "secrets.",
+        "modal deploy",
+        "modal run",
+        "snapshot_download",
+        "official_runtime",
+        "yahoo",
+        "yfinance",
+        "huggingface",
+    ):
+        assert forbidden not in lowered
 
 
 @pytest.mark.parametrize("path", _workflows(), ids=lambda p: p.name)

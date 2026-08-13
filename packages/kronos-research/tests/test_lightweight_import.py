@@ -1,15 +1,34 @@
 import ast
+import json
+import subprocess
 import sys
 from pathlib import Path
 
 
 def test_import_is_lightweight_and_names_the_subject() -> None:
-    import openalpha_kronos
+    script = """
+import json
+import sys
 
-    assert openalpha_kronos.__name__ == "openalpha_kronos"
-    assert "torch" not in sys.modules
-    assert "huggingface_hub" not in sys.modules
-    assert "yfinance" not in sys.modules
+heavy_modules = ("torch", "huggingface_hub", "yfinance")
+before = {name: name in sys.modules for name in heavy_modules}
+import openalpha_kronos
+after = {name: name in sys.modules for name in heavy_modules}
+print(json.dumps({"before": before, "after": after, "name": openalpha_kronos.__name__}))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    observed = json.loads(completed.stdout)
+
+    assert observed == {
+        "before": {"torch": False, "huggingface_hub": False, "yfinance": False},
+        "after": {"torch": False, "huggingface_hub": False, "yfinance": False},
+        "name": "openalpha_kronos",
+    }
 
 
 def test_model_and_evaluation_layers_do_not_import_studies() -> None:

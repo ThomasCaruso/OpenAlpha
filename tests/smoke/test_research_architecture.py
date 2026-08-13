@@ -110,6 +110,22 @@ def _python_imports_dormant_study(source: str) -> bool:
     return False
 
 
+def _python_imports_namespace(source: str, namespace: str) -> bool:
+    tree = ast.parse(source)
+    prefix = f"{namespace}."
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(
+                alias.name == namespace or alias.name.startswith(prefix) for alias in node.names
+            ):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module == namespace or module.startswith(prefix):
+                return True
+    return False
+
+
 def _expression_references_dormant_study(
     node: ast.AST, *, allow_inert_historical_label: bool = False
 ) -> bool:
@@ -559,3 +575,77 @@ description = "Documentation about the frozen-representation study"
 
 def test_frozen_representation_has_no_execution_surface() -> None:
     assert _find_dormant_surface_offenders(ROOT) == []
+
+
+def test_abandoned_bridge_package_is_absent() -> None:
+    assert not (ROOT / "packages" / "bridge").exists()
+
+
+def test_active_python_has_no_openalpha_bridge_imports() -> None:
+    namespace = "openalpha_" + "bridge"
+    offenders: list[str] = []
+    for surface in ("packages", "cloud", "scripts", "tests"):
+        root = ROOT / surface
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*.py"):
+            relative = path.relative_to(ROOT)
+            if _is_ignored(relative):
+                continue
+            if _python_imports_namespace(path.read_text(encoding="utf-8"), namespace):
+                offenders.append(relative.as_posix())
+    assert sorted(offenders) == []
+
+
+def test_research_core_knows_no_research_subject() -> None:
+    source_root = ROOT / "packages" / "research-core" / "src" / "openalpha_research"
+    forbidden = ("openalpha_kronos", "openalpha_sentinel", "kronos", "sentinel", "bridge")
+    offenders = {
+        path.relative_to(ROOT).as_posix(): sorted(
+            token for token in forbidden if token in path.read_text(encoding="utf-8").casefold()
+        )
+        for path in source_root.rglob("*.py")
+        if any(
+            token in path.read_text(encoding="utf-8").casefold() for token in forbidden
+        )
+    }
+    assert offenders == {}
+
+
+def test_research_core_distribution_has_no_study_dependency() -> None:
+    document = tomllib.loads(
+        (ROOT / "packages" / "research-core" / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    project = document["project"]
+    dependencies = [*project.get("dependencies", [])]
+    for values in project.get("optional-dependencies", {}).values():
+        dependencies.extend(values)
+    normalized = "\n".join(dependencies).casefold()
+    assert not any(subject in normalized for subject in ("kronos", "sentinel", "bridge"))
+
+
+def test_no_official_protocol_implementation_exists() -> None:
+    source_root = ROOT / "packages" / "kronos-research" / "src"
+    offenders = [
+        path.relative_to(ROOT).as_posix()
+        for path in source_root.rglob("*")
+        if "official_protocol" in path.relative_to(source_root).as_posix().casefold()
+    ]
+    assert offenders == []
+
+
+def test_active_ci_has_no_bridge_phase2_identity() -> None:
+    identity = re.compile(r"bridge[\W_]*phase[\W_]*2", re.IGNORECASE)
+    workflow_root = ROOT / ".github" / "workflows"
+    offenders = [
+        path.relative_to(ROOT).as_posix()
+        for path in sorted((*workflow_root.glob("*.yml"), *workflow_root.glob("*.yaml")))
+        if identity.search(path.name) or identity.search(path.read_text(encoding="utf-8"))
+    ]
+    assert offenders == []
+
+
+def test_workspace_metadata_has_no_live_bridge_distribution_or_cli() -> None:
+    metadata = (ROOT / "pyproject.toml").read_text(encoding="utf-8").casefold()
+    assert "openalpha-bridge" not in metadata
+    assert "bridge-phase2" not in metadata
