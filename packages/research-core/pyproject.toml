@@ -11,5 +11,9 @@ dependencies = [
   "pydantic>=2.11,<3",
 ]
 
+[project.optional-dependencies]
+yahoo = ["yfinance==1.5.2"]
+s3 = ["boto3>=1.35,<2"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/openalpha_research"]

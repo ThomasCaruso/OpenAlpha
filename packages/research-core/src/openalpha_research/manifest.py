@@ -68,7 +68,7 @@ class MethodologyStatus(StrEnum):
 
 class ManifestProfile(StrEnum):
     LEGACY_RESEARCH_RUN = "legacy_research_run"
-    SENTINEL_ORIGIN = "sentinel_origin"
+    FORECAST_EVALUATION = "forecast_evaluation"
 
 
 class GitMetadata(FrozenModel):
@@ -190,7 +190,7 @@ REQUIRED_COMPLETED_ARTIFACT_KINDS = frozenset(
         ArtifactKind.METHODOLOGY_AUDIT,
     }
 )
-REQUIRED_SENTINEL_ORIGIN_ARTIFACT_KINDS = frozenset(
+REQUIRED_FORECAST_EVALUATION_ARTIFACT_KINDS = frozenset(
     {
         ArtifactKind.CANONICAL_SPEC,
         ArtifactKind.DATA_SNAPSHOT,
@@ -204,7 +204,7 @@ REQUIRED_SENTINEL_ORIGIN_ARTIFACT_KINDS = frozenset(
 )
 REQUIRED_COMPLETED_ARTIFACT_KINDS_BY_PROFILE = {
     ManifestProfile.LEGACY_RESEARCH_RUN: REQUIRED_COMPLETED_ARTIFACT_KINDS,
-    ManifestProfile.SENTINEL_ORIGIN: REQUIRED_SENTINEL_ORIGIN_ARTIFACT_KINDS,
+    ManifestProfile.FORECAST_EVALUATION: REQUIRED_FORECAST_EVALUATION_ARTIFACT_KINDS,
 }
 MANIFEST_MEDIA_TYPE = "application/vnd.openalpha.run-manifest+json"
 

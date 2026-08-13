@@ -106,7 +106,9 @@ def test_completed_manifest_requires_the_full_core_artifact_inventory(tmp_path: 
         publish_manifest(store, _replace_manifest(manifest, artifacts=without_snapshot))
 
 
-def test_sentinel_origin_profile_requires_evidence_not_trading_artifacts(tmp_path: Path) -> None:
+def test_forecast_evaluation_profile_requires_evidence_not_trading_artifacts(
+    tmp_path: Path,
+) -> None:
     store = LocalArtifactStore(tmp_path)
     legacy = _valid_manifest(store)
     required = {
@@ -143,7 +145,7 @@ def test_sentinel_origin_profile_requires_evidence_not_trading_artifacts(tmp_pat
     )
     manifest = _replace_manifest(
         legacy,
-        profile=ManifestProfile.SENTINEL_ORIGIN,
+        profile=ManifestProfile.FORECAST_EVALUATION,
         artifacts=tuple(selected),
     )
 

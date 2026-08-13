@@ -301,7 +301,7 @@ def append_outcome_and_complete(
     )
     manifest = RunManifest(
         schema_version="1.0",
-        profile=ManifestProfile.SENTINEL_ORIGIN,
+        profile=ManifestProfile.FORECAST_EVALUATION,
         run_id=context.run_id,
         attempt_id=context.attempt_id,
         experiment_id=creation.experiment_id,
