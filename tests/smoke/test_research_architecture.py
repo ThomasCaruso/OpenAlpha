@@ -1,4 +1,5 @@
 import ast
+import re
 import tomllib
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -39,6 +40,8 @@ _IGNORED_DIRECTORY_NAMES = frozenset(
     }
 )
 _ENTRY_POINT_KEYS = frozenset({"entry_points", "gui_scripts", "scripts"})
+_INERT_HISTORICAL_LABEL = "PROCEED_TO_FROZEN_REPRESENTATION_PROBE"
+_LOCAL_MODULE_PATTERN = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
 _EXECUTION_TARGET_MARKERS = frozenset(
     {
         "app",
@@ -60,7 +63,9 @@ _EXECUTION_TARGET_MARKERS = frozenset(
 
 
 def _normalized(value: str) -> str:
-    return value.casefold().replace("-", "_")
+    with_acronym_boundaries = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "_", value)
+    with_word_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", with_acronym_boundaries)
+    return with_word_boundaries.casefold().replace("-", "_")
 
 
 def _references_dormant_study(value: str) -> bool:
@@ -86,19 +91,32 @@ def _python_imports_dormant_study(source: str) -> bool:
     return False
 
 
-def _expression_references_dormant_study(node: ast.AST) -> bool:
+def _expression_references_dormant_study(
+    node: ast.AST, *, allow_inert_historical_label: bool = False
+) -> bool:
     for item in ast.walk(node):
         if isinstance(item, ast.Name) and _references_dormant_study(item.id):
             return True
         if isinstance(item, ast.Attribute) and _references_dormant_study(item.attr):
             return True
-        if (
-            isinstance(item, ast.Constant)
-            and isinstance(item.value, str)
-            and _references_dormant_study(item.value)
-        ):
-            return True
+        if isinstance(item, ast.Constant) and isinstance(item.value, str):
+            if allow_inert_historical_label and item.value == _INERT_HISTORICAL_LABEL:
+                continue
+            if _references_dormant_study(item.value):
+                return True
     return False
+
+
+def _call_references_dormant_execution(node: ast.Call) -> bool:
+    if _expression_references_dormant_study(node.func):
+        return True
+    called = ast.unparse(node.func)
+    arguments = [*node.args, *(keyword.value for keyword in node.keywords)]
+    allow_inert_label = called not in {"__import__", "importlib.import_module"}
+    return any(
+        _expression_references_dormant_study(item, allow_inert_historical_label=allow_inert_label)
+        for item in arguments
+    )
 
 
 def _assignment_is_execution_reference(node: ast.Assign | ast.AnnAssign) -> bool:
@@ -138,8 +156,7 @@ def _python_references_dormant_execution(source: str) -> bool:
             if any(_expression_references_dormant_study(item) for item in node.decorator_list):
                 return True
         elif isinstance(node, ast.Call):
-            expressions = [node.func, *node.args, *(keyword.value for keyword in node.keywords)]
-            if any(_expression_references_dormant_study(item) for item in expressions):
+            if _call_references_dormant_execution(node):
                 return True
         elif isinstance(node, ast.Assign | ast.AnnAssign):
             if _assignment_is_execution_reference(node):
@@ -190,6 +207,44 @@ def _entry_point_values(document: Mapping[str, Any]) -> Iterable[object]:
                     pending.append(value)
 
 
+def _string_values(value: object) -> Iterable[str]:
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, Mapping):
+        for item in value.values():
+            yield from _string_values(item)
+    elif isinstance(value, list | tuple):
+        for item in value:
+            yield from _string_values(item)
+
+
+def _resolve_local_entrypoint(pyproject: Path, target: str) -> Path | None:
+    module = target.partition(":")[0].strip()
+    if not _LOCAL_MODULE_PATTERN.fullmatch(module):
+        return None
+    relative = Path(*module.split("."))
+    project_root = pyproject.parent
+    for source_root in (project_root, project_root / "src"):
+        module_file = source_root / relative.with_suffix(".py")
+        if module_file.is_file():
+            return module_file
+        package_file = source_root / relative / "__init__.py"
+        if package_file.is_file():
+            return package_file
+    return None
+
+
+def _entrypoint_targets_dormant_study(pyproject: Path, value: object) -> bool:
+    for target in _string_values(value):
+        module_path = _resolve_local_entrypoint(pyproject, target)
+        if module_path is None:
+            continue
+        source = _read_text(module_path)
+        if source is not None and _python_references_dormant_execution(source):
+            return True
+    return False
+
+
 def _value_references_dormant_study(value: object) -> bool:
     if isinstance(value, str):
         return _references_dormant_study(value)
@@ -236,7 +291,10 @@ def _find_dormant_surface_offenders(root: Path) -> list[str]:
 
     for path in sorted(_pyproject_files(root)):
         document = tomllib.loads(path.read_text(encoding="utf-8"))
-        if any(_value_references_dormant_study(value) for value in _entry_point_values(document)):
+        entry_points = tuple(_entry_point_values(document))
+        if any(_value_references_dormant_study(value) for value in entry_points) or any(
+            _entrypoint_targets_dormant_study(path, value) for value in entry_points
+        ):
             offenders.add(path.relative_to(root).as_posix())
 
     return sorted(offenders)
@@ -293,6 +351,24 @@ def test_dormant_surface_scan_catches_aliased_python_import(tmp_path: Path) -> N
     assert _find_dormant_surface_offenders(tmp_path) == ["scripts/run_research.py"]
 
 
+def test_python_surface_scan_catches_camel_case_execution_names(tmp_path: Path) -> None:
+    _write_text(
+        tmp_path,
+        "cloud/classes.py",
+        "@app.cls()\nclass FrozenRepresentationProbe: ...\n",
+    )
+    _write_text(
+        tmp_path,
+        "scripts/functions.py",
+        "def runFrozenRepresentationProbe(): ...\n",
+    )
+
+    assert _find_dormant_surface_offenders(tmp_path) == [
+        "cloud/classes.py",
+        "scripts/functions.py",
+    ]
+
+
 def test_python_surface_scan_catches_dynamic_imports_and_decorators(tmp_path: Path) -> None:
     _write_text(
         tmp_path,
@@ -307,11 +383,66 @@ def test_python_surface_scan_catches_dynamic_imports_and_decorators(tmp_path: Pa
     ]
 
 
+def test_local_entrypoint_alias_resolves_to_a_dormant_import(tmp_path: Path) -> None:
+    _write_text(
+        tmp_path,
+        "packages/example/pyproject.toml",
+        """\
+[project]
+name = "example"
+version = "0.1.0"
+
+[project.scripts]
+frp = "example.cli:main"
+""",
+    )
+    _write_text(
+        tmp_path,
+        "packages/example/src/example/cli.py",
+        (
+            "from openalpha_kronos.studies.frozen_representation.worker "
+            "import run_probe_fit_worker as main\n"
+        ),
+    )
+
+    assert _find_dormant_surface_offenders(tmp_path) == ["packages/example/pyproject.toml"]
+
+
+def test_unresolved_entrypoint_alias_is_not_flagged(tmp_path: Path) -> None:
+    _write_text(
+        tmp_path,
+        "pyproject.toml",
+        """\
+[project]
+name = "root"
+version = "0.1.0"
+
+[project.scripts]
+frp = "external_package.cli:main"
+""",
+    )
+
+    assert _find_dormant_surface_offenders(tmp_path) == []
+
+
 def test_historical_decision_labels_are_not_execution_surfaces(tmp_path: Path) -> None:
     _write_text(
         tmp_path,
         "cloud/metadata.py",
         "decision_outcomes = ['PROCEED_TO_FROZEN_REPRESENTATION_PROBE']\n",
+    )
+
+    assert _find_dormant_surface_offenders(tmp_path) == []
+
+
+def test_historical_decision_label_is_inert_in_calls(tmp_path: Path) -> None:
+    _write_text(
+        tmp_path,
+        "cloud/metadata_calls.py",
+        """\
+record = Decision(outcome="PROCEED_TO_FROZEN_REPRESENTATION_PROBE")
+logger.info("PROCEED_TO_FROZEN_REPRESENTATION_PROBE")
+""",
     )
 
     assert _find_dormant_surface_offenders(tmp_path) == []
