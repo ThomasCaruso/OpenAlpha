@@ -29,9 +29,14 @@ from typing import Any, Final
 from openalpha_research.failures import FailureCategory, ResearchFailure, ResearchFailureError
 from pydantic import BaseModel, ConfigDict
 
-from ..studies.structural_validity.mini.spec import OFFICIAL_TOKEN_VOCABULARY
 from .assets import KRONOS_MINI_SPEC
-from .contracts import GeneratedPath, ResolvedDiagnosticAssets, StepSampling, TokenPair
+from .contracts import (
+    OFFICIAL_TOKEN_VOCABULARY,
+    GeneratedPath,
+    ResolvedDiagnosticAssets,
+    StepSampling,
+    TokenPair,
+)
 from .input import OfficialRow, TimeStamp
 from .normalization import NormalizationState
 from .source import SOURCE_REVISION, verify_source_files

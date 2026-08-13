@@ -1010,6 +1010,7 @@ version = "0.1.0"
 source = { editable = "packages/bridge" }
 dependencies = [
     { name = "numpy" },
+    { name = "openalpha-kronos-research" },
     { name = "openalpha-sentinel" },
     { name = "pydantic" },
 ]
@@ -1059,6 +1060,7 @@ requires-dist = [
     { name = "openalpha-bridge", extras = ["bridge-core"], marker = "extra == 'bridge-gpu'", editable = "packages/bridge" },
     { name = "openalpha-bridge", extras = ["bridge-kronos"], marker = "extra == 'bridge-gpu'", editable = "packages/bridge" },
     { name = "openalpha-bridge", extras = ["bridge-training"], marker = "extra == 'bridge-gpu'", editable = "packages/bridge" },
+    { name = "openalpha-kronos-research", editable = "packages/kronos-research" },
     { name = "openalpha-sentinel", editable = "packages/sentinel" },
     { name = "pandas", marker = "extra == 'bridge-kronos'", specifier = ">=2.2,<4" },
     { name = "pydantic", specifier = ">=2.11,<3" },

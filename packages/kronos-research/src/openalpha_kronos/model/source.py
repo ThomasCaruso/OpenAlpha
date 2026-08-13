@@ -4,10 +4,10 @@ Every value here was read out of ``model/kronos.py`` at revision
 67b630e67f6a18c9e9be918d9b4337c960db1e9a. The source and the digests sealed in
 experiment.yaml are the authority; the README is not.
 
-The constants are duplicated deliberately: the diagnostic needs them as values,
-and the conformance tests re-derive them from the source text so a drift
-between what the code believes and what the source says fails a test rather
-than surfacing as a wrong number in an artifact.
+The behavioral constants are recorded here because the diagnostic needs them
+as values, and the conformance tests re-derive them from source text. The
+revision itself comes directly from the pinned asset specification so it has
+one authority.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from typing import Final, Literal
 from openalpha_research.failures import FailureCategory, ResearchFailure, ResearchFailureError
 from pydantic import BaseModel, ConfigDict, Field
 
-from .assets import OFFICIAL_SOURCE_FILES
+from .assets import OFFICIAL_SOURCE_FILES, SOURCE_SPEC
 
 __all__ = [
     "SOURCE_CONTRACT",
@@ -31,7 +31,7 @@ __all__ = [
     "verify_source_files",
 ]
 
-SOURCE_REVISION: Final[str] = "67b630e67f6a18c9e9be918d9b4337c960db1e9a"
+SOURCE_REVISION: Final[str] = SOURCE_SPEC.revision
 
 
 def _fail(code: str, message: str, *, field: str | None = None) -> ResearchFailureError:

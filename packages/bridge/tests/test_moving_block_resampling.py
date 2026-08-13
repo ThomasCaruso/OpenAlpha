@@ -38,23 +38,24 @@ from openalpha_bridge.resampling import (
     blocks_per_resample,
     moving_block_percentile_interval,
 )
-from openalpha_bridge.zero_shot.aggregation import (
+from openalpha_kronos.studies.zero_shot.aggregation import (
     BOOTSTRAP_ASSETS_PER_CLUSTER,
     BOOTSTRAP_BLOCK_LENGTH,
     BOOTSTRAP_CLUSTER_COUNT,
 )
-from openalpha_bridge.zero_shot.aggregation import (
+from openalpha_kronos.studies.zero_shot.aggregation import (
     OriginCluster as ZeroShotCluster,
 )
-from openalpha_bridge.zero_shot.aggregation import (
+from openalpha_kronos.studies.zero_shot.aggregation import (
     paired_origin_moving_block_bootstrap as zero_shot_bootstrap,
 )
-from openalpha_bridge.zero_shot.spec import (
+from openalpha_kronos.studies.zero_shot.spec import (
     ASSET_PANEL,
     BOOTSTRAP_CONFIDENCE_LEVEL,
     BOOTSTRAP_RESAMPLES,
     BOOTSTRAP_SEED,
 )
+from openalpha_research.failures import ResearchFailureError
 
 REPO = Path(__file__).resolve().parents[3]
 ARTIFACT = REPO / "research" / "artifacts" / "kronos_zero_shot_benchmark_terminal.json"
@@ -182,7 +183,7 @@ def test_the_zero_shot_wrapper_still_demands_exactly_twenty_five(count: int) -> 
         ZeroShotCluster(ordinal=i, assets=ASSET_PANEL, paired_differences=(0.1, 0.1, 0.1, 0.1))
         for i in range(count)
     )
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         zero_shot_bootstrap(
             clusters,
             seed=BOOTSTRAP_SEED,

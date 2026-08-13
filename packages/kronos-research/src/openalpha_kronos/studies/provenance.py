@@ -7,6 +7,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
+from openalpha_research.failures import ResearchFailureError
 from openalpha_research.protocols import verify_sha256_files
 
 MINI_RUN_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"^canary_[0-9a-f]{8,32}$")
@@ -39,12 +40,23 @@ def legacy_canary_artifact_key(run_id: str) -> str:
 
 def verify_locked_hashes(research_root: Path) -> dict[str, str]:
     """Verify the historical mini-study experiment and amendment chain."""
-    return verify_sha256_files(
-        research_root,
-        {
-            "experiment.yaml": MINI_EXPERIMENT_SHA256,
-            "phase2-preregistration-amendment.yaml": MINI_AMENDMENT_1_SHA256,
-            "phase2-amendment-2-context-prefix.yaml": MINI_AMENDMENT_2_SHA256,
-            "phase2-amendment-3-scale-features.yaml": MINI_AMENDMENT_3_SHA256,
-        },
-    )
+    try:
+        return verify_sha256_files(
+            research_root,
+            {
+                "experiment.yaml": MINI_EXPERIMENT_SHA256,
+                "phase2-preregistration-amendment.yaml": MINI_AMENDMENT_1_SHA256,
+                "phase2-amendment-2-context-prefix.yaml": MINI_AMENDMENT_2_SHA256,
+                "phase2-amendment-3-scale-features.yaml": MINI_AMENDMENT_3_SHA256,
+            },
+        )
+    except ResearchFailureError as error:
+        historical_codes = {
+            "MISSING_PROTOCOL_FILE": "MISSING_LOCK_FILE",
+            "PROTOCOL_HASH_MISMATCH": "EXPERIMENT_HASH_MISMATCH",
+        }
+        first = error.failures[0]
+        historical_code = historical_codes.get(first.code)
+        if historical_code is None:
+            raise
+        raise ResearchFailureError(first.model_copy(update={"code": historical_code})) from error

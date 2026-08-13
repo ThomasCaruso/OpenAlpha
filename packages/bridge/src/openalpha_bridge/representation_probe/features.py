@@ -15,9 +15,9 @@ import math
 from datetime import date
 from typing import Final
 
+from openalpha_kronos.model.input import OfficialRow
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..diagnostic.official_input import OfficialRow
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from .spec import ASSET_PANEL, CONTEXT_CANDLES, HORIZON_CANDLES, STRIDE
 

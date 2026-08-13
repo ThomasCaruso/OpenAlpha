@@ -71,9 +71,14 @@ def test_declared_local_packages_exist_and_are_real_packages() -> None:
         )
 
 
-def test_the_three_workspace_packages_are_mounted() -> None:
+def test_the_four_workspace_packages_are_mounted() -> None:
     mounted = {remote.rsplit("/", 1)[-1] for _, remote in _declared_local_packages()}
-    assert {"openalpha_bridge", "openalpha_sentinel", "openalpha_research"} <= mounted
+    assert {
+        "openalpha_bridge",
+        "openalpha_kronos",
+        "openalpha_sentinel",
+        "openalpha_research",
+    } <= mounted
 
 
 def test_every_sibling_package_the_bridge_imports_is_mounted() -> None:
@@ -174,7 +179,7 @@ def test_app_imports_where_the_workspace_is_not_installed() -> None:
         "the Modal app could not be imported without the workspace installed:\n"
         f"{result.stdout}\n{result.stderr}"
     )
-    assert "OK 3" in result.stdout
+    assert "OK 4" in result.stdout
 
 
 @pytest.mark.network

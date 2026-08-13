@@ -20,7 +20,22 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from openalpha_bridge.diagnostic.spec import (
+from openalpha_kronos.studies.provenance import (
+    MINI_AMENDMENT_1_SHA256 as AMENDMENT_1_SHA256,
+)
+from openalpha_kronos.studies.provenance import (
+    MINI_AMENDMENT_2_SHA256 as AMENDMENT_2_SHA256,
+)
+from openalpha_kronos.studies.provenance import (
+    MINI_AMENDMENT_3_SHA256 as AMENDMENT_3_SHA256,
+)
+from openalpha_kronos.studies.provenance import (
+    MINI_EXPERIMENT_SHA256 as EXPERIMENT_SHA256,
+)
+from openalpha_kronos.studies.provenance import (
+    verify_locked_hashes,
+)
+from openalpha_kronos.studies.structural_validity.mini.spec import (
     V1_SPECIFICATION_NAME,
     V1_SPECIFICATION_SHA256,
     V2_SPECIFICATION_NAME,
@@ -31,14 +46,7 @@ from openalpha_bridge.diagnostic.spec import (
     V4_SPECIFICATION_SHA256,
     verify_diagnostic_specifications,
 )
-from openalpha_bridge.errors import BridgeTransformError
-from openalpha_bridge.phase2.identity import (
-    AMENDMENT_1_SHA256,
-    AMENDMENT_2_SHA256,
-    AMENDMENT_3_SHA256,
-    EXPERIMENT_SHA256,
-    verify_locked_hashes,
-)
+from openalpha_research.failures import ResearchFailureError
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "cloud" / "modal" / "bridge_phase2_app.py"
@@ -127,9 +135,46 @@ def research_copy(tmp_path: Path) -> Path:
 
 def test_verify_deployment_invokes_the_diagnostic_verifier() -> None:
     body = _function_source("verify_deployment")
-    assert "from openalpha_bridge.diagnostic.spec import verify_diagnostic_specifications" in body
+    assert any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "openalpha_kronos.studies.structural_validity.mini.spec"
+        and any(alias.name == "verify_diagnostic_specifications" for alias in node.names)
+        for node in ast.walk(ast.parse(body))
+    )
     assert "verify_diagnostic_specifications(research_root)" in body
     assert '"diagnostic_specification_hashes": diagnostic_hashes,' in body
+
+
+def test_current_modal_shell_has_no_removed_completed_study_imports() -> None:
+    source = APP.read_text(encoding="utf-8")
+    for removed_namespace in (
+        "openalpha_bridge.diagnostic",
+        "openalpha_bridge.base_study",
+        "openalpha_bridge.zero_shot",
+        "openalpha_bridge.phase2.identity",
+    ):
+        assert removed_namespace not in source
+
+
+def test_modal_image_copies_the_new_study_owner() -> None:
+    source = APP.read_text(encoding="utf-8")
+    assert (
+        '("packages/kronos-research/src/openalpha_kronos", "/root/openalpha_kronos")'
+        in source
+    )
+
+
+@pytest.mark.parametrize(
+    "function_name",
+    (
+        "frozen_inference_diagnostic",
+        "kronos_base_frozen_inference_diagnostic",
+        "run_zero_shot_benchmark",
+        "inventory_zero_shot_artifacts",
+    ),
+)
+def test_completed_studies_use_the_research_object_store(function_name: str) -> None:
+    assert "_build_research_store()" in _function_source(function_name)
 
 
 def test_the_response_is_not_hard_coded() -> None:
@@ -211,7 +256,7 @@ def test_the_rest_of_the_payload_is_unchanged(research_copy: Path) -> None:
 @pytest.mark.parametrize("name", sorted(DIAGNOSTIC))
 def test_a_missing_diagnostic_specification_fails_closed(research_copy: Path, name: str) -> None:
     (research_copy / name).unlink()
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         _run_verify_deployment(research_copy)
     failure = excinfo.value.failures[0]
     assert failure.code == "MISSING_DIAGNOSTIC_SPECIFICATION"
@@ -222,7 +267,7 @@ def test_a_missing_diagnostic_specification_fails_closed(research_copy: Path, na
 def test_a_modified_diagnostic_specification_fails_closed(research_copy: Path, name: str) -> None:
     target = research_copy / name
     target.write_bytes(target.read_bytes() + b"\n# one appended comment\n")
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         _run_verify_deployment(research_copy)
     failure = excinfo.value.failures[0]
     assert failure.code == "DIAGNOSTIC_SPECIFICATION_HASH_MISMATCH"
@@ -234,7 +279,7 @@ def test_a_modified_sealed_file_still_fails_closed(research_copy: Path, name: st
     """The pre-existing behaviour, unchanged by this correction."""
     target = research_copy / name
     target.write_bytes(target.read_bytes() + b"\n")
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         _run_verify_deployment(research_copy)
     assert excinfo.value.failures[0].code == "EXPERIMENT_HASH_MISMATCH"
 
@@ -243,7 +288,7 @@ def test_a_sealed_failure_is_raised_before_the_diagnostic_check(research_copy: P
     """Order is deliberate: the sealed chain is checked first."""
     (research_copy / "experiment.yaml").write_bytes(b"tampered\n")
     (research_copy / V2_SPECIFICATION_NAME).write_bytes(b"tampered\n")
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         _run_verify_deployment(research_copy)
     assert excinfo.value.failures[0].code == "EXPERIMENT_HASH_MISMATCH"
 

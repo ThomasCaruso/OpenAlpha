@@ -91,6 +91,32 @@ class _FailingS3Client:
         raise self.error
 
 
+class _ImmutableS3Client:
+    def __init__(self, *, exists: bool) -> None:
+        self.exists = exists
+        self.head_calls = 0
+        self.put_calls: list[dict[str, object]] = []
+
+    def head_object(self, **_: object) -> dict[str, object]:
+        self.head_calls += 1
+        if not self.exists:
+            raise _not_found_error("NoSuchKey")
+        return {}
+
+    def put_object(self, **arguments: object) -> dict[str, object]:
+        self.put_calls.append(arguments)
+        if self.exists:
+            raise _S3Error(
+                "hidden",
+                response={
+                    "Error": {"Code": "PreconditionFailed"},
+                    "ResponseMetadata": {"HTTPStatusCode": 412},
+                },
+            )
+        self.exists = True
+        return {}
+
+
 def _not_found_error(signal: str) -> Exception:
     if signal == "http-status":
         return _S3Error(
@@ -231,6 +257,105 @@ def test_object_store_enforces_immutable_writes_and_supports_overwrite() -> None
 def test_s3_store_does_not_import_its_optional_dependency_on_construction() -> None:
     store = S3CompatibleObjectStore(bucket="research")
     assert store.bucket == "research"
+
+
+@pytest.mark.parametrize("backend", ["memory", "s3"])
+@pytest.mark.parametrize("body", [b"{}", b'{"changed":true}'], ids=["valid", "invalid"])
+def test_immutable_duplicate_precedence_is_backend_independent(
+    backend: str, body: bytes
+) -> None:
+    metadata = ObjectMetadata(
+        schema_version="study.result.v1",
+        run_id="run_1",
+        experiment_hash="0" * 64,
+        content_sha256=canonical_sha256({}),
+        created_at=datetime.now(UTC),
+        evidence_class="development",
+    )
+    client: _ImmutableS3Client | None = None
+    if backend == "memory":
+        store = InMemoryObjectStore()
+        store.put_immutable("result.json", b"{}", metadata)
+    else:
+        client = _ImmutableS3Client(exists=True)
+        store = S3CompatibleObjectStore(bucket="research")
+        store._client = client
+
+    with pytest.raises(ResearchFailureError) as excinfo:
+        store.put_immutable("result.json", body, metadata)
+    assert excinfo.value.failures[0].code == "OBJECT_ALREADY_EXISTS"
+    if backend == "s3":
+        assert client is not None
+        assert client.head_calls == 1
+        assert client.put_calls == []
+
+
+@pytest.mark.parametrize("backend", ["memory", "s3"])
+def test_absent_immutable_object_rejects_a_bad_hash_for_every_backend(backend: str) -> None:
+    metadata = ObjectMetadata(
+        schema_version="study.result.v1",
+        run_id="run_1",
+        experiment_hash="0" * 64,
+        content_sha256="0" * 64,
+        created_at=datetime.now(UTC),
+        evidence_class="development",
+    )
+    client: _ImmutableS3Client | None = None
+    if backend == "memory":
+        store = InMemoryObjectStore()
+    else:
+        client = _ImmutableS3Client(exists=False)
+        store = S3CompatibleObjectStore(bucket="research")
+        store._client = client
+
+    with pytest.raises(ResearchFailureError) as excinfo:
+        store.put_immutable("result.json", b"{}", metadata)
+    assert excinfo.value.failures[0].code == "OBJECT_HASH_MISMATCH"
+    if backend == "s3":
+        assert client is not None
+        assert client.head_calls == 1
+        assert client.put_calls == []
+
+
+def test_s3_immutable_write_fails_closed_when_existence_cannot_be_checked() -> None:
+    cause = _S3Error(
+        "hidden",
+        response={"Error": {"Code": "AccessDenied"}, "ResponseMetadata": {"HTTPStatusCode": 403}},
+    )
+    store = S3CompatibleObjectStore(bucket="research")
+    store._client = _FailingS3Client(cause)
+    metadata = ObjectMetadata(
+        schema_version="study.result.v1",
+        run_id="run_1",
+        experiment_hash="0" * 64,
+        content_sha256=canonical_sha256({}),
+        created_at=datetime.now(UTC),
+        evidence_class="development",
+    )
+
+    with pytest.raises(ResearchFailureError) as excinfo:
+        store.put_immutable("result.json", b"{}", metadata)
+    assert excinfo.value.failures[0].code == "OBJECT_STORE_REQUEST_FAILED"
+    assert excinfo.value.__cause__ is cause
+
+
+def test_s3_absent_valid_immutable_write_retains_the_conditional_put() -> None:
+    client = _ImmutableS3Client(exists=False)
+    store = S3CompatibleObjectStore(bucket="research")
+    store._client = client
+    metadata = ObjectMetadata(
+        schema_version="study.result.v1",
+        run_id="run_1",
+        experiment_hash="0" * 64,
+        content_sha256=canonical_sha256({}),
+        created_at=datetime.now(UTC),
+        evidence_class="development",
+    )
+
+    assert store.put_immutable("result.json", b"{}", metadata) == metadata
+    assert client.head_calls == 1
+    assert len(client.put_calls) == 1
+    assert client.put_calls[0]["IfNoneMatch"] == "*"
 
 
 def test_object_store_rejects_body_metadata_hash_mismatch_before_persistence() -> None:

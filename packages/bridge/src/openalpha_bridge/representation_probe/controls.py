@@ -16,7 +16,8 @@ import statistics
 from collections.abc import Callable
 from typing import Final
 
-from ..diagnostic.official_input import OFFICIAL_COLUMNS, OfficialRow
+from openalpha_kronos.model.input import OFFICIAL_COLUMNS, OfficialRow
+
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from .spec import (
     CONTEXT_CANDLES,

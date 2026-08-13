@@ -18,9 +18,9 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Final, Literal
 
+from openalpha_kronos.model.assets import KRONOS_BASE_SPEC, KRONOS_BASE_TOKENIZER_SPEC
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..base_study.spec import KRONOS_BASE_SPEC, KRONOS_BASE_TOKENIZER_SPEC
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 
 __all__ = [

@@ -75,18 +75,18 @@ def _pin(name: str) -> str:
 
 
 # The pinned official Kronos source. Mirrors experiment.yaml official_source;
-# openalpha_bridge.phase2.kronos.SOURCE_SPEC is the authority and a deployment
+# openalpha_kronos.model.assets.SOURCE_SPEC is the authority and a deployment
 # test asserts the two agree.
 KRONOS_SOURCE_REPOSITORY = "https://github.com/shiyu-coder/Kronos"
 KRONOS_SOURCE_REVISION = "67b630e67f6a18c9e9be918d9b4337c960db1e9a"
 KRONOS_SOURCE_ROOT = "/opt/kronos"
 # The pinned Kronos-mini forecasting model, for the frozen inference
-# diagnostic. openalpha_bridge.diagnostic.spec.KRONOS_MINI_SPEC is the
+# diagnostic. openalpha_kronos.studies.structural_validity.mini.spec.KRONOS_MINI_SPEC is the
 # authority; a packaging test asserts these agree.
 KRONOS_MINI_REPOSITORY = "NeoQuasar/Kronos-mini"
 KRONOS_MINI_REVISION = "f4e68697d9d5aed55cef5c96aabc3376bcad9f81"
 # The pinned Kronos-base pair, for the separate base replication study.
-# openalpha_bridge.base_study.spec is the authority; a packaging test asserts
+# openalpha_kronos.studies.structural_validity.base.spec is the authority; a packaging test asserts
 # these agree. Kronos-base is released paired with Kronos-Tokenizer-base, and a
 # crossed pair is refused at runtime rather than silently measured.
 KRONOS_BASE_REPOSITORY = "NeoQuasar/Kronos-base"
@@ -131,6 +131,7 @@ LOCAL_PACKAGES: tuple[tuple[str, str], ...] = (
     ("packages/bridge/src/openalpha_bridge", "/root/openalpha_bridge"),
     ("packages/sentinel/src/openalpha_sentinel", "/root/openalpha_sentinel"),
     ("packages/research-core/src/openalpha_research", "/root/openalpha_research"),
+    ("packages/kronos-research/src/openalpha_kronos", "/root/openalpha_kronos"),
 )
 
 #: Bytecode from the host Python must never shadow the image's own.
@@ -293,6 +294,17 @@ def _build_store() -> Any:
         endpoint_url=os.environ.get("OPENALPHA_S3_ENDPOINT_URL"),
         region_name=os.environ.get("OPENALPHA_S3_REGION", "auto"),
         stage="cloud-storage",
+    )
+
+
+def _build_research_store() -> Any:
+    """Subject-neutral S3 store used by completed Kronos studies."""
+    from openalpha_research.objectstore import S3CompatibleObjectStore
+
+    return S3CompatibleObjectStore(
+        bucket=os.environ["OPENALPHA_ARTIFACT_BUCKET"],
+        endpoint_url=os.environ.get("OPENALPHA_S3_ENDPOINT_URL"),
+        region_name=os.environ.get("OPENALPHA_S3_REGION", "auto"),
     )
 
 
@@ -530,9 +542,11 @@ def verify_deployment() -> dict[str, Any]:
     """
     from pathlib import Path
 
-    from openalpha_bridge.diagnostic.spec import verify_diagnostic_specifications
-    from openalpha_bridge.phase2.identity import verify_locked_hashes
     from openalpha_bridge.windowing import score_mask_sha256
+    from openalpha_kronos.studies.provenance import verify_locked_hashes
+    from openalpha_kronos.studies.structural_validity.mini.spec import (
+        verify_diagnostic_specifications,
+    )
 
     research_root = Path("/root/research/bridge-v0")
     # Both verifiers raise on any mismatch or missing file, so reaching the
@@ -666,15 +680,17 @@ def frozen_inference_diagnostic(source_commit: str, run_id: str) -> dict[str, An
     stops after the artifact is written.
 
     This is a shell. Everything it does lives in
-    openalpha_bridge.diagnostic.worker, which tests exercise with doubles.
+    openalpha_kronos.studies.structural_validity.mini.worker, which tests exercise with doubles.
     """
     from pathlib import Path
 
-    from openalpha_bridge.diagnostic.official_backend import official_runtime
-    from openalpha_bridge.diagnostic.spec import OFFICIAL_SNAPSHOT_ALLOW_PATTERNS
-    from openalpha_bridge.diagnostic.worker import run_diagnostic_worker
-    from openalpha_bridge.phase2.kronos import TOKENIZER_SPEC
-    from openalpha_bridge.phase2.provider import YahooDailyProvider
+    from openalpha_kronos.model.assets import TOKENIZER_SPEC
+    from openalpha_kronos.model.official import official_runtime
+    from openalpha_kronos.studies.structural_validity.mini.spec import (
+        OFFICIAL_SNAPSHOT_ALLOW_PATTERNS,
+    )
+    from openalpha_kronos.studies.structural_validity.mini.worker import run_diagnostic_worker
+    from openalpha_research.providers import YahooDailyProvider
 
     _register_secrets()
     cache_root = Path(CACHE_ROOT)
@@ -711,9 +727,9 @@ def frozen_inference_diagnostic(source_commit: str, run_id: str) -> dict[str, An
         )
 
     result = run_diagnostic_worker(
-        store=_build_store(),
+        store=_build_research_store(),
         resolve_runtime=resolve_runtime,
-        provider_factory=lambda: YahooDailyProvider(stage="frozen-inference-diagnostic"),
+        provider_factory=YahooDailyProvider,
         research_root=Path("/root/research/bridge-v0"),
         source_commit=source_commit,
         deployed_commit=_require_deployed_commit(),
@@ -746,13 +762,15 @@ def verify_frozen_inference_runtime() -> dict[str, Any]:
     """
     from pathlib import Path
 
-    from openalpha_bridge.diagnostic.official_backend import official_runtime
-    from openalpha_bridge.diagnostic.runtime_probe import (
+    from openalpha_kronos.model.assets import TOKENIZER_SPEC
+    from openalpha_kronos.model.official import official_runtime
+    from openalpha_kronos.studies.structural_validity.mini.runtime_probe import (
         RuntimeEnvironment,
         run_frozen_inference_runtime_probe,
     )
-    from openalpha_bridge.diagnostic.spec import OFFICIAL_SNAPSHOT_ALLOW_PATTERNS
-    from openalpha_bridge.phase2.kronos import TOKENIZER_SPEC
+    from openalpha_kronos.studies.structural_validity.mini.spec import (
+        OFFICIAL_SNAPSHOT_ALLOW_PATTERNS,
+    )
 
     _register_secrets()
     cache_root = Path(CACHE_ROOT)
@@ -838,7 +856,8 @@ def verify_base_deployment() -> dict[str, Any]:
     """
     from pathlib import Path
 
-    from openalpha_bridge.base_study.spec import (
+    from openalpha_kronos.studies.provenance import verify_locked_hashes
+    from openalpha_kronos.studies.structural_validity.base.spec import (
         BASE_ARTIFACT_ROOT,
         BASE_EXPERIMENT_ID,
         BASE_FAILURE_SCHEMA_VERSION,
@@ -850,12 +869,11 @@ def verify_base_deployment() -> dict[str, Any]:
         prove_context_budget,
         verify_base_specification,
     )
-    from openalpha_bridge.diagnostic.spec import (
+    from openalpha_kronos.studies.structural_validity.mini.spec import (
         CONTEXT_CANDLES,
         TARGET_CANDLES,
         verify_diagnostic_specifications,
     )
-    from openalpha_bridge.phase2.identity import verify_locked_hashes
 
     research_root = Path("/root/research/bridge-v0")
     base_hashes = verify_base_specification(research_root)
@@ -922,7 +940,9 @@ def _download_base_pair(cache_root: Path) -> tuple[str, str]:
     temporary directory, a test fixture, or a terminal artifact.
     """
     from huggingface_hub import snapshot_download
-    from openalpha_bridge.diagnostic.spec import OFFICIAL_SNAPSHOT_ALLOW_PATTERNS
+    from openalpha_kronos.studies.structural_validity.mini.spec import (
+        OFFICIAL_SNAPSHOT_ALLOW_PATTERNS,
+    )
 
     tokenizer_dir = snapshot_download(
         repo_id=KRONOS_BASE_TOKENIZER_REPOSITORY,
@@ -956,10 +976,15 @@ def verify_base_frozen_inference_runtime() -> dict[str, Any]:
     """
     from pathlib import Path
 
-    from openalpha_bridge.base_study.runtime_probe import run_base_runtime_probe
-    from openalpha_bridge.base_study.spec import KRONOS_BASE_SPEC, KRONOS_BASE_TOKENIZER_SPEC
-    from openalpha_bridge.diagnostic.official_backend import official_runtime
-    from openalpha_bridge.diagnostic.runtime_probe import RuntimeEnvironment
+    from openalpha_kronos.model.official import official_runtime
+    from openalpha_kronos.studies.structural_validity.base.runtime_probe import (
+        run_base_runtime_probe,
+    )
+    from openalpha_kronos.studies.structural_validity.base.spec import (
+        KRONOS_BASE_SPEC,
+        KRONOS_BASE_TOKENIZER_SPEC,
+    )
+    from openalpha_kronos.studies.structural_validity.mini.runtime_probe import RuntimeEnvironment
 
     _register_secrets()
     cache_root = Path(BASE_CACHE_ROOT)
@@ -1025,14 +1050,17 @@ def kronos_base_frozen_inference_diagnostic(source_commit: str, run_id: str) -> 
     held-out evaluation. Execution stops after the artifact is written.
 
     This is a shell. Everything it does lives in
-    openalpha_bridge.base_study.worker, which tests exercise with doubles.
+    openalpha_kronos.studies.structural_validity.base.worker, which tests exercise with doubles.
     """
     from pathlib import Path
 
-    from openalpha_bridge.base_study.spec import KRONOS_BASE_SPEC, KRONOS_BASE_TOKENIZER_SPEC
-    from openalpha_bridge.base_study.worker import run_base_study_worker
-    from openalpha_bridge.diagnostic.official_backend import official_runtime
-    from openalpha_bridge.phase2.provider import YahooDailyProvider
+    from openalpha_kronos.model.official import official_runtime
+    from openalpha_kronos.studies.structural_validity.base.spec import (
+        KRONOS_BASE_SPEC,
+        KRONOS_BASE_TOKENIZER_SPEC,
+    )
+    from openalpha_kronos.studies.structural_validity.base.worker import run_base_study_worker
+    from openalpha_research.providers import YahooDailyProvider
 
     _register_secrets()
     cache_root = Path(BASE_CACHE_ROOT)
@@ -1052,9 +1080,9 @@ def kronos_base_frozen_inference_diagnostic(source_commit: str, run_id: str) -> 
         )
 
     result = run_base_study_worker(
-        store=_build_store(),
+        store=_build_research_store(),
         resolve_runtime=resolve_runtime,
-        provider_factory=lambda: YahooDailyProvider(stage="kronos-base-diagnostic"),
+        provider_factory=YahooDailyProvider,
         research_root=Path("/root/research/bridge-v0"),
         source_commit=source_commit,
         deployed_commit=_require_deployed_commit(),
@@ -1092,7 +1120,9 @@ def inventory_base_remote_cache() -> dict[str, Any]:
     Invoke with:
         modal run cloud/modal/bridge_phase2_app.py::inventory_base_remote_cache
     """
-    from openalpha_bridge.base_study.cache_inventory import build_base_cache_inventory
+    from openalpha_kronos.studies.structural_validity.base.cache_inventory import (
+        build_base_cache_inventory,
+    )
 
     return build_base_cache_inventory(
         reload=base_cache_volume.reload,
@@ -1128,13 +1158,15 @@ def verify_zero_shot_benchmark_deployment() -> dict[str, Any]:
     """
     from pathlib import Path
 
-    from openalpha_bridge.base_study.spec import (
+    from openalpha_kronos.studies.provenance import verify_locked_hashes
+    from openalpha_kronos.studies.structural_validity.base.spec import (
         BASE_ARTIFACT_ROOT,
         verify_base_specification,
     )
-    from openalpha_bridge.diagnostic.spec import verify_diagnostic_specifications
-    from openalpha_bridge.phase2.identity import verify_locked_hashes
-    from openalpha_bridge.zero_shot.aggregation import (
+    from openalpha_kronos.studies.structural_validity.mini.spec import (
+        verify_diagnostic_specifications,
+    )
+    from openalpha_kronos.studies.zero_shot.aggregation import (
         BOOTSTRAP_ASSETS_PER_CLUSTER,
         BOOTSTRAP_AVAILABLE_BLOCK_STARTS,
         BOOTSTRAP_BASE_RESAMPLING_UNIT,
@@ -1145,9 +1177,12 @@ def verify_zero_shot_benchmark_deployment() -> dict[str, Any]:
         BOOTSTRAP_OBSERVATION_COUNT,
         BOOTSTRAP_TEMPORAL_RESAMPLING_UNIT,
     )
-    from openalpha_bridge.zero_shot.baselines import BASELINE_IDS, PRIMARY_BASELINE_ID
-    from openalpha_bridge.zero_shot.origins import ORIGIN_INDEX_OFFSETS, verify_origin_policy
-    from openalpha_bridge.zero_shot.spec import (
+    from openalpha_kronos.studies.zero_shot.baselines import BASELINE_IDS, PRIMARY_BASELINE_ID
+    from openalpha_kronos.studies.zero_shot.origins import (
+        ORIGIN_INDEX_OFFSETS,
+        verify_origin_policy,
+    )
+    from openalpha_kronos.studies.zero_shot.spec import (
         ASSET_PANEL,
         BOOTSTRAP_CONFIDENCE_LEVEL,
         BOOTSTRAP_RESAMPLES,
@@ -1314,10 +1349,13 @@ def verify_zero_shot_benchmark_runtime() -> dict[str, Any]:
     """
     from pathlib import Path
 
-    from openalpha_bridge.diagnostic.official_backend import official_runtime
-    from openalpha_bridge.diagnostic.runtime_probe import RuntimeEnvironment
-    from openalpha_bridge.zero_shot.runtime_probe import run_zero_shot_runtime_probe
-    from openalpha_bridge.zero_shot.spec import ZERO_SHOT_MODEL_SPEC, ZERO_SHOT_TOKENIZER_SPEC
+    from openalpha_kronos.model.official import official_runtime
+    from openalpha_kronos.studies.structural_validity.mini.runtime_probe import RuntimeEnvironment
+    from openalpha_kronos.studies.zero_shot.runtime_probe import run_zero_shot_runtime_probe
+    from openalpha_kronos.studies.zero_shot.spec import (
+        ZERO_SHOT_MODEL_SPEC,
+        ZERO_SHOT_TOKENIZER_SPEC,
+    )
 
     _register_secrets()
     cache_root = Path(BASE_CACHE_ROOT)
@@ -1387,14 +1425,17 @@ def run_zero_shot_benchmark(source_commit: str, run_id: str) -> dict[str, Any]:
     or validity filtering. Execution stops after the artifact is written.
 
     This is a shell. Everything it does lives in
-    openalpha_bridge.zero_shot.worker, which tests exercise with doubles.
+    openalpha_kronos.studies.zero_shot.worker, which tests exercise with doubles.
     """
     from pathlib import Path
 
-    from openalpha_bridge.diagnostic.official_backend import official_runtime
-    from openalpha_bridge.phase2.provider import YahooDailyProvider
-    from openalpha_bridge.zero_shot.spec import ZERO_SHOT_MODEL_SPEC, ZERO_SHOT_TOKENIZER_SPEC
-    from openalpha_bridge.zero_shot.worker import run_zero_shot_benchmark_worker
+    from openalpha_kronos.model.official import official_runtime
+    from openalpha_kronos.studies.zero_shot.spec import (
+        ZERO_SHOT_MODEL_SPEC,
+        ZERO_SHOT_TOKENIZER_SPEC,
+    )
+    from openalpha_kronos.studies.zero_shot.worker import run_zero_shot_benchmark_worker
+    from openalpha_research.providers import YahooDailyProvider
 
     _register_secrets()
     cache_root = Path(BASE_CACHE_ROOT)
@@ -1414,9 +1455,9 @@ def run_zero_shot_benchmark(source_commit: str, run_id: str) -> dict[str, Any]:
         )
 
     result = run_zero_shot_benchmark_worker(
-        store=_build_store(),
+        store=_build_research_store(),
         resolve_runtime=resolve_runtime,
-        provider_factory=lambda: YahooDailyProvider(stage="kronos-zero-shot-benchmark"),
+        provider_factory=YahooDailyProvider,
         research_root=Path("/root/research/bridge-v0"),
         source_commit=source_commit,
         deployed_commit=_require_deployed_commit(),
@@ -1435,11 +1476,11 @@ def inventory_zero_shot_artifacts() -> dict[str, Any]:
     aim this at another namespace. It has no delete mode, mounts no volume and
     loads no weight.
     """
-    from openalpha_bridge.zero_shot.inventory import inventory_zero_shot_artifacts as build
+    from openalpha_kronos.studies.zero_shot.inventory import inventory_zero_shot_artifacts as build
 
     _register_secrets()
     result = build(
-        _build_store(),
+        _build_research_store(),
         deployed_commit=_require_deployed_commit(),
         inspected_at=_now(),
     )
@@ -1471,19 +1512,19 @@ def _probe_runtime(cache_root: Path, source_root: Path):
     """
     import contextlib
 
-    from openalpha_bridge.diagnostic.backends import ResolvedDiagnosticAssets
-    from openalpha_bridge.diagnostic.official_backend import (
-        isolated_official_source,
-        load_and_freeze_official,
-        parameter_digest,
-        verify_official_assets,
-    )
-    from openalpha_bridge.diagnostic.source_conformance import SOURCE_REVISION, verify_source_files
     from openalpha_bridge.representation_probe.extraction import OfficialHiddenStateExtractor
     from openalpha_bridge.representation_probe.spec import (
         PROBE_MODEL_SPEC,
         PROBE_TOKENIZER_SPEC,
     )
+    from openalpha_kronos.model.contracts import ResolvedDiagnosticAssets
+    from openalpha_kronos.model.official import (
+        isolated_official_source,
+        load_and_freeze_official,
+        parameter_digest,
+        verify_official_assets,
+    )
+    from openalpha_kronos.model.source import SOURCE_REVISION, verify_source_files
 
     tokenizer_dir, model_dir = _download_base_pair(cache_root)
 
@@ -1548,9 +1589,6 @@ def verify_representation_probe_deployment() -> dict[str, Any]:
     """Fail deployment when the image and the probe preregistration disagree."""
     from pathlib import Path
 
-    from openalpha_bridge.base_study.spec import verify_base_specification
-    from openalpha_bridge.diagnostic.spec import verify_diagnostic_specifications
-    from openalpha_bridge.phase2.identity import verify_locked_hashes
     from openalpha_bridge.representation_probe.controls import CONTROL_BUILDERS
     from openalpha_bridge.representation_probe.spec import (
         ASSET_PANEL,
@@ -1592,6 +1630,11 @@ def verify_representation_probe_deployment() -> dict[str, Any]:
         verify_partition_geometry,
         verify_pinned_pair,
         verify_probe_specification,
+    )
+    from openalpha_kronos.studies.provenance import verify_locked_hashes
+    from openalpha_kronos.studies.structural_validity.base.spec import verify_base_specification
+    from openalpha_kronos.studies.structural_validity.mini.spec import (
+        verify_diagnostic_specifications,
     )
 
     research_root = Path("/root/research/bridge-v0")
@@ -1695,14 +1738,14 @@ def verify_representation_probe_runtime() -> dict[str, Any]:
     from datetime import date
     from pathlib import Path
 
-    from openalpha_bridge.diagnostic.normalization import fit_context_state
-    from openalpha_bridge.diagnostic.official_input import OfficialRow, official_stamp
     from openalpha_bridge.representation_probe.spec import (
         CONTEXT_CANDLES,
         PROBE_EXPERIMENT_ID,
         PROBE_PROBE_SCHEMA_VERSION,
         REPRESENTATION_DIMENSION,
     )
+    from openalpha_kronos.model.input import OfficialRow, official_stamp
+    from openalpha_kronos.model.normalization import fit_context_state
 
     _register_secrets()
     cache_root = Path(BASE_CACHE_ROOT)

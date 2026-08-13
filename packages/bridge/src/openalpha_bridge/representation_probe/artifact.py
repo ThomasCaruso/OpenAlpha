@@ -16,10 +16,10 @@ import hashlib
 from datetime import UTC, datetime
 from typing import Any, Final, Literal
 
+from openalpha_kronos.studies.structural_validity.mini.safe_logging import StageTracker
 from pydantic import BaseModel, ConfigDict
 
 from ..cloud.objectstore import ObjectStore, get_json, put_json
-from ..diagnostic.safe_logging import StageTracker
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from ..phase2.identity import canonical_json
 from ..phase2.states import EvidenceClass

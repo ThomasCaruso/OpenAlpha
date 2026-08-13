@@ -83,6 +83,7 @@ IMAGE_SOURCE_ROOTS: tuple[str, ...] = (
     "packages/bridge/src/openalpha_bridge",
     "packages/sentinel/src/openalpha_sentinel",
     "packages/research-core/src/openalpha_research",
+    "packages/kronos-research/src/openalpha_kronos",
     "research/bridge-v0",
 )
 

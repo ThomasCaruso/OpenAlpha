@@ -12,7 +12,7 @@ can audit.
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal, Protocol, runtime_checkable
+from typing import Final, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +20,7 @@ from .input import OfficialRow, TimeStamp
 from .normalization import NormalizationState
 
 __all__ = [
+    "OFFICIAL_TOKEN_VOCABULARY",
     "SAMPLING_PROBABILITY_DEFINITION",
     "ForecastModel",
     "GeneratedPath",
@@ -28,6 +29,11 @@ __all__ = [
     "TokenPair",
     "TokenizerCodec",
 ]
+
+#: Every released Kronos tokenizer encodes with s1_bits = s2_bits = 10, so
+#: both token streams span [0, 1023]. This is a model contract shared by every
+#: study rather than a property owned by the historical mini study.
+OFFICIAL_TOKEN_VOCABULARY: Final[int] = 1024
 
 #: What every stored probability in this package means, in one place.
 #:

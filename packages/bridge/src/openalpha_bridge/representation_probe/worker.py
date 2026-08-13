@@ -22,12 +22,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
+from openalpha_kronos.model.input import OfficialRow, official_stamp
+from openalpha_kronos.model.normalization import fit_context_state
+from openalpha_kronos.studies.structural_validity.mini.safe_logging import (
+    StageTracker,
+    log_operational_failure,
+)
 from pydantic import BaseModel, ConfigDict
 
 from ..cloud.objectstore import ObjectStore
-from ..diagnostic.normalization import fit_context_state
-from ..diagnostic.official_input import OfficialRow, official_stamp
-from ..diagnostic.safe_logging import StageTracker, log_operational_failure
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from ..phase2.measurement import gpu_snapshot, reset_gpu_statistics
 from ..phase2.provider import Phase2Provider, RetrievalRequest, validate_series

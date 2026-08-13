@@ -12,12 +12,12 @@ from __future__ import annotations
 import re
 from typing import Final
 
+from openalpha_kronos.studies.structural_validity.base.spec import BASE_RUN_ID_PATTERN
+from openalpha_kronos.studies.zero_shot.spec import ZERO_SHOT_RUN_ID_PATTERN
 from pydantic import BaseModel, ConfigDict
 
-from ..base_study.spec import BASE_RUN_ID_PATTERN
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from ..phase2.invocation import RUN_ID_PATTERN as MINI_RUN_ID_PATTERN
-from ..zero_shot.spec import ZERO_SHOT_RUN_ID_PATTERN
 from .spec import PROBE_RUN_ID_PATTERN
 
 __all__ = [

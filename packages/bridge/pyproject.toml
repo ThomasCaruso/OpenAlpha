@@ -9,6 +9,7 @@ description = "Constraint-preserving mathematical decoder contract for OpenAlpha
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "numpy>=2.5,<3",
+  "openalpha-kronos-research",
   "openalpha-sentinel",
   "pydantic>=2.11,<3",
 ]
@@ -44,6 +45,7 @@ bridge-gpu = [
 openalpha-bridge-phase2 = "openalpha_bridge.phase2.cli:main"
 
 [tool.uv.sources]
+openalpha-kronos-research = { workspace = true }
 openalpha-sentinel = { workspace = true }
 
 [tool.hatch.build.targets.wheel]

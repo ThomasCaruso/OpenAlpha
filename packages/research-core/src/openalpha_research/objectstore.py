@@ -235,8 +235,20 @@ class S3CompatibleObjectStore:
         body: bytes,
         metadata: ObjectMetadata,
     ) -> ObjectMetadata:
-        _verify_body_metadata(key, body, metadata)
         client = self._boto()
+        try:
+            client.head_object(Bucket=self._bucket, Key=key)
+        except Exception as error:
+            if not _is_not_found(error):
+                raise _request_failure("metadata read", key, error) from error
+        else:
+            raise _fail(
+                "OBJECT_ALREADY_EXISTS",
+                f"immutable object already exists and cannot be replaced: {key}",
+                field=key,
+            )
+
+        _verify_body_metadata(key, body, metadata)
         try:
             client.put_object(
                 Bucket=self._bucket,

@@ -20,10 +20,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from openalpha_bridge.base_study.spec import BASE_RUN_ID_PATTERN
 from openalpha_bridge.cloud.objectstore import InMemoryObjectStore
-from openalpha_bridge.diagnostic.normalization import fit_context_state
-from openalpha_bridge.diagnostic.official_input import OfficialRow, official_stamp
 from openalpha_bridge.errors import BridgeTransformError
 from openalpha_bridge.phase2.invocation import RUN_ID_PATTERN as MINI_RUN_ID_PATTERN
 from openalpha_bridge.phase2.provider import Candle, MarketSeries, ProviderMode, RetrievalRequest
@@ -95,7 +92,10 @@ from openalpha_bridge.representation_probe.worker import (
     run_probe_fit_worker,
     run_probe_test_worker,
 )
-from openalpha_bridge.zero_shot.spec import ZERO_SHOT_RUN_ID_PATTERN
+from openalpha_kronos.model.input import OfficialRow, official_stamp
+from openalpha_kronos.model.normalization import fit_context_state
+from openalpha_kronos.studies.structural_validity.base.spec import BASE_RUN_ID_PATTERN
+from openalpha_kronos.studies.zero_shot.spec import ZERO_SHOT_RUN_ID_PATTERN
 
 REPO = Path(__file__).resolve().parents[3]
 RESEARCH = REPO / "research" / "bridge-v0"
@@ -222,9 +222,9 @@ class _Runtime:
 
 
 def _assets(**overrides: Any):
-    from openalpha_bridge.diagnostic.backends import ResolvedDiagnosticAssets
-    from openalpha_bridge.diagnostic.spec import OFFICIAL_SOURCE_FILES
     from openalpha_bridge.phase2.kronos import SOURCE_SPEC
+    from openalpha_kronos.model.assets import OFFICIAL_SOURCE_FILES
+    from openalpha_kronos.model.contracts import ResolvedDiagnosticAssets
 
     values: dict[str, Any] = {
         "tokenizer_repository": "NeoQuasar/Kronos-Tokenizer-base",

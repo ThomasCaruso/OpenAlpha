@@ -23,11 +23,11 @@ from __future__ import annotations
 
 from typing import Any, Final, Protocol, runtime_checkable
 
+from openalpha_kronos.model.input import OfficialRow, TimeStamp
+from openalpha_kronos.model.normalization import NormalizationState
+from openalpha_kronos.model.official import _rows_to_tensor, _stamps_to_tensor
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..diagnostic.normalization import NormalizationState
-from ..diagnostic.official_backend import _rows_to_tensor, _stamps_to_tensor
-from ..diagnostic.official_input import OfficialRow, TimeStamp
 from ..errors import BridgeFailure, BridgeTransformError, FailureCategory
 from .spec import CONTEXT_CANDLES, REPRESENTATION_DIMENSION
 

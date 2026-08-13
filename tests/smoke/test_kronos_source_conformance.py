@@ -15,16 +15,16 @@ import hashlib
 from pathlib import Path
 
 import pytest
-from openalpha_bridge.diagnostic.source_conformance import (
+from openalpha_kronos.model import source as source_contract_module
+from openalpha_kronos.model.assets import OFFICIAL_SOURCE_FILES, SOURCE_SPEC
+from openalpha_kronos.model.source import (
     SOURCE_CONTRACT,
     SOURCE_REVISION,
     crlf_normalize,
     digest_pair,
     verify_source_files,
 )
-from openalpha_bridge.diagnostic.spec import OFFICIAL_SOURCE_FILES
-from openalpha_bridge.errors import BridgeTransformError
-from openalpha_bridge.phase2.kronos import SOURCE_SPEC
+from openalpha_research.failures import ResearchFailureError
 
 ROOT = Path(__file__).resolve().parents[2]
 VENDOR = ROOT / "vendor" / "kronos" / "67b630e6"
@@ -110,14 +110,24 @@ def test_a_tampered_source_file_fails_closed(tmp_path: Path) -> None:
     fake.mkdir()
     (fake / "kronos.py").write_bytes(b"# not the pinned source\n")
     (fake / "module.py").write_bytes(MODULE.read_bytes())
-    with pytest.raises(BridgeTransformError) as excinfo:
+    with pytest.raises(ResearchFailureError) as excinfo:
         verify_source_files(tmp_path)
     assert excinfo.value.failures[0].code == "OFFICIAL_SOURCE_AS_COMMITTED_MISMATCH"
 
 
 def test_the_revision_agrees_with_the_sealed_specification() -> None:
-    assert SOURCE_REVISION == SOURCE_SPEC.revision
-    assert SOURCE_CONTRACT.revision == SOURCE_REVISION
+    module_tree = ast.parse(Path(source_contract_module.__file__).read_text(encoding="utf-8"))
+    assignment = next(
+        node
+        for node in module_tree.body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "SOURCE_REVISION"
+    )
+    assert assignment.value is not None
+    assert ast.unparse(assignment.value) == "SOURCE_SPEC.revision"
+    assert SOURCE_REVISION is SOURCE_SPEC.revision
+    assert SOURCE_CONTRACT.revision == SOURCE_SPEC.revision
 
 
 # ==================================================== predictor entry point
@@ -336,7 +346,7 @@ def test_the_buffer_keeps_the_most_recent_max_context_tokens(source: str) -> Non
 
 def test_no_roll_occurs_in_the_diagnostic_configuration() -> None:
     """448 context plus 64 steps reaches 511, below max_context 512."""
-    from openalpha_bridge.diagnostic.spec import (
+    from openalpha_kronos.studies.structural_validity.mini.spec import (
         CONTEXT_CANDLES,
         TARGET_CANDLES,
         TOTAL_CANDLES,
@@ -380,7 +390,9 @@ def test_sampling_draws_from_the_global_rng(source: str) -> None:
 
 
 def test_the_diagnostic_settings_match_the_source_defaults() -> None:
-    from openalpha_bridge.diagnostic.spec import OFFICIAL_INFERENCE_SETTINGS as settings
+    from openalpha_kronos.studies.structural_validity.mini.spec import (
+        OFFICIAL_INFERENCE_SETTINGS as settings,
+    )
 
     assert settings.temperature == SOURCE_CONTRACT.predict_default_temperature
     assert settings.top_k == SOURCE_CONTRACT.predict_default_top_k
@@ -391,7 +403,7 @@ def test_the_diagnostic_settings_match_the_source_defaults() -> None:
 
 
 def test_the_diagnostic_columns_match_the_source_columns() -> None:
-    from openalpha_bridge.diagnostic.official_input import (
+    from openalpha_kronos.model.input import (
         OFFICIAL_COLUMNS,
         OFFICIAL_STAMP_COLUMNS,
     )
@@ -401,7 +413,7 @@ def test_the_diagnostic_columns_match_the_source_columns() -> None:
 
 
 def test_the_diagnostic_normalization_matches_the_source() -> None:
-    from openalpha_bridge.diagnostic.normalization import CLIP_VALUE, EPSILON
+    from openalpha_kronos.model.normalization import CLIP_VALUE, EPSILON
 
     assert EPSILON == SOURCE_CONTRACT.normalization_epsilon
     assert CLIP_VALUE == float(SOURCE_CONTRACT.default_clip)
@@ -417,7 +429,7 @@ def test_nothing_imports_the_vendored_source() -> None:
             sys.executable,
             "-c",
             (
-                "import sys, openalpha_bridge.diagnostic.source_conformance; "
+                "import sys, openalpha_kronos.model.source; "
                 "print(any('vendor' in str(m) for m in sys.modules))"
             ),
         ],
