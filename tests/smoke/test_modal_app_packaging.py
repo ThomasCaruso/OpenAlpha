@@ -327,7 +327,7 @@ def test_image_pins_official_runtime_dependencies_explicitly() -> None:
 
 
 def test_image_source_constants_match_the_locked_spec() -> None:
-    """The Modal constants must not drift from openalpha_bridge SOURCE_SPEC."""
+    """The Modal constants must not drift from openalpha_kronos SOURCE_SPEC."""
     tree = ast.parse(_source())
     found: dict[str, object] = {}
     for node in tree.body:
