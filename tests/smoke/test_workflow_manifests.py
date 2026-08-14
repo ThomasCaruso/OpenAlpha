@@ -143,6 +143,9 @@ def _run_signature(command: object) -> str | None:
 
 def _research_integrity_violations(document: dict[str, Any]) -> list[str]:
     violations: list[str] = []
+    expected_top_level_keys = {"name", "on", "permissions", "env", "jobs"}
+    if set(document) != expected_top_level_keys:
+        violations.append("top-level keys")
     if document.get("name") != "Research Integrity":
         violations.append("workflow name")
 
@@ -151,6 +154,8 @@ def _research_integrity_violations(document: dict[str, Any]) -> list[str]:
         violations.append("trigger set")
     if document.get("permissions") != {"contents": "read"}:
         violations.append("workflow permissions")
+    if document.get("env") != {"PYTHONDONTWRITEBYTECODE": "1"}:
+        violations.append("workflow environment")
 
     jobs = document.get("jobs")
     if not isinstance(jobs, dict) or set(jobs) != {"verify"}:
@@ -159,8 +164,8 @@ def _research_integrity_violations(document: dict[str, Any]) -> list[str]:
     verify = jobs.get("verify")
     if not isinstance(verify, dict):
         return [*violations, "verify job"]
-    if "environment" in verify or "permissions" in verify:
-        violations.append("job privilege override")
+    if set(verify) != {"runs-on", "steps"}:
+        violations.append("verify job keys")
     if verify.get("runs-on") != "ubuntu-latest":
         violations.append("runner")
 
@@ -186,19 +191,35 @@ def _research_integrity_violations(document: dict[str, Any]) -> list[str]:
     if setup_uv is None or setup_uv.get("with") != {"enable-cache": "true"}:
         violations.append("setup-uv configuration")
 
-    signatures = [_run_signature(step.get("run")) for step in steps if "run" in step]
-    expected_signatures = {
-        "python",
-        "sync",
-        "torch-absent",
-        "pytest",
-        "verify-specifications",
-        "verify-artifacts",
-        "ruff",
-        "pyright",
-    }
-    if len(signatures) != len(expected_signatures) or set(signatures) != expected_signatures:
-        violations.append("verification commands")
+    step_signatures: list[tuple[str, str | None]] = []
+    for index, step in enumerate(steps):
+        if "uses" in step:
+            action = step.get("uses")
+            expected_keys = {"name", "uses", "with"}
+            if set(step) != expected_keys:
+                violations.append(f"action step keys: {index}")
+            step_signatures.append(("uses", action if isinstance(action, str) else None))
+        elif "run" in step:
+            if set(step) != {"name", "run"}:
+                violations.append(f"run step keys: {index}")
+            step_signatures.append(("run", _run_signature(step.get("run"))))
+        else:
+            violations.append(f"unrecognized step: {index}")
+
+    expected_step_signatures = [
+        ("uses", "actions/checkout@v4"),
+        ("uses", "astral-sh/setup-uv@v6"),
+        ("run", "python"),
+        ("run", "sync"),
+        ("run", "torch-absent"),
+        ("run", "pytest"),
+        ("run", "verify-specifications"),
+        ("run", "verify-artifacts"),
+        ("run", "ruff"),
+        ("run", "pyright"),
+    ]
+    if step_signatures != expected_step_signatures:
+        violations.append("step order and commands")
 
     forbidden_keys = {"environment", "environments", "secret", "secrets"}
     forbidden_text = (
@@ -260,6 +281,29 @@ def test_research_integrity_workflow_is_complete_and_verification_only() -> None
         "secret-reference",
         "provider-command",
         "extra-job",
+        "top-level-defaults",
+        "top-level-env-drift",
+        "job-env",
+        "job-defaults",
+        "job-if",
+        "job-continue-on-error",
+        "run-step-env",
+        "run-step-uses",
+        "run-step-with",
+        "run-step-shell",
+        "run-step-working-directory",
+        "run-step-if",
+        "run-step-continue-on-error",
+        "action-step-env",
+        "action-step-run",
+        "action-step-shell",
+        "action-step-if",
+        "action-step-continue-on-error",
+        "action-step-working-directory",
+        "unknown-top-level-key",
+        "unknown-job-key",
+        "unknown-run-step-key",
+        "unknown-action-step-key",
     ),
 )
 def test_research_integrity_validator_rejects_privilege_and_trigger_mutations(
@@ -286,8 +330,49 @@ def test_research_integrity_validator_rejects_privilege_and_trigger_mutations(
         mutated["jobs"]["verify"]["env"] = {"TOKEN": "${{ secrets.TOKEN }}"}
     elif mutation == "provider-command":
         mutated["jobs"]["verify"]["steps"].append({"run": "modal run study.py"})
-    else:
+    elif mutation == "extra-job":
         mutated["jobs"]["deploy"] = {"runs-on": "ubuntu-latest", "steps": []}
+    elif mutation == "top-level-defaults":
+        mutated["defaults"] = {"run": {"shell": "bash -c 'modal run study.py; bash {0}'"}}
+    elif mutation == "top-level-env-drift":
+        mutated["env"]["EXTRA"] = "1"
+    elif mutation == "job-env":
+        mutated["jobs"]["verify"]["env"] = {"TOKEN": "value"}
+    elif mutation == "job-defaults":
+        mutated["jobs"]["verify"]["defaults"] = {"run": {"shell": "bash"}}
+    elif mutation == "job-if":
+        mutated["jobs"]["verify"]["if"] = "always()"
+    elif mutation == "job-continue-on-error":
+        mutated["jobs"]["verify"]["continue-on-error"] = "true"
+    elif mutation.startswith("run-step-"):
+        key = mutation.removeprefix("run-step-")
+        run_step = next(
+            step
+            for step in mutated["jobs"]["verify"]["steps"]
+            if "run" in step
+            and (key != "continue-on-error" or step["run"] == "uv run pyright")
+        )
+        run_step[key] = {"TOKEN": "value"} if key in {"env", "with"} else "true"
+    elif mutation.startswith("action-step-"):
+        action_step = next(
+            step for step in mutated["jobs"]["verify"]["steps"] if "uses" in step
+        )
+        key = mutation.removeprefix("action-step-")
+        action_step[key] = {"TOKEN": "value"} if key == "env" else "true"
+    elif mutation == "unknown-top-level-key":
+        mutated["timeout-minutes"] = "10"
+    elif mutation == "unknown-job-key":
+        mutated["jobs"]["verify"]["timeout-minutes"] = "10"
+    elif mutation == "unknown-run-step-key":
+        run_step = next(
+            step for step in mutated["jobs"]["verify"]["steps"] if "run" in step
+        )
+        run_step["timeout-minutes"] = "10"
+    else:
+        action_step = next(
+            step for step in mutated["jobs"]["verify"]["steps"] if "uses" in step
+        )
+        action_step["timeout-minutes"] = "10"
 
     assert _research_integrity_violations(mutated)
 
