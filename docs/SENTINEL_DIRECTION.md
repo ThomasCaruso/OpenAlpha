@@ -4,10 +4,13 @@
 - Status: v0 reliability retired; Sentinel assurance retained within OpenAlpha for Kronos
 - Preserved commits: `c037bd5`, `27f0c69`, `daf3477`
 
-## Current product direction
+## Historical product direction
 
-Sentinel is OpenAlpha's assurance layer. It validates the official raw forecast and
-every separately labeled compatible reconstruction, preserves exact violations and
+This section preserves the superseded product direction. Current package ownership
+is documented in [ARCHITECTURE.md](ARCHITECTURE.md), and the current research
+direction is documented in [STATUS.md](STATUS.md).
+
+Sentinel was OpenAlpha's assurance layer. It validated the official raw forecast andevery separately labeled compatible reconstruction, preserves exact violations and
 provenance, creates immutable audits, and prevents an invalid raw path from being
 silently accepted downstream. Deterministic terminal projection remains an explicit
 fallback gateway, never a disguised model output or an accuracy claim.
@@ -25,12 +28,12 @@ valid paths but failed the high-low range gate, while stepwise project/re-encode
 hard-failed 21 of 36 paths. The model-size canary, larger v1 study, and untouched
 holdout remain unrun.
 
-OpenAlpha Bridge is a new, separately preregistered training track at the continuous
-reconstruction boundary, not another Sentinel phase. It retains all official tokens
-and weights, reuses the frozen causal tokenizer decoder trunk, and produces a
-separately labeled constrained path. Sentinel validates and audits both the official
-and Bridge paths. See `OPENALPHA_PIVOT.md` and
-`OPENALPHA_KRONOS_BRIDGE.md`.
+OpenAlpha Bridge was a separately preregistered training track at the continuous
+reconstruction boundary, not another Sentinel phase. It retained all official
+tokens and weights, reused the frozen causal tokenizer decoder trunk, and produced
+a separately labeled constrained path. Sentinel validated and audited both the
+official and Bridge paths. See [ARCHITECTURE.md](ARCHITECTURE.md) and
+[STATUS.md](STATUS.md) for the current research architecture and direction.
 
 Structural assurance remains; v0 forecast-error risk prediction remains retired.
 

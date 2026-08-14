@@ -118,16 +118,14 @@ weights and issues no provider request.
 ## Repository tour
 
 ```
-packages/bridge/      Research engine: diagnostics, zero-shot benchmark,
-                      metrics, bootstrap, decision rules, artifact publication
-packages/sentinel/    Structural validation and audit layer
-packages/research-core, packages/experiment-spec
-cloud/modal/          GPU execution shells — thin wrappers; all logic is importable
-research/bridge-v0/   Preregistrations, sealed with .sha256 sidecars
-research/reports/     ← the completed studies and their evidence
-research/sentinel-*/  Earlier investigations and their immutable artifacts
-docs/                 Architecture, ADRs, methodology, data policy
-vendor/kronos/        Two upstream files, verbatim, for offline conformance checks
+packages/research-core/      Model-independent research infrastructure
+packages/kronos-research/    Kronos integration and completed studies
+packages/sentinel/           Structural validation and completed Sentinel work
+packages/experiment-spec/    Immutable experiment-document contracts
+cloud/modal/                 Thin wrappers for completed-study reproducibility
+research/                    Immutable evidence, specifications, and reports
+docs/                        Current architecture, status, methodology, and policy
+vendor/kronos/               Pinned upstream files for offline conformance checks
 ```
 
 | | |
@@ -158,9 +156,9 @@ sha256sum research/bridge-v0/kronos-zero-shot-benchmark-v1.yaml
 # 6832c0f7befc54cd7ccec382db8cac1e6314f3fb356eb5eed8e9e9eca9a6fd07
 ```
 
-Executing a study additionally requires a Modal account and object-store
-credentials. See [`docs/BRIDGE_MODAL_DEPLOYMENT.md`](docs/BRIDGE_MODAL_DEPLOYMENT.md)
-and [`docs/BRIDGE_GPU_RUNBOOK.md`](docs/BRIDGE_GPU_RUNBOOK.md).
+The optional Modal shell is limited to reproducibility and runtime functions for the
+three completed studies. Default verification is offline and requires no cloud
+account, provider request, checkpoint, or GPU.
 
 ---
 
@@ -220,19 +218,16 @@ Every authorization field in every artifact is `false`.
 
 ## Status and what would come next
 
-The structural direction is **closed**. The zero-shot generation direction is
-**stopped** by its own preregistered rule.
+The structural-validity direction is **closed**. The zero-shot generation
+direction is **stopped** by its own preregistered rule.
 
-One hypothesis survives: a model can generate poorly and still encode useful
-internal state. The preregistered decision therefore routes to a
-frozen-representation probe. A design note exists at
-[`research/bridge-v0/kronos-frozen-representation-probe-design.md`](research/bridge-v0/kronos-frozen-representation-probe-design.md),
-including a source audit confirming that `Kronos.decode_s1` already returns the
-transformer hidden state publicly — so the probe would need no upstream
-modification.
+The frozen-representation probe is preregistered and preserved, but it is inactive,
+not authorized, and has not been executed. It has produced no scientific
+conclusion.
 
-It is **not implemented and not authorized**. It would require its own
-preregistration.
+The next direction is an official-protocol replication. Its protocol must be
+designed and its preregistration cryptographically sealed before code is written.
+No official-protocol implementation or execution surface exists.
 
 ---
 

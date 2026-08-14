@@ -29,6 +29,64 @@ _FORBIDDEN_RESEARCH_SHELL_IDENTITIES = (
 )
 
 _FORBIDDEN_IDENTITIES = ("representation_probe", "frozen_representation")
+_RETIRED_OPERATIONAL_DOCS = frozenset(
+    {
+        "docs/BRIDGE_CLOUD_API.md",
+        "docs/BRIDGE_CLOUD_ARCHITECTURE.md",
+        "docs/BRIDGE_CLOUD_STORAGE.md",
+        "docs/BRIDGE_GPU_RUNBOOK.md",
+        "docs/BRIDGE_MATHEMATICAL_REPRESENTATION.md",
+        "docs/BRIDGE_MODAL_DEPLOYMENT.md",
+        "docs/BRIDGE_NUMERICAL_CONTRACT.md",
+        "docs/BRIDGE_PHASE2_EXECUTION.md",
+        "docs/BRIDGE_TEST_OPENING_POLICY.md",
+        "docs/OPENALPHA_KRONOS_BRIDGE.md",
+    }
+)
+_RETIRED_LIVE_DOC_IDENTIFIERS = (
+    "packages/bridge",
+    "openalpha_bridge",
+    "bridge_phase2_app.py",
+)
+_LIVE_BRIDGE_PHASE2_CLAIMS = (
+    re.compile(
+        r"\bbridge[\W_]*phase[\W_]*2\b.{0,160}"
+        r"\b(?:is|remains)\s+(?:active|available|deployed|executable|implemented|live|operational)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bbridge[\W_]*phase[\W_]*2\b.{0,160}"
+        r"\b(?:can\s+be\s+)?(?:deployed|executed|exposed|provided|run|served|supported)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bbridge[\W_]*phase[\W_]*2\b.{0,80}"
+        r"\bhas\s+(?:an?\s+)?(?:api|cli|control[\W_]+plane|endpoint|service|worker)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:the\s+)?bridge\s+(?:phase\s+2\s+)?"
+        r"(?:adapter|api|checkpoint|cli|control[\W_]+plane|service|worker)\b"
+        r".{0,80}\b(?:can|is|must|provides?|produces?|runs?|supports?|will)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:active|deployed|executable|live|loadable|operational)\s+"
+        r"bridge\s+(?:adapter|api|checkpoint|cli|service|worker)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bbridge\s+produces?\b", re.IGNORECASE),
+    re.compile(
+        r"\bbridge(?:[\W_]*(?:2k|base))?\b.{0,100}"
+        r"\b(?:is\s+prohibited\s+until|must\s+pass|passes)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:modal\s+(?:deploy|run)|python\s+-m)\b.{0,120}"
+        r"\bbridge[\W_]*(?:phase[\W_]*2)?\b",
+        re.IGNORECASE,
+    ),
+)
 _TEXT_EXTENSIONS = frozenset(
     {
         ".bat",
@@ -87,6 +145,63 @@ def _normalized(value: str) -> str:
     with_acronym_boundaries = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "_", value)
     with_word_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", with_acronym_boundaries)
     return with_word_boundaries.casefold().replace("-", "_")
+
+
+def _current_document_paths(root: Path) -> tuple[Path, ...]:
+    package_readmes = sorted((root / "packages").glob("*/README.md"))
+    return (
+        root / "README.md",
+        root / "docs" / "ARCHITECTURE.md",
+        root / "docs" / "DATA_POLICY.md",
+        root / "docs" / "KRONOS_COMPATIBILITY_BOUNDARY.md",
+        root / "docs" / "MASTER_PLAN.md",
+        root / "docs" / "SENTINEL_DIRECTION.md",
+        root / "docs" / "STATUS.md",
+        *package_readmes,
+    )
+
+
+def _live_bridge_phase2_claims(text: str) -> list[str]:
+    normalized = re.sub(r"\s+", " ", text)
+    return [pattern.pattern for pattern in _LIVE_BRIDGE_PHASE2_CLAIMS if pattern.search(normalized)]
+
+
+def _broken_current_document_links(root: Path) -> list[str]:
+    broken: list[str] = []
+    for path in _current_document_paths(root):
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"!?\[[^]]*\]\((?P<target>[^)]+)\)", text):
+            target = match.group("target").strip().split(maxsplit=1)[0].strip("<>")
+            if not target or target.startswith(("#", "http://", "https://", "mailto:")):
+                continue
+            relative_target = target.split("#", maxsplit=1)[0]
+            if not (path.parent / relative_target).exists():
+                broken.append(f"{path.relative_to(root).as_posix()}: {target}")
+    return sorted(broken)
+
+
+def _current_documentation_offenders(root: Path) -> dict[str, list[str]]:
+    offenders: dict[str, list[str]] = {}
+    for path in _current_document_paths(root):
+        text = path.read_text(encoding="utf-8")
+        normalized = text.replace("\\", "/").casefold()
+        problems = [
+            retired_path
+            for retired_path in sorted(_RETIRED_OPERATIONAL_DOCS)
+            if any(
+                candidate in normalized
+                for candidate in (retired_path.casefold(), Path(retired_path).name.casefold())
+            )
+        ]
+        problems.extend(
+            identifier
+            for identifier in _RETIRED_LIVE_DOC_IDENTIFIERS
+            if identifier.casefold() in normalized
+        )
+        problems.extend(_live_bridge_phase2_claims(text))
+        if problems:
+            offenders[path.relative_to(root).as_posix()] = problems
+    return offenders
 
 
 def _references_dormant_study(value: str) -> bool:
@@ -707,3 +822,39 @@ def test_workspace_metadata_has_no_live_bridge_distribution_or_cli() -> None:
     metadata = (ROOT / "pyproject.toml").read_text(encoding="utf-8").casefold()
     assert "openalpha-bridge" not in metadata
     assert "bridge-phase2" not in metadata
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Bridge Phase 2\nis operational.",
+        "Bridge Phase 2 has an API.",
+        "Bridge Phase 2 can be deployed.",
+        "The Bridge adapter must preserve token order.",
+        "Bridge produces constrained forecasts.",
+        "This is a loadable Bridge checkpoint.",
+        "Bridge-2K reconstruction feasibility must pass.",
+    ],
+)
+def test_current_doc_guard_rejects_live_system_claims(text: str) -> None:
+    assert _live_bridge_phase2_claims(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Bridge Phase 2 was retired.",
+        "The historical contract required ordered tokens.",
+        "Bridge was never trained.",
+    ],
+)
+def test_current_doc_guard_allows_explicit_historical_status(text: str) -> None:
+    assert _live_bridge_phase2_claims(text) == []
+
+
+def test_current_documentation_has_no_retired_bridge_operations() -> None:
+    assert _current_documentation_offenders(ROOT) == {}
+
+
+def test_current_documentation_local_links_exist() -> None:
+    assert _broken_current_document_links(ROOT) == []

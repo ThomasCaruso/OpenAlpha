@@ -1,6 +1,16 @@
 # Kronos Compatibility Boundary
 
-## Scope and evidence
+## Scope, current status, and evidence
+
+**Current status:** this document preserves a historical compatibility and
+scientific trace for the retired Bridge design. The active Kronos integration is
+`openalpha_kronos.model.assets`, `openalpha_kronos.model.source`, and
+`openalpha_kronos.model.official`. No Bridge adapter, checkpoint, product, or
+execution surface exists in the current tree.
+
+Requirements and modal language below describe constraints imposed by the retired
+design at the time. They are retained for audit and do not authorize or describe a
+current executable system.
 
 This trace describes only the pinned source and checkpoints used by the preserved
 OpenAlpha experiments. It is not a statement about later Kronos revisions.
@@ -72,7 +82,7 @@ specification
 
 is
 `ea1825698624a0835a2238d9bfe8c5ebbd39e074fb4daa9613423f0e4df23af2`.
-Bridge manifests call this the implicit codebook fingerprint. The tokenizer config,
+Retired Bridge manifests called this the implicit codebook fingerprint. The tokenizer config,
 weights, and source hashes are still required because the learned encoder,
 `post_quant_embed`, and decoder trunk are checkpoint-specific.
 
@@ -93,9 +103,9 @@ tokens through `t`, not on future tokens. It is not a candle-local lookup. The
 decoder receives no calendar timestamp tensor, but it receives sequence order
 through causal attention and rotary position state.
 
-Any replacement that decodes each pair in isolation would be incompatible with the
-audited architecture. OpenAlpha Bridge must process the full ordered token window
-and test future-token perturbation invariance.
+The retired design treated any replacement that decoded each pair in isolation as
+incompatible with the audited architecture. It required the full ordered token
+window and future-token perturbation-invariance testing.
 
 ## Forecast generation boundary
 
@@ -115,9 +125,10 @@ forecasting transformer during token generation. They do not enter the tokenizer
 continuous decoder.
 
 The official implementation averages decoded samples when `sample_count > 1`.
-Bridge auditing cannot infer individual token paths from that average. OpenAlpha
-must capture and preserve each generated token sequence and decode paths separately;
-the Phase 3 paired experiment uses `sample_count=1` per declared seed.
+The retired auditing design could not infer individual token paths from that
+average, so it required each generated token sequence and decoded path to be
+preserved separately; its planned Phase 3 paired experiment specified
+`sample_count=1` per declared seed.
 
 ## Normalization and price restoration
 
@@ -138,22 +149,22 @@ the order above.
 Volume and amount are not decoded through specialized nonnegative heads. They are
 the fifth and sixth unrestricted outputs of the same linear head used for OHLC.
 
-OpenAlpha Bridge receives the exact historical normalization bundle and a
-feature-presence policy. It does not recompute statistics from forecast values. Its
-hard price reconstruction uses the last observed close as the first causal anchor.
-When volume was absent at input, Bridge may pass official zero placeholders through
-the frozen compatibility path but must omit safe volume and amount, set a warning,
-and exclude volume loss. It must not present a synthesized zero as an observed
-volume forecast.
+The retired design specified the exact historical normalization bundle and a
+feature-presence policy. It did not recompute statistics from forecast values, and
+its hard price reconstruction used the last observed close as the first causal
+anchor. When volume was absent at input, the design allowed official zero
+placeholders through the frozen compatibility path but required safe volume and
+amount to be omitted, a warning to be set, and volume loss to be excluded. A
+synthesized zero could not be presented as an observed volume forecast.
 
-When volume is supported, Bridge produces nonnegative volume. If an amount field is
-required, OpenAlpha derives it deterministically as volume times the safe candle's
-OHLC mean and labels it as derived; it does not learn an independent unrestricted
-amount.
+When volume was supported, the retired design required nonnegative volume. If an
+amount field was required, it derived that field deterministically as volume times
+the safe candle's OHLC mean and labeled it as derived; it did not learn an
+independent unrestricted amount.
 
-## Selected Bridge tensors
+## Historical selected Bridge tensors
 
-The stable public compatibility bundle is:
+The retired design specified this compatibility bundle:
 
 | Tensor or field | Type and shape | Source | Mutable |
 |---|---|---|---|
@@ -167,7 +178,7 @@ The stable public compatibility bundle is:
 | `previous_close` | positive `float64[B]` | last observation before output suffix | causal state |
 | `volume_present` | mode plus optional `bool[B,S]` target/output mask | input schema | no |
 
-Inside the frozen compatibility trunk:
+Inside the retired frozen compatibility trunk:
 
 | Tensor | Shape | Construction |
 |---|---|---|
@@ -180,22 +191,22 @@ Inside the frozen compatibility trunk:
 `scale_features` contains `log(anchor_close)`; four price-mean values calculated as
 `mean_i / anchor_close - 1`; four `log1p(std_i / anchor_close)` values; and
 `log1p(mean)` plus `log1p(std)` for volume and amount. The price anchor, means, and
-standard deviations must be finite; the anchor must be positive; standard
-deviations must be nonnegative; and volume/amount means must be nonnegative.
-Violations are typed compatibility failures.
+standard deviations were required to be finite; the anchor had to be positive;
+standard deviations had to be nonnegative; and volume/amount means had to be
+nonnegative. Violations were typed compatibility failures.
 
-The selected head is `Linear(269,64) -> SiLU -> Linear(64,5)`, with 17,605 trainable
-parameters. The five outputs parameterize gap, body, upper wick, lower wick, and
-volume. The frozen official six-output head remains available only to produce the
-raw comparison forecast; it is not required to generate the Bridge path.
+The selected head was `Linear(269,64) -> SiLU -> Linear(64,5)`, with 17,605
+trainable parameters. Its five outputs parameterized gap, body, upper wick, lower
+wick, and volume. The frozen official six-output head remained available only for
+the raw comparison forecast; the retired Bridge path did not require it.
 
 ## Smallest stable boundary
 
-For OpenAlpha Bridge, the smallest stable boundary is **after the official ordered
-coarse/fine token sequence has been generated and preserved, and before continuous
-financial values are accepted downstream**.
+The retired design selected its smallest stable boundary **after the official
+ordered coarse/fine token sequence had been generated and preserved, and before
+continuous financial values were accepted downstream**.
 
-At that boundary OpenAlpha can branch without modifying the encoder, forecasting
+At that boundary the design could branch without modifying the encoder, forecasting
 transformer, token vocabulary, generated IDs, or official decoder:
 
 ```text
@@ -204,40 +215,40 @@ preserved token IDs
   `-- frozen tokenizer trunk + OpenAlpha constrained head -> safe forecast -> Sentinel
 ```
 
-This differs from Sentinel v1's pre-append interception boundary because Bridge does
-not change token selection or autoregressive conditioning. It reconstructs the
-completed original token sequence.
+This differed from Sentinel v1's pre-append interception boundary because the
+retired design did not change token selection or autoregressive conditioning. It
+reconstructed the completed original token sequence.
 
-The decoder can be augmented without modifying the official encoder or pretrained
-forecasting transformer. The implicit tokenizer codebook and learned frozen
-`post_quant_embed` can be reused directly. The learned forecast-model token
-embeddings are not needed and are deliberately excluded to avoid coupling Bridge to
-a particular forecasting-backbone size.
+The design allowed the decoder to be augmented without modifying the official
+encoder or pretrained forecasting transformer. It reused the implicit tokenizer
+codebook and learned frozen `post_quant_embed` directly. It excluded the learned
+forecast-model token embeddings to avoid coupling the retired design to a
+particular forecasting-backbone size.
 
-## Phase 1 boundary implementation
+## Historical Phase 1 boundary implementation
 
-Phase 1 deliberately implements only the stable continuous-financial side of this
-boundary. `BridgeFinancialTransform` receives either a valid source OHLC(V) tensor,
-a transformed financial-feature tensor, or a future `[B,S,5]` raw-head tensor. It
-does not accept token IDs, instantiate the frozen decoder trunk, load a Kronos
-module, or claim checkpoint compatibility.
+Phase 1 implemented only the stable continuous-financial side of this boundary.
+`BridgeFinancialTransform` received either a valid source OHLC(V) tensor, a
+transformed financial-feature tensor, or a future `[B,S,5]` raw-head tensor. It did
+not accept token IDs, instantiate the frozen decoder trunk, load a Kronos module,
+or claim checkpoint compatibility.
 
-The future sequence head must pass its five raw float32 outputs into this exact
-versioned mapping. Phase 1 returns both `transformed_features` and separately
-labeled reconstructed candles; it records the representation/configuration hash and
-sets `projection_applied=false`. Each batch requires one exact initial previous
-close per sequence. Later anchors are the preceding reconstructed close, so no
-future true candle, official-decoder next close, or broadcast state can enter the
-recursion.
+The design required a future sequence head to pass five raw float32 outputs into
+this exact versioned mapping. Phase 1 returned both `transformed_features` and
+separately labeled reconstructed candles; it recorded the
+representation/configuration hash and set `projection_applied=false`. Each batch
+required one exact initial previous close per sequence. Later anchors were the
+preceding reconstructed close, so no future true candle, official-decoder next
+close, or broadcast state could enter the recursion.
 
-This separation is the smallest useful implementation slice: the mathematical
-contract can be proven without loading protected model assets, while the Phase 2
-adapter remains obligated to reuse the pinned full-sequence trunk and unchanged
-tokens described above.
+This separation was the smallest useful implementation slice: the mathematical
+contract could be tested without loading protected model assets. A later Phase 2
+adapter would have been required to reuse the pinned full-sequence trunk and
+unchanged tokens described above.
 
 ## Phase 2 boundary status
 
-The compatibility boundary remains selected but was not instantiated in Phase 2.
+The compatibility boundary had been selected but was not instantiated in Phase 2.
 The pre-data window audit found that the locked daily validation and reconstruction
 test partitions cannot contain one complete 512-candle sequence while the
 no-crossing and purge rules remain in force. Phase 2 therefore stopped
@@ -249,9 +260,10 @@ parameter comparison, or checkpoint compatibility claim exists. The identities i
 this document remain expected pinned identities from the preserved source trace,
 not a Phase 2 runtime manifest.
 
-## Runtime rejection rules
+## Historical runtime rejection rules
 
-A Bridge checkpoint is loadable only when its manifest matches all of the following:
+The retired contract would have permitted a Bridge checkpoint to load only when
+its manifest matched all of the following:
 
 - official source repository and revision;
 - `model/kronos.py` and `model/module.py` hashes;
@@ -265,30 +277,30 @@ A Bridge checkpoint is loadable only when its manifest matches all of the follow
 
 Unknown fields, mismatched hashes, out-of-range IDs, nonfinite scale state,
 nonpositive anchors, unordered positions, unsupported feature schemas, or suffixes
-longer than the manifest limit fail closed. No nearest-version or best-effort loading
-is permitted.
+longer than the manifest limit would have failed closed. The contract permitted no
+nearest-version or best-effort loading.
 
-## Phase 2 integration contract readiness
+## Historical Phase 2 integration contract
 
-The compatibility boundary is now expressed as typed interfaces in
-`openalpha_bridge.phase2.kronos`: asset resolver, pinned revision verifier,
-tokenizer encoder, token-pair extraction, bipolar latent conversion, the frozen
-20-to-256 projection, the three frozen causal decoder blocks, the official
-decoder output, and 269-feature Bridge tensor construction.
+Before the product architecture was retired, the compatibility boundary was
+expressed as typed interfaces for asset resolution, pinned-revision verification,
+tokenizer encoding, token-pair extraction, bipolar latent conversion, the frozen
+20-to-256 projection, three frozen causal decoder blocks, official decoder output,
+and 269-feature tensor construction. That implementation path is no longer live;
+Git history preserves it.
 
-No real asset has been resolved or loaded. `OfficialKronosBackend` imports Torch
-and `huggingface_hub` lazily and raises `OFFICIAL_BACKEND_NOT_LOADED` for every
-numerical operation until the pinned assets are downloaded on a GPU host. The
-identities in this document therefore remain expected pinned identities, not a
+No real asset was resolved or loaded during that work. The retired official backend
+loaded Torch and `huggingface_hub` lazily and rejected numerical operations until
+the pinned assets were available on a GPU host. The identities in this document
+therefore remain expected pinned identities from the preserved source trace, not a
 runtime manifest.
 
-At runtime the resolver asserts the pinned repository and revision, the expected
-config and weights SHA-256, tensor ranks, dimensions, token ranges, feature
-order, dtype, and mask semantics. A hash mismatch fails with
-`TOKENIZER_CONFIG_HASH_MISMATCH` or `TOKENIZER_WEIGHTS_HASH_MISMATCH` before any
-tensor is produced.
+The intended runtime contract required exact repository revisions, configuration
+and weight SHA-256 values, tensor ranks and dimensions, token ranges, feature order,
+dtype, and mask semantics. A configuration or weights mismatch failed before any
+tensor was produced.
 
-A deterministic fake backend with matching shapes, dtypes, and token ranges
-exercises the pipeline locally. It is rejected outright by any run declaring
-`kronos_mode: pinned_official`, so synthetic components can never produce real
-evidence.
+A deterministic fake backend with matching shapes, dtypes, and token ranges was
+used only for local contract tests. It was rejected by any run declaring real
+evidence, so synthetic components could not produce scientific evidence. These
+historical interface notes do not describe a current executable system.

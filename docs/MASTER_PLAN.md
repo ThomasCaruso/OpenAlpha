@@ -1,10 +1,14 @@
 # OpenAlpha Master Plan
 
-## Current decision
+## Historical Bridge decision
 
-OpenAlpha remains one project. Its first public integration is OpenAlpha for
-Kronos: Sentinel assurance, a learned Bridge compatibility decoder, and the full
-Evidence record.
+This section preserves the retired Bridge product decision for historical context.
+The current research architecture is documented in
+[ARCHITECTURE.md](ARCHITECTURE.md), and the current research direction is in
+[STATUS.md](STATUS.md).
+
+OpenAlpha remained one project. Its proposed first public integration combined
+Sentinel assurance, a learned Bridge compatibility decoder, and the evidence record.
 
 The separately versioned Bridge v0 direction begins only with compatibility design
 and the Phase 1 mathematical contract. It freezes the official encoder, implicit
@@ -28,10 +32,11 @@ projection guaranteed returned validity, stepwise re-encoding hard-failed
 excessively, and candidate resampling failed the range gate. No prior outcome,
 threshold, result, artifact, or claim boundary is changed.
 
-Bridge-2K reconstruction feasibility must pass before forecast integration.
-Bridge-base is prohibited until Bridge-2K passes all reconstruction, fixed forecast,
-and external-generalization gates. See `OPENALPHA_PIVOT.md`,
-`OPENALPHA_KRONOS_BRIDGE.md`, `KRONOS_COMPATIBILITY_BOUNDARY.md`, and
+Under that retired direction, Bridge-2K reconstruction feasibility had to pass
+before forecast integration. Bridge-base was prohibited unless Bridge-2K passed all
+reconstruction, fixed-forecast, and external-generalization gates. See
+`OPENALPHA_PIVOT.md`,
+`ARCHITECTURE.md`, `STATUS.md`, `KRONOS_COMPATIBILITY_BOUNDARY.md`, and
 `research/bridge-v0/experiment.yaml`.
 
 ## Preserved v0 mission and result

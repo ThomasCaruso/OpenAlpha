@@ -64,42 +64,41 @@ A third party may reproduce code and request parameters yet receive corrected Ya
 - [Kronos-mini model card](https://huggingface.co/NeoQuasar/Kronos-mini)
 - [Kronos-Tokenizer-2k model card](https://huggingface.co/NeoQuasar/Kronos-Tokenizer-2k)
 
-## Bridge Phase 2 execution pipeline
+## Historical Bridge Phase 2 execution policy
 
-The Bridge-2K Phase 2 pipeline reuses this policy unchanged. The locked provider
-remains Yahoo Finance through pinned `yfinance==1.5.2`; Binance remains reserved
-for Phase 4 after the continuation and data-policy gates.
+The retired Bridge-2K Phase 2 design reused this policy unchanged. Its locked
+provider was Yahoo Finance through pinned `yfinance==1.5.2`; Binance was reserved
+for a later phase behind continuation and data-policy gates.
 
-As of the pipeline-preparation commit, zero provider requests have been issued
-and zero candles retrieved. The retrieval client is implemented but has never
-been invoked.
+At the pipeline-preparation commit, zero provider requests had been issued and
+zero candles retrieved. The retrieval client had been implemented but not invoked.
 
-Additional Phase 2 rules:
+The planned pipeline was governed by these rules:
 
-- The provider client resolves `yfinance` lazily. Importing `openalpha_bridge`
-  pulls in no provider client, no Torch, and no Kronos asset.
-- Provider exception text is never propagated into logs or artifacts, because it
-  can carry request URLs and query parameters. Failures surface as the typed
+- Provider integrations were resolved lazily, so importing the research package
+  loaded no provider client, Torch, or Kronos asset.
+- Provider exception text was never propagated into logs or artifacts, because it
+  could carry request URLs and query parameters. Failures surfaced as the typed
   `PROVIDER_REQUEST_FAILED` code with the exception class name only.
-- No credential is required. The locked provider is a public interface and the
-  pinned Tokenizer-2k repository is public. The environment template contains
-  paths and execution knobs only, and no filled copy is ever committed.
-- The feature cache lives outside the Git worktree, is content-addressed, and is
+- No credential was required. The locked provider was a public interface and the
+  pinned Tokenizer-2k repository was public. The environment template contained
+  paths and execution knobs only, and no filled copy was committed.
+- The feature cache lived outside the Git worktree, was content-addressed, and was
   capped in code at 10,737,418,240 bytes. Both preflight and the cache
-  constructor refuse a cache path inside the repository.
-- Feature-cache shards, checkpoints, and raw candles are never exported. The
-  export script copies manifests, hashes, aggregates, and reports only, and
-  fails with `FORBIDDEN_ARTIFACT_IN_EXPORT` otherwise.
-- Reconstruction-test shards cannot be loaded before the explicit test-opening
-  transition; see [BRIDGE_TEST_OPENING_POLICY.md](BRIDGE_TEST_OPENING_POLICY.md).
-- Fake-provider fixtures are stamped `provider_mode: fake`, carry no retrieval
-  timestamp, and are rejected by any run declaring `evidence_class: real_phase2`.
+  constructor refused a cache path inside the repository.
+- Feature-cache shards, checkpoints, and raw candles were never exported. The
+  export script copied manifests, hashes, aggregates, and reports only, and
+  failed with `FORBIDDEN_ARTIFACT_IN_EXPORT` otherwise.
+- Reconstruction-test shards were not loadable before the explicit, now-retired
+  test-opening transition.
+- Fake-provider fixtures were stamped `provider_mode: fake`, carried no retrieval
+  timestamp, and were rejected by any run declaring `evidence_class: real_phase2`.
 
-## Cloud execution and the provider decision
+## Historical cloud execution and the provider decision
 
-Phase 2 moved to managed cloud execution. The locked provider is **unchanged**:
-Yahoo Finance through pinned `yfinance==1.5.2`, now called from inside the Modal
-worker rather than from a workstation.
+The historical Phase 2 design moved execution to managed cloud infrastructure.
+Its locked provider remained Yahoo Finance through pinned `yfinance==1.5.2`, to
+be called from inside the Modal worker rather than from a workstation.
 
 An official-API swap to Alpaca was evaluated and deliberately not taken. Alpaca's
 documented historical stock coverage begins 2016-01-01, while the locked training
@@ -108,32 +107,32 @@ training corpus (40 to 16 scored suffixes per symbol, 35,840 to 14,336 pooled
 scored candles) and would have required a second methodological change beyond the
 provider swap. Validation, reconstruction test, and external periods were
 unaffected, and both locked sample minima still passed, but shortening the
-training period is a scientific cost that must be chosen explicitly rather than
+training period would have been a scientific cost that had to be chosen explicitly rather than
 absorbed inside a provider amendment.
 
-Keeping `yfinance` therefore preserves the entire hash chain and requires no
-pre-data amendment at all. The provider abstraction is unchanged, so adopting
-Alpaca, Polygon, or Tiingo later is one implementation plus an explicit pre-data
+Keeping `yfinance` therefore preserved the entire hash chain and required no
+pre-data amendment at all. The provider abstraction was unchanged, so adopting
+Alpaca, Polygon, or Tiingo later would have required one implementation plus an explicit pre-data
 amendment recording old provider, new provider, reason, feed, adjustment
 behaviour, OHLCV fields, corporate-action handling, pagination, missing-session
 behaviour, timestamp semantics, endpoint class, credentials requirement, and a
 revised experiment hash.
 
-Additional cloud rules:
+The planned cloud design added these rules:
 
-- Provider credentials, when a future provider needs them, exist only in Modal
-  Secrets. They are never accepted in a run-creation request, never a GitHub
-  workflow input, and never written to journals, logs, artifacts, or exceptions.
-- Provider exception text is still never propagated; failures surface as the
+- Provider credentials, if a future provider had needed them, would have existed only in Modal
+  Secrets. They were never accepted in a run-creation request or a GitHub
+  workflow input, and were never written to journals, logs, artifacts, or exceptions.
+- Provider exception text was still never propagated; failures surfaced as the
   typed `PROVIDER_REQUEST_FAILED` code with the exception class name only.
-- Raw provider responses are stored in neither Git nor the immutable artifact
-  store. Normalized derived features live only in the cache volume, under the
-  10 GiB cap, and are cleaned up after manifests and hashes are sealed.
-- `GET /artifacts` filters model weights, feature shards, raw data, and the lease
-  object out of every manifest.
-- Fake-provider fixtures remain stamped `provider_mode: fake` with no retrieval
-  timestamp, write to a separate object-store root, and are rejected by any run
+- Raw provider responses were stored in neither Git nor the immutable artifact
+  store. Normalized derived features lived only in the cache volume, under the
+  10 GiB cap, and were cleaned up after manifests and hashes were sealed.
+- The planned `GET /artifacts` endpoint filtered model weights, feature shards,
+  raw data, and the lease object out of every manifest.
+- Fake-provider fixtures remained stamped `provider_mode: fake` with no retrieval
+  timestamp, wrote to a separate object-store root, and were rejected by any run
   declaring `evidence_class: real_phase2`.
 
-As of the cloud-conversion commit, zero provider requests have been issued and
-zero candles retrieved.
+At the cloud-conversion commit, zero provider requests had been issued and zero
+candles retrieved.

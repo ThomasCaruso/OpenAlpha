@@ -1,93 +1,116 @@
-# OpenAlpha Sentinel Architecture
+# OpenAlpha Research Architecture
 
-## Position
+OpenAlpha is an evidence-first Python research repository. Its active code supports
+reproducible empirical studies, verification of completed evidence, and reusable
+research contracts. It is not a product service, trading system, or deployment
+control plane.
 
-OpenAlpha is a local, evidence-first Python research repository. Sentinel v0 adds no service topology. Its primary object is a pre-outcome reliability decision linked to causal data, an ensemble forecast, diagnostics, a later outcome, and verified provenance.
-
-No frontend, API server, worker, database, MLflow service, or public SDK is required.
-
-## Repository shape
+## Repository boundary
 
 ```text
 packages/
-  experiment-spec/      # preserved execution-spec prototype
-  research-core/        # preserved artifact, journal, and manifest infrastructure
-  sentinel/             # Phase 2 only: one narrow internal package
-research/
-  sentinel-v0/
-    experiment.yaml     # fixed v0 experiment choices
-    results/            # compact derived artifacts only
-    reports/            # artifact-grounded reports only
+  experiment-spec/    immutable experiment-document contracts
+  research-core/      model-independent research infrastructure
+  kronos-research/    Kronos integration and model-specific studies
+  sentinel/           structural validation and completed Sentinel studies
+cloud/modal/
+  kronos_research.py  thin shell for eight completed-study functions
+research/             immutable specifications, artifacts, results, and reports
 ```
 
-Phase 1 creates no `sentinel` package. When Phase 2 begins, the package contains only focused modules for forecast-provider contracts, diagnostics, labels, risk scoring, actions, evaluation, reporting, and one orchestration service.
+Current names describe current ownership. Historical identifiers remain unchanged
+inside sealed specifications, artifacts, reports, and provenance records. Git
+history preserves retired operational material without presenting it as live
+architecture.
 
-## Evidence flow
+## Strict dependency direction
+
+`experiment-spec` and `research-core` are foundational boundaries:
 
 ```text
-experiment.yaml
-  -> exact weekly origin list
-  -> development: causal raw context -> nine paths -> 512-path mean -> diagnostics -> later outcome
-  -> frozen development risk model and action policy
-  -> holdout: causal context -> forecasts -> diagnostics -> decision
-  -> later holdout outcome -> immutable error and postmortem
-  -> untouched holdout report
-  -> verified manifests and go/no-go decision
+experiment-spec       (no local study dependency)
+research-core         (no model- or study-specific dependency)
+      ^
+      |-- kronos-research
+      `-- sentinel
 ```
 
-Outcome data is inaccessible to the forecast/diagnostic operation. A separate resolver receives forecast identities after their artifacts are durably published. Development origins have no Sentinel action because no frozen risk model exists yet. Holdout decisions use only the frozen development configuration and are published before resolution.
+`kronos-research` depends on `research-core`. Among workspace packages, `sentinel`
+depends only on `research-core`. Neither subject package is imported by
+`research-core`, and the two subject packages do not depend on each other.
+`experiment-spec` remains separate because experiment-document canonicalization is
+its own contract rather than a model-specific concern.
 
-## Minimal internal boundaries
+The `research/` tree is outside the runtime package graph. It holds immutable
+research records and historical prose; package refactors do not rewrite their
+identities or conclusions.
 
-### Market data
+## Package responsibilities
 
-The provider-independent historical-bars port remains unchanged in principle. Phase 2's first adapter is a pinned yfinance client over Yahoo Finance's unofficial public interface. Interval, inclusive start, exclusive end, raw adjustment behavior, repair, actions, threading, timeout, and local XNYS cutoff enforcement are explicit; no fallback exists. Alpaca remains an optional later adapter for independent verification.
+### `packages/experiment-spec`
 
-### Forecast provider
+Loads, validates, canonicalizes, and migrates versioned experiment specification
+documents. Stable canonical bytes make a sealed specification digest reproducible.
 
-The v0 port accepts model/checkpoint/source identity, ordered OHLCV, context length, horizon, seed, temperature, top-p, path count, and request metadata. It returns paths, summary, duration, provider/checkpoint/request identity, and typed failure.
+### `packages/research-core`
 
-Kronos uses a pinned temporary cache outside Git. A deterministic provider is test-only.
+Provides model-independent infrastructure: content identity, protocols, run
+manifests and state, artifact and object-store handling, providers, calendars,
+resampling, runtime measurements, typed failures, redaction, and safe logging. It
+contains no Kronos, Sentinel, or retired product knowledge.
 
-### Diagnostics
+### `packages/kronos-research`
 
-Pure functions consume causal context, the nine forecast paths, the baseline, eligible prior contexts, and only previously resolved model errors. They emit fourteen named values and missingness evidence.
+Owns the pinned Kronos model/tokenizer boundary, evaluation utilities, and the
+three completed executable study families:
 
-### Labels and outcomes
+- Kronos-mini structural-validity diagnostic;
+- Kronos-base structural-validity replication;
+- Kronos-base zero-shot benchmark.
 
-Outcome resolution computes five-session return error, development-frozen failure label, baseline-relative label, direction correctness, and path error. It appends; it never mutates the forecast or decision.
+It also preserves the preregistered frozen-representation probe source and tests.
+That probe is inactive, has no CLI, workflow, Modal entrypoint, or authorization,
+and has not been executed.
 
-### Risk and action
+No official-protocol replication package or implementation exists. Its protocol
+must be designed and its preregistration sealed before code is written.
 
-Development-only preprocessing feeds logistic and ridge models. A frozen config converts failure probability to 0–100 reliability and USE/BLEND/ABSTAIN. Reasons are deterministic diagnostic mappings, never generated text.
+### `packages/sentinel`
 
-### Evaluation and reporting
+Owns structural-validity rules, audit records, provider adapters, and the completed
+Sentinel investigations. Its immutable evidence remains under the corresponding
+`research/sentinel-*` paths.
 
-The evaluator reports risk/error correlation, quintiles, coverage, direction, baseline, calibration, stability, diagnostic contribution, and runtime/cost. Reports read verified artifacts only.
+## Completed-study Modal boundary
 
-## Preserved infrastructure mapping
+`cloud/modal/kronos_research.py` is a thin optional shell. Study computation remains
+importable and testable outside Modal. Its exact public surface is:
 
-- `LocalArtifactStore` publishes immutable request, forecast, diagnostic, decision, outcome, and report bytes.
-- `RunStateJournal` records the experiment attempt lifecycle.
-- Sentinel forecast/decision/outcome/postmortem events are new append-only payload artifacts; the existing journal is not rewritten into a forecast database.
-- `RunManifest` binds all compatible artifact kinds and provenance. Existing required artifact semantics remain until a failing compatibility test justifies an amendment.
-- Existing path confinement governs every artifact path.
+| Function | Completed-study purpose |
+|---|---|
+| `run_mini_structural_validity` | reproduce the completed mini diagnostic |
+| `verify_mini_runtime` | verify the pinned mini runtime |
+| `verify_base_runtime` | verify the pinned base runtime |
+| `run_base_structural_validity` | reproduce the completed base study |
+| `inventory_base_artifacts` | inventory completed base-study artifacts |
+| `verify_zero_shot_runtime` | verify the pinned zero-shot runtime |
+| `run_zero_shot_benchmark` | reproduce the completed zero-shot study |
+| `inventory_zero_shot_artifacts` | inventory completed zero-shot artifacts |
 
-## Error model
+The shell has no training, generic command, control API, continuation,
+test-opening, frozen-representation, or future-study function. The retirement
+migration neither deploys nor invokes it.
 
-Typed failures distinguish provider availability or response, data quality, insufficient history, model loading, inference resource, seed control, ensemble completeness, diagnostic availability, outcome timing, risk configuration, holdout mutation, artifact integrity, and report provenance.
+## Evidence and integrity
 
-Failures remain in counts. No fake output silently replaces a real model failure.
+Specifications, amendments, terminal artifacts, result summaries, and completed
+reports are research records rather than live application state. Historical run
+IDs, schema names, artifact keys, digests, and implementation names remain intact
+where they establish provenance.
 
-## Security and storage
-
-- Pinned client versions, bounded requests, explicit timeouts, and no silent provider fallback.
-- Secrets are not required by the Phase 2 adapter; future provider credentials remain excluded from URLs, logs, artifacts, exceptions, and Git.
-- Raw market responses are hashed then discarded in v0.
-- Restricted normalized contexts, if retained, remain in the user-local confined store.
-- Checkpoints and Hugging Face caches remain outside Git.
-- No arbitrary remote code or pickle/joblib loading.
-
-## Deferred architecture
-
-A public `sentinel.forecast(...)` interface is a product hypothesis, not a v0 deliverable. Scheduling, services, databases, dashboards, additional models, and complex repair are considered only after the holdout decision.
+The `Research Integrity` CI workflow verifies this boundary offline. It runs the
+offline suite, checks sealed specifications and published artifacts, lints active
+Python, type-checks the workspace, and asserts that Torch is absent from the
+verification environment. Architecture guards additionally enforce package
+direction, inactive-study boundaries, the exact Modal surface, and current-doc
+links.
