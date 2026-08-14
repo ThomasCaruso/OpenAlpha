@@ -112,9 +112,14 @@ Status: complete in `c037bd5` and `27f0c69`.
 - existing tests, Ruff, and Pyright;
 - no hand-written dependency on an undocumented Yahoo endpoint.
 
-## Stage 1 — Direction and experiment lock
+## Historical Sentinel execution stages (retired)
 
-Scope:
+The following stages preserve the superseded Sentinel execution plan for audit. They
+are not current implementation instructions.
+
+### Stage 1 — Direction and experiment lock
+
+The retired scope fixed:
 
 - Sentinel direction, failure taxonomy, and methodology;
 - SPY/QQQ daily, five-session experiment;
@@ -126,55 +131,63 @@ Scope:
 - exact pinned source/model/tokenizer revisions;
 - archived unimplemented Reality Check plan/spec.
 
-Acceptance:
+The historical acceptance state required:
 
-- protocol v1 remains unfrozen;
+- protocol v1 to remain unfrozen;
 - no experiment code or real forecast runs;
-- no empirical Sentinel claim is made;
-- the full preserved quality gates pass.
+- no empirical Sentinel claim;
+- the full preserved quality gates to pass.
 
-## Stage 2 — Smallest real diagnostic
+### Stage 2 — Smallest real diagnostic
 
-For one historical SPY cutoff:
+For one historical SPY cutoff, the retired plan would have:
 
-1. fetch one causal context from Yahoo Finance through pinned yfinance with every request option explicit;
+1. fetched one causal context from Yahoo Finance through pinned yfinance with every request option explicit;
 2. run the seed-reproducibility probe and nine declared real Kronos requests;
-3. generate the last-value baseline;
-4. average only the three 512-context close paths and publish every path before outcome access;
-5. compute and publish the diagnostic vector without inventing an unfitted Sentinel action;
-6. resolve the five-session outcome;
-7. append errors and a human-readable audit record;
-8. verify artifacts, lifecycle, and manifest.
+3. generated the last-value baseline;
+4. averaged only the three 512-context close paths and published every path before outcome access;
+5. computed and published the diagnostic vector without inventing an unfitted Sentinel action;
+6. resolved the five-session outcome;
+7. appended errors and a human-readable audit record;
+8. verified artifacts, lifecycle, and manifest.
 
-Stop if real Kronos cannot operate within the locked feasibility boundary.
+The plan required a stop if real Kronos could not operate within the locked feasibility
+boundary.
 
-Alpaca remains a later independent verification provider. No provider-independent empirical claim is permitted until a representative sample has been compared across separately sourced providers.
+Alpaca was reserved as a later independent verification provider. No
+provider-independent empirical claim was permitted until a representative sample had
+been compared across separately sourced providers.
 
-## Stage 3 — Development sample
+### Stage 3 — Development sample
 
-- Materialize and hash the exact weekly origin list.
-- Run chronological SPY/QQQ development cutoffs.
-- Inspect only development diagnostic validity, missingness, and redundancy under fixed rules.
-- Fit logistic failure probability and secondary ridge error regression.
-- Freeze preprocessing, coefficients, failure/reason thresholds, and USE/BLEND/ABSTAIN policy.
+The retired plan would have:
 
-## Stage 4 — Untouched holdout
+- materialized and hashed the exact weekly origin list;
+- run chronological SPY/QQQ development cutoffs;
+- inspected only development diagnostic validity, missingness, and redundancy under fixed rules;
+- fit logistic failure probability and secondary ridge error regression;
+- frozen preprocessing, coefficients, failure/reason thresholds, and USE/BLEND/ABSTAIN policy.
 
-- Run the frozen pipeline once on the later year.
-- Report all five coverage levels, risk quintiles, calibration, baseline comparison, asset/time stability, and runtime/cost.
-- Do not alter diagnostics, labels, models, thresholds, or actions.
-- Apply the locked project-decision mapping.
+### Stage 4 — Untouched holdout
 
-## Stage 5 — Decision
+The retired plan would have:
 
-Record exactly one:
+- run the frozen pipeline once on the later year;
+- reported all five coverage levels, risk quintiles, calibration, baseline comparison, asset/time stability, and runtime/cost;
+- left diagnostics, labels, models, thresholds, and actions unchanged;
+- applied the locked project-decision mapping.
+
+### Stage 5 — Decision
+
+The historical audit was to record exactly one:
 
 - PROCEED;
 - PROCEED WITH A NARROWER DIAGNOSTIC SET;
 - CHANGE THE FAILURE-DETECTION APPROACH;
 - STOP THE PROJECT.
 
-Only then decide whether public interfaces, other models, exogenous-event data, complex repair, or protocol v1 are justified.
+Only after that record could the retired plan have considered public interfaces, other
+models, exogenous-event data, complex repair, or protocol v1.
 
 ## Explicit non-goals
 

@@ -10,9 +10,10 @@ This section preserves the superseded product direction. Current package ownersh
 is documented in [ARCHITECTURE.md](ARCHITECTURE.md), and the current research
 direction is documented in [STATUS.md](STATUS.md).
 
-Sentinel was OpenAlpha's assurance layer. It validated the official raw forecast andevery separately labeled compatible reconstruction, preserves exact violations and
-provenance, creates immutable audits, and prevents an invalid raw path from being
-silently accepted downstream. Deterministic terminal projection remains an explicit
+Sentinel was OpenAlpha's assurance layer. It validated the official raw forecast and
+every separately labeled compatible reconstruction, preserved exact violations and
+provenance, created immutable audits, and prevented an invalid raw path from being
+silently accepted downstream. Deterministic terminal projection remained an explicit
 fallback gateway, never a disguised model output or an accuracy claim.
 
 Sentinel v1.1 established why that assurance is necessary. Both pinned released

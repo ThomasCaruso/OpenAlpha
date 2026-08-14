@@ -4,6 +4,7 @@ import tomllib
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import pytest
 
@@ -48,10 +49,20 @@ _RETIRED_LIVE_DOC_IDENTIFIERS = (
     "openalpha_bridge",
     "bridge_phase2_app.py",
 )
+_ATX_HEADING = re.compile(
+    r"^(?P<marks>#{1,6})[ \t]+(?P<title>.*?)(?:[ \t]+#+)?[ \t]*$"
+)
+_HISTORICAL_SECTION_HEADING = re.compile(
+    r"\b(?:historical|retired|archive|archived|obsolete)\b", re.IGNORECASE
+)
+_CURRENT_IMPLEMENTATION_HEADING = re.compile(
+    r"\b(?:implementation|next|scope)\b", re.IGNORECASE
+)
 _LIVE_BRIDGE_PHASE2_CLAIMS = (
     re.compile(
         r"\bbridge[\W_]*phase[\W_]*2\b.{0,160}"
-        r"\b(?:is|remains)\s+(?:active|available|deployed|executable|implemented|live|operational)\b",
+        r"\b(?:is|remains|continues?\s+to\s+be)\s+(?:an?\s+)?"
+        r"(?:active|available|deployed|executable|implemented|live|operational)\b",
         re.IGNORECASE,
     ),
     re.compile(
@@ -66,8 +77,12 @@ _LIVE_BRIDGE_PHASE2_CLAIMS = (
     ),
     re.compile(
         r"\b(?:the\s+)?bridge\s+(?:phase\s+2\s+)?"
-        r"(?:adapter|api|checkpoint|cli|control[\W_]+plane|service|worker)\b"
-        r".{0,80}\b(?:can|is|must|provides?|produces?|runs?|supports?|will)\b",
+        r"(?:adapter|api|checkpoint|cli|control[\W_]+plane|service|worker)\b.{0,80}\b"
+        r"(?:can(?!\s+(?:never|no|not)\b)(?!\s+be\s+(?:absent|inactive|not\s+authorized|retired|stopped|unavailable)\b)|"
+        r"executes?|must(?!\s+not\b)|provides?|produces?|runs?|supports?|will\b|"
+        r"has(?!\s+(?:been\s+(?:removed|retired)|never|no|not)\b)|"
+        r"is\s+(?:an?\s+)?(?:active|available|deployed|executable|implemented|live|loadable|"
+        r"operational|service|system|worker))\b",
         re.IGNORECASE,
     ),
     re.compile(
@@ -88,12 +103,17 @@ _LIVE_BRIDGE_PHASE2_CLAIMS = (
     ),
 )
 _LIVE_IMPLEMENTATION_SCOPE_DIRECTIVE = re.compile(
-    r"^##\s+(?!historical\b|retired\b)[^\n]*(?:next|scope|implementation)[^\n]*\n"
-    r"(?:(?!^##\s).){0,1600}?\b(?:implement\s+phase\s+1\s+only|"
-    r"implement\s+the\s+corpus\s+builder|add\s+the\s+causal\s+adapter|"
-    r"(?:generate|create|produce)\s+(?:a\s+)?loadable\s+checkpoint)\b",
-    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    r"\b(?:implement\s+phase\s+1\b|"
+    r"(?:implement|add|build|deploy|run|fetch|materialize|apply|generate|create|produce)\b"
+    r".{0,120}\b(?:adapter|bridge|checkpoint|corpus|head|holdout|kronos(?:\s+requests?)?)\b)",
+    re.IGNORECASE,
 )
+_MARKDOWN_LINK = re.compile(
+    r"!?\[[^\]\n]*\]\(\s*"
+    r"(?:<(?P<angle>[^>\n]+)>|(?P<plain>[^\s()]+))"
+    r"(?:\s+(?:\"[^\"\n]*\"|'[^'\n]*'|\([^\)\n]*\)))?\s*\)"
+)
+_EXTERNAL_LINK_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 _TEXT_EXTENSIONS = frozenset(
     {
         ".bat",
@@ -168,29 +188,176 @@ def _current_document_paths(root: Path) -> tuple[Path, ...]:
     )
 
 
+def _markdown_atx_sections(text: str) -> list[tuple[str, str, bool, bool]]:
+    sections: list[tuple[str, str, bool, bool]] = []
+    heading_stack: list[tuple[int, bool, bool]] = []
+    current_heading = ""
+    current_body: list[str] = []
+    current_historical = False
+    current_implementation_scope = False
+    fence_character = ""
+    fence_length = 0
+
+    def flush() -> None:
+        if current_heading or current_body:
+            sections.append(
+                (
+                    current_heading,
+                    "\n".join(current_body),
+                    current_historical,
+                    current_implementation_scope,
+                )
+            )
+
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        fence_match = re.match(r"(?P<fence>`{3,}|~{3,})", stripped)
+        if fence_match:
+            fence = fence_match.group("fence")
+            if not fence_character:
+                fence_character = fence[0]
+                fence_length = len(fence)
+            elif fence[0] == fence_character and len(fence) >= fence_length:
+                fence_character = ""
+                fence_length = 0
+            current_body.append(line)
+            continue
+        if fence_character:
+            current_body.append(line)
+            continue
+
+        heading_match = _ATX_HEADING.match(line)
+        if not heading_match:
+            current_body.append(line)
+            continue
+
+        flush()
+        level = len(heading_match.group("marks"))
+        title = heading_match.group("title").strip()
+        while heading_stack and heading_stack[-1][0] >= level:
+            heading_stack.pop()
+        inherited_historical = heading_stack[-1][1] if heading_stack else False
+        inherited_implementation_scope = heading_stack[-1][2] if heading_stack else False
+        current_historical = inherited_historical or bool(
+            _HISTORICAL_SECTION_HEADING.search(title)
+        )
+        current_implementation_scope = inherited_implementation_scope or bool(
+            _CURRENT_IMPLEMENTATION_HEADING.search(title)
+        )
+        heading_stack.append(
+            (level, current_historical, current_implementation_scope)
+        )
+        current_heading = title
+        current_body = []
+
+    flush()
+    return sections
+
 def _live_bridge_phase2_claims(text: str) -> list[str]:
-    normalized = re.sub(r"\s+", " ", text)
-    offenders = [
-        pattern.pattern for pattern in _LIVE_BRIDGE_PHASE2_CLAIMS if pattern.search(normalized)
-    ]
-    if _LIVE_IMPLEMENTATION_SCOPE_DIRECTIVE.search(text):
-        offenders.append(_LIVE_IMPLEMENTATION_SCOPE_DIRECTIVE.pattern)
-    return offenders
+    offenders: set[str] = set()
+    for heading, body, historical, implementation_scope in _markdown_atx_sections(text):
+        if historical:
+            continue
+        normalized = re.sub(r"\s+", " ", f"{heading} {body}")
+        offenders.update(
+            pattern.pattern
+            for pattern in _LIVE_BRIDGE_PHASE2_CLAIMS
+            if pattern.search(normalized)
+        )
+        if implementation_scope and _LIVE_IMPLEMENTATION_SCOPE_DIRECTIVE.search(
+            normalized
+        ):
+            offenders.add(_LIVE_IMPLEMENTATION_SCOPE_DIRECTIVE.pattern)
+    return sorted(offenders)
+
+
+def _markdown_without_code(text: str) -> str:
+    visible_lines: list[str] = []
+    fence_character = ""
+    fence_length = 0
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        fence_match = re.match(r"(?P<fence>`{3,}|~{3,})", stripped)
+        if fence_match:
+            fence = fence_match.group("fence")
+            if not fence_character:
+                fence_character = fence[0]
+                fence_length = len(fence)
+            elif fence[0] == fence_character and len(fence) >= fence_length:
+                fence_character = ""
+                fence_length = 0
+            visible_lines.append("")
+            continue
+        if fence_character:
+            visible_lines.append("")
+            continue
+        visible_lines.append(
+            re.sub(r"(?P<ticks>`+)[^`\n]*?(?P=ticks)", "", line)
+        )
+    return "\n".join(visible_lines)
+
+
+def _github_heading_base(title: str) -> str:
+    title = re.sub(r"!?\[([^\]]+)\]\([^\)]+\)", r"\1", title)
+    title = re.sub(r"<[^>]+>", "", title)
+    title = re.sub(r"[`*_~]", "", title).casefold()
+    title = re.sub(r"[^\w\s-]", "", title)
+    title = re.sub(r"\s+", "-", title.strip())
+    return re.sub(r"-+", "-", title).strip("-")
+
+
+def _markdown_heading_anchors(text: str) -> set[str]:
+    anchors: set[str] = set()
+    counts: dict[str, int] = {}
+    fence_character = ""
+    fence_length = 0
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        fence_match = re.match(r"(?P<fence>`{3,}|~{3,})", stripped)
+        if fence_match:
+            fence = fence_match.group("fence")
+            if not fence_character:
+                fence_character = fence[0]
+                fence_length = len(fence)
+            elif fence[0] == fence_character and len(fence) >= fence_length:
+                fence_character = ""
+                fence_length = 0
+            continue
+        if fence_character:
+            continue
+        heading_match = _ATX_HEADING.match(line)
+        if not heading_match:
+            continue
+        base = _github_heading_base(heading_match.group("title"))
+        if not base:
+            continue
+        duplicate_index = counts.get(base, 0)
+        counts[base] = duplicate_index + 1
+        anchors.add(base if duplicate_index == 0 else f"{base}-{duplicate_index}")
+    return anchors
 
 
 def _broken_current_document_links(root: Path) -> list[str]:
     broken: list[str] = []
     for path in _current_document_paths(root):
         text = path.read_text(encoding="utf-8")
-        for match in re.finditer(r"!?\[[^]]*\]\((?P<target>[^)]+)\)", text):
-            target = match.group("target").strip().split(maxsplit=1)[0].strip("<>")
-            if not target or target.startswith(("#", "http://", "https://", "mailto:")):
+        for match in _MARKDOWN_LINK.finditer(_markdown_without_code(text)):
+            target = (match.group("angle") or match.group("plain")).strip()
+            if not target or _EXTERNAL_LINK_SCHEME.match(target):
                 continue
-            relative_target = target.split("#", maxsplit=1)[0]
-            if not (path.parent / relative_target).exists():
+            encoded_path, has_fragment, encoded_fragment = target.partition("#")
+            relative_target = unquote(encoded_path)
+            target_path = path if not relative_target else path.parent / relative_target
+            problem = not target_path.exists()
+            if not problem and has_fragment and encoded_fragment and target_path.is_file():
+                fragment = unquote(encoded_fragment).casefold()
+                anchors = _markdown_heading_anchors(
+                    target_path.read_text(encoding="utf-8")
+                )
+                problem = fragment not in anchors
+            if problem:
                 broken.append(f"{path.relative_to(root).as_posix()}: {target}")
     return sorted(broken)
-
 
 def _current_documentation_offenders(root: Path) -> dict[str, list[str]]:
     offenders: dict[str, list[str]] = {}
@@ -842,7 +1009,11 @@ def test_workspace_metadata_has_no_live_bridge_distribution_or_cli() -> None:
         "Bridge Phase 2\nis operational.",
         "Bridge Phase 2 has an API.",
         "Bridge Phase 2 can be deployed.",
+        "Bridge Phase 2 continues to be operational.",
+        "Bridge Phase 2 is an active service.",
         "The Bridge adapter must preserve token order.",
+        "The Bridge adapter can preserve token order.",
+        "The Bridge adapter executes production forecasts.",
         "Bridge produces constrained forecasts.",
         "This is a loadable Bridge checkpoint.",
         "Bridge-2K reconstruction feasibility must pass.",
@@ -850,6 +1021,8 @@ def test_workspace_metadata_has_no_live_bridge_distribution_or_cli() -> None:
         "## Next justified scope\n\nImplement the corpus builder.",
         "## Next justified scope\n\nAdd the causal adapter.",
         "## Next justified scope\n\nGenerate a loadable checkpoint.",
+        "## Current work\n\n### Next implementation\n\nImplement the corpus builder.",
+        "## Next implementation\n\n### Phase 1\n\nImplement the corpus builder.",
     ],
 )
 def test_current_doc_guard_rejects_live_system_claims(text: str) -> None:
@@ -860,13 +1033,129 @@ def test_current_doc_guard_rejects_live_system_claims(text: str) -> None:
     "text",
     [
         "Bridge Phase 2 was retired.",
+        "Bridge Phase 2 is inactive.",
+        "The Bridge adapter is absent.",
+        "The Bridge adapter is not authorized.",
+        "The Bridge service was stopped.",
+        "The Bridge checkpoint has been retired.",
         "The historical contract required ordered tokens.",
         "Bridge was never trained.",
         "## Historical next justified scope\n\nImplement Phase 1 only.",
+        (
+            "## Historical Sentinel execution stages (retired)\n\n"
+            "### Next implementation\n\nImplement the corpus builder."
+        ),
+        (
+            "# Archive\n\n## Current notes\n\n### Next implementation\n\n"
+            "Build the Bridge checkpoint."
+        ),
     ],
 )
 def test_current_doc_guard_allows_explicit_historical_status(text: str) -> None:
     assert _live_bridge_phase2_claims(text) == []
+
+
+def test_readme_has_no_hardcoded_repository_metrics() -> None:
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "1,549 passing" not in text
+    assert not re.search(
+        r"\|\s*(?:Source|Tests)\s*\|[^|\n]*\b\d[\d,]*\s+lines\b",
+        text,
+        re.IGNORECASE,
+    )
+    assert not re.search(r"#\s*\d[\d,]*\s+tests\b", text, re.IGNORECASE)
+
+
+def test_master_plan_marks_retired_execution_stages_as_historical() -> None:
+    text = (ROOT / "docs" / "MASTER_PLAN.md").read_text(encoding="utf-8")
+    assert "## Historical Sentinel execution stages (retired)" in text
+    for stage in range(1, 6):
+        assert re.search(rf"^### Stage {stage}\b", text, re.MULTILINE)
+        assert not re.search(rf"^## Stage {stage}\b", text, re.MULTILINE)
+
+
+def test_sentinel_direction_has_separate_compatible_reconstruction_clause() -> None:
+    text = (ROOT / "docs" / "SENTINEL_DIRECTION.md").read_text(encoding="utf-8")
+    assert "and every separately labeled compatible reconstruction" in re.sub(
+        r"\s+", " ", text
+    )
+
+
+def _write_current_doc_fixture(
+    root: Path, readme: str, extra_files: Mapping[str, str | bytes]
+) -> None:
+    required_docs = (
+        "ARCHITECTURE.md",
+        "DATA_POLICY.md",
+        "KRONOS_COMPATIBILITY_BOUNDARY.md",
+        "MASTER_PLAN.md",
+        "SENTINEL_DIRECTION.md",
+        "STATUS.md",
+    )
+    (root / "docs").mkdir(parents=True)
+    (root / "README.md").write_text(readme, encoding="utf-8")
+    for name in required_docs:
+        (root / "docs" / name).write_text(f"# {name}\n", encoding="utf-8")
+    for relative, content in extra_files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            path.write_bytes(content)
+        else:
+            path.write_text(content, encoding="utf-8")
+
+
+def test_current_doc_links_accept_commonmark_destinations(tmp_path: Path) -> None:
+    readme = """# Overview
+
+[file](docs/guide.md)
+![image](assets/pixel.png)
+[same document](#overview)
+[cross document](docs/guide.md#target-heading)
+[first duplicate](docs/guide.md#repeat)
+[second duplicate](docs/guide.md#repeat-1)
+[with title](docs/guide.md "Guide")
+[angle path](<docs/path with spaces.md>)
+[encoded path](docs/path%20with%20spaces.md)
+[http](http://example.com)
+[https](https://example.com)
+[email](mailto:research@example.com)
+[external scheme](ftp://example.com/archive)
+`[code example](missing.md)`
+"""
+    _write_current_doc_fixture(
+        tmp_path,
+        readme,
+        {
+            "docs/guide.md": (
+                "# Guide\n\n## Target *Heading*!\n\n## Repeat\n\n## Repeat\n"
+            ),
+            "docs/path with spaces.md": "# Spaced path\n",
+            "assets/pixel.png": b"not-a-real-image",
+        },
+    )
+
+    assert _broken_current_document_links(tmp_path) == []
+
+
+def test_current_doc_links_report_missing_files_and_anchors(tmp_path: Path) -> None:
+    readme = """# Overview
+
+[missing file](docs/missing.md)
+[missing same-document anchor](#missing-anchor)
+[missing cross-document anchor](docs/guide.md#missing-anchor)
+"""
+    _write_current_doc_fixture(
+        tmp_path,
+        readme,
+        {"docs/guide.md": "# Guide\n\n## Existing anchor\n"},
+    )
+
+    assert _broken_current_document_links(tmp_path) == [
+        "README.md: #missing-anchor",
+        "README.md: docs/guide.md#missing-anchor",
+        "README.md: docs/missing.md",
+    ]
 
 
 def test_master_plan_states_current_research_direction() -> None:

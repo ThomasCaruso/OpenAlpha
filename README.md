@@ -130,9 +130,7 @@ vendor/kronos/               Pinned upstream files for offline conformance check
 
 | | |
 | --- | --- |
-| Source | ~44,000 lines |
-| Tests | ~24,000 lines · **1,549 passing** |
-| Static analysis | `ruff` clean · `pyright` clean |
+| Verification | Offline suite passes · Ruff clean · Pyright clean |
 | Stack | Python 3.13 · PyTorch 2.13 · Modal (T4) · S3-compatible storage · `uv` |
 
 ---
@@ -144,7 +142,7 @@ does not touch a checkpoint.
 
 ```bash
 uv sync --locked --group dev
-uv run pytest -q          # 1,549 tests
+uv run pytest -q
 uv run ruff check .
 uv run pyright
 ```
