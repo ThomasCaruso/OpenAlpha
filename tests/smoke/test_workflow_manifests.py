@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import re
 import shlex
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,13 @@ WORKFLOW_DIR = ROOT / ".github" / "workflows"
 #: is. Using `inputs` there makes GitHub reject the file, and the workflow
 #: silently never registers.
 _WORKFLOW_LEVEL_KEYS = ("concurrency:", "run-name:")
+
+#: Actions are referenced by commit SHA, never by tag. A tag can be repointed at
+#: new code by whoever owns the action; a commit cannot. The workflow records the
+#: human-readable version beside each SHA in a trailing comment.
+_CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+_SETUP_UV_ACTION = "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d"
+_SHA_PINNED_USES = re.compile(r"^[\w.-]+/[\w.-]+(?:/[\w.-]+)*@[0-9a-f]{40}$")
 
 
 def _workflows() -> list[Path]:
@@ -173,20 +181,20 @@ def _research_integrity_violations(document: dict[str, Any]) -> list[str]:
     if not isinstance(steps, list) or not all(isinstance(step, dict) for step in steps):
         return [*violations, "steps"]
     uses = [step.get("uses") for step in steps if "uses" in step]
-    if uses.count("actions/checkout@v4") != 1:
+    if uses.count(_CHECKOUT_ACTION) != 1:
         violations.append("checkout step")
-    if uses.count("astral-sh/setup-uv@v6") != 1:
+    if uses.count(_SETUP_UV_ACTION) != 1:
         violations.append("setup-uv step")
     if len(uses) != 2:
         violations.append("unexpected action step")
 
     checkout = next(
-        (step for step in steps if step.get("uses") == "actions/checkout@v4"), None
+        (step for step in steps if step.get("uses") == _CHECKOUT_ACTION), None
     )
     if checkout is None or checkout.get("with") != {"persist-credentials": "false"}:
         violations.append("checkout credentials")
     setup_uv = next(
-        (step for step in steps if step.get("uses") == "astral-sh/setup-uv@v6"), None
+        (step for step in steps if step.get("uses") == _SETUP_UV_ACTION), None
     )
     if setup_uv is None or setup_uv.get("with") != {"enable-cache": "true"}:
         violations.append("setup-uv configuration")
@@ -207,8 +215,8 @@ def _research_integrity_violations(document: dict[str, Any]) -> list[str]:
             violations.append(f"unrecognized step: {index}")
 
     expected_step_signatures = [
-        ("uses", "actions/checkout@v4"),
-        ("uses", "astral-sh/setup-uv@v6"),
+        ("uses", _CHECKOUT_ACTION),
+        ("uses", _SETUP_UV_ACTION),
         ("run", "python"),
         ("run", "sync"),
         ("run", "torch-absent"),
@@ -259,6 +267,29 @@ def test_workflow_declares_a_name_and_trigger(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     assert text.startswith("name:"), f"{path.name} must start with a `name:` key"
     assert "\non:" in text, f"{path.name} must declare an `on:` trigger block"
+
+
+@pytest.mark.parametrize("path", _workflows(), ids=lambda p: p.name)
+def test_every_action_is_pinned_to_a_commit(path: Path) -> None:
+    """A tag can be repointed at new code by its owner; a commit cannot.
+
+    CI is what asserts the research record is intact, so an unpinned action is a
+    hole in that assertion: whoever owns the tag could change what runs.
+    """
+    document = _load_workflow(path.read_text(encoding="utf-8"))
+    jobs = document.get("jobs")
+    assert isinstance(jobs, dict) and jobs, f"{path.name} declares no jobs"
+
+    unpinned = [
+        step["uses"]
+        for job in jobs.values()
+        if isinstance(job, dict)
+        for step in job.get("steps", [])
+        if isinstance(step, dict)
+        and "uses" in step
+        and not _SHA_PINNED_USES.match(str(step["uses"]))
+    ]
+    assert unpinned == [], f"{path.name} references actions by tag: {unpinned}"
 
 
 def test_research_integrity_workflow_is_complete_and_verification_only() -> None:

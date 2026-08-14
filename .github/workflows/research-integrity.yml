@@ -14,13 +14,16 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      # Actions are pinned to commit SHAs, not tags. A tag can be moved; a
+      # commit cannot. This workflow is what asserts the research record is
+      # intact, so its own toolchain is pinned the same way every study is.
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
 
