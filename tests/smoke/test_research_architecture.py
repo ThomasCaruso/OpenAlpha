@@ -5,6 +5,8 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 APP_PATH = ROOT / "cloud" / "modal" / "kronos_research.py"
 ALLOWED_PUBLIC_MODAL_FUNCTIONS = {
@@ -113,17 +115,73 @@ def _python_imports_dormant_study(source: str) -> bool:
 def _python_imports_namespace(source: str, namespace: str) -> bool:
     tree = ast.parse(source)
     prefix = f"{namespace}."
+    importlib_aliases: set[str] = set()
+    import_module_aliases: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            if any(
-                alias.name == namespace or alias.name.startswith(prefix) for alias in node.names
-            ):
-                return True
+            for alias in node.names:
+                if alias.name == namespace or alias.name.startswith(prefix):
+                    return True
+                if alias.name == "importlib":
+                    importlib_aliases.add(alias.asname or alias.name)
         elif isinstance(node, ast.ImportFrom):
             module = node.module or ""
             if module == namespace or module.startswith(prefix):
                 return True
+            if module == "importlib":
+                import_module_aliases.update(
+                    alias.asname or alias.name
+                    for alias in node.names
+                    if alias.name == "import_module"
+                )
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        target = node.args[0]
+        if not isinstance(target, ast.Constant) or not isinstance(target.value, str):
+            continue
+        if target.value != namespace and not target.value.startswith(prefix):
+            continue
+        function = node.func
+        if isinstance(function, ast.Name) and (
+            function.id == "__import__" or function.id in import_module_aliases
+        ):
+            return True
+        if (
+            isinstance(function, ast.Attribute)
+            and function.attr == "import_module"
+            and isinstance(function.value, ast.Name)
+            and function.value.id in importlib_aliases
+        ):
+            return True
     return False
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        'import importlib\nimportlib.import_module("openalpha_bridge.phase2")\n',
+        'import importlib as il\nil.import_module("openalpha_bridge")\n',
+        'from importlib import import_module as load\nload("openalpha_bridge.cloud")\n',
+        '__import__("openalpha_bridge.phase2")\n',
+    ),
+)
+def test_python_namespace_scan_catches_dynamic_imports(source: str) -> None:
+    assert _python_imports_namespace(source, "openalpha_bridge") is True
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        'import importlib\nimportlib.import_module("openalpha_bridgework")\n',
+        'import importlib as il\ntarget = "openalpha_bridge"\nil.import_module(target)\n',
+        'from importlib import import_module as load\nload("other_package")\n',
+        'loader.import_module("openalpha_bridge")\n',
+        'value = "openalpha_bridge.phase2"\n',
+    ),
+)
+def test_python_namespace_scan_ignores_near_names_and_inert_strings(source: str) -> None:
+    assert _python_imports_namespace(source, "openalpha_bridge") is False
 
 
 def _expression_references_dormant_study(

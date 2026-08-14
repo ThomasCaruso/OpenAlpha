@@ -6,7 +6,7 @@ help:
 	@echo "  make setup       Install pinned Python and Node dependencies"
 	@echo "  make check       Everything CI runs: tests, lint, types, environment"
 	@echo ""
-	@echo "  make test        Full suite (~1,549 tests; no GPU or credentials needed)"
+	@echo "  make test        Full offline suite; no GPU or credentials needed"
 	@echo "  make test-smoke  Repository and deployment guards only (fast)"
 	@echo "  make lint        ruff"
 	@echo "  make typecheck   pyright"
