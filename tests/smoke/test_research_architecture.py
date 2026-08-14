@@ -1,4 +1,5 @@
 import ast
+import hashlib
 import re
 import tomllib
 from collections.abc import Iterable, Mapping
@@ -1064,6 +1065,19 @@ def test_readme_has_no_hardcoded_repository_metrics() -> None:
         re.IGNORECASE,
     )
     assert not re.search(r"#\s*\d[\d,]*\s+tests\b", text, re.IGNORECASE)
+
+
+def test_readme_uses_the_approved_research_flow_image() -> None:
+    image = ROOT / "docs" / "assets" / "openalpha-research-flow.png"
+    assert image.is_file()
+    assert image.stat().st_size == 1_419_345
+    assert hashlib.sha256(image.read_bytes()).hexdigest() == (
+        "4782c0251fe9a21bd6984b4b03b39ffe6d2549cb34fac6b5f14a11afece88929"
+    )
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    marker = "![OpenAlpha research flow"
+    assert marker in readme
+    assert readme.index(marker) < readme.index("| Study | Question | Conclusion |")
 
 
 def test_master_plan_marks_retired_execution_stages_as_historical() -> None:

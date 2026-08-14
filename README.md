@@ -3,6 +3,8 @@
 **Preregistered empirical research on whether a pretrained financial foundation
 model produces usable forecasts.**
 
+![OpenAlpha research flow: the Bridge thesis led through Kronos-mini and Kronos-base structural studies, abandonment of the structural-validity direction, a zero-shot benchmark, and the current official-protocol replication direction. Every transition is gated by sealed preregistrations, pinned commits, immutable artifacts, and predefined decision rules.](docs/assets/openalpha-research-flow.png)
+
 Three completed studies against [Kronos](https://github.com/shiyu-coder/Kronos),
 a published time-series foundation model. Three negative results — including one
 that falsified this project's own original thesis.
