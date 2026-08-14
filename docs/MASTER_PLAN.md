@@ -78,19 +78,27 @@ hard-failed 21 paths, while candidate resampling returned all 36 paths but excee
 the preregistered high-low range-error limit. The model-size canary was therefore
 not run.
 
-## Next justified scope
+## Current next direction
 
-Implement Phase 1 only: the typed constrained representation, stable forward and
-inverse transforms, causal previous-close chaining, normalization-state contract,
-optional-volume behavior, independent structural validation, deterministic
-serialization, property tests, and numerical edge-case tests. Do not retrieve the
-Bridge corpus, fit a head, run reconstruction metrics, generate a checkpoint, run
-Kronos forecasts, or access the untouched holdout until the complete Phase 1 gate
-passes and its artifacts are committed.
+Official-protocol replication is the next research direction. Its protocol must be
+designed and its preregistration cryptographically sealed before code is written.
+No official-protocol implementation exists.
 
-The former v1.1 next-step instruction to stop inference-only decoder research
-remains binding. Bridge is not another candidate-selection method and may not reuse
-v0 outcomes for feature mining or make an improved-forecasting claim.
+## Historical next justified scope
+
+The retired Bridge plan would have implemented Phase 1 only: the typed constrained
+representation, stable forward and inverse transforms, causal previous-close
+chaining, normalization-state contract, optional-volume behavior, independent
+structural validation, deterministic serialization, property tests, and numerical
+edge-case tests. It prohibited retrieving the Bridge corpus, fitting a head, running
+reconstruction metrics, generating a checkpoint, running Kronos forecasts, or
+accessing the untouched holdout until the complete Phase 1 gate had passed and its
+artifacts had been committed.
+
+The former v1.1 instruction to stop inference-only decoder research remained
+binding within that retired plan. Bridge was not another candidate-selection method
+and could not reuse v0 outcomes for feature mining or make an improved-forecasting
+claim.
 
 ## Stage 0 — Preserved evidence infrastructure
 

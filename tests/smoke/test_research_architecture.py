@@ -87,6 +87,13 @@ _LIVE_BRIDGE_PHASE2_CLAIMS = (
         re.IGNORECASE,
     ),
 )
+_LIVE_IMPLEMENTATION_SCOPE_DIRECTIVE = re.compile(
+    r"^##\s+(?!historical\b|retired\b)[^\n]*(?:next|scope|implementation)[^\n]*\n"
+    r"(?:(?!^##\s).){0,1600}?\b(?:implement\s+phase\s+1\s+only|"
+    r"implement\s+the\s+corpus\s+builder|add\s+the\s+causal\s+adapter|"
+    r"(?:generate|create|produce)\s+(?:a\s+)?loadable\s+checkpoint)\b",
+    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
 _TEXT_EXTENSIONS = frozenset(
     {
         ".bat",
@@ -163,7 +170,12 @@ def _current_document_paths(root: Path) -> tuple[Path, ...]:
 
 def _live_bridge_phase2_claims(text: str) -> list[str]:
     normalized = re.sub(r"\s+", " ", text)
-    return [pattern.pattern for pattern in _LIVE_BRIDGE_PHASE2_CLAIMS if pattern.search(normalized)]
+    offenders = [
+        pattern.pattern for pattern in _LIVE_BRIDGE_PHASE2_CLAIMS if pattern.search(normalized)
+    ]
+    if _LIVE_IMPLEMENTATION_SCOPE_DIRECTIVE.search(text):
+        offenders.append(_LIVE_IMPLEMENTATION_SCOPE_DIRECTIVE.pattern)
+    return offenders
 
 
 def _broken_current_document_links(root: Path) -> list[str]:
@@ -834,6 +846,10 @@ def test_workspace_metadata_has_no_live_bridge_distribution_or_cli() -> None:
         "Bridge produces constrained forecasts.",
         "This is a loadable Bridge checkpoint.",
         "Bridge-2K reconstruction feasibility must pass.",
+        "## Next justified scope\n\nImplement Phase 1 only.",
+        "## Next justified scope\n\nImplement the corpus builder.",
+        "## Next justified scope\n\nAdd the causal adapter.",
+        "## Next justified scope\n\nGenerate a loadable checkpoint.",
     ],
 )
 def test_current_doc_guard_rejects_live_system_claims(text: str) -> None:
@@ -846,10 +862,22 @@ def test_current_doc_guard_rejects_live_system_claims(text: str) -> None:
         "Bridge Phase 2 was retired.",
         "The historical contract required ordered tokens.",
         "Bridge was never trained.",
+        "## Historical next justified scope\n\nImplement Phase 1 only.",
     ],
 )
 def test_current_doc_guard_allows_explicit_historical_status(text: str) -> None:
     assert _live_bridge_phase2_claims(text) == []
+
+
+def test_master_plan_states_current_research_direction() -> None:
+    text = (ROOT / "docs" / "MASTER_PLAN.md").read_text(encoding="utf-8")
+    assert "## Current next direction" in text
+    assert "official-protocol replication is the next research direction" in text.casefold()
+    assert (
+        "protocol must be designed and its preregistration cryptographically sealed "
+        "before code is written"
+    ) in re.sub(r"\s+", " ", text)
+    assert "No official-protocol implementation exists" in text
 
 
 def test_current_documentation_has_no_retired_bridge_operations() -> None:
