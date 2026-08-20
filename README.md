@@ -5,6 +5,18 @@ model produces usable forecasts.**
 
 ![OpenAlpha research flow: the Bridge thesis led through Kronos-mini and Kronos-base structural studies, abandonment of the structural-validity direction, a zero-shot benchmark, and the current official-protocol replication direction. Every transition is gated by sealed preregistrations, pinned commits, immutable artifacts, and predefined decision rules.](docs/assets/openalpha-research-flow.png)
 
+## Hypothesis
+
+If structurally invalid outputs are a meaningful cause of error in a pretrained financial forecasting model, then repairing those outputs should improve forecast accuracy.
+
+## Abstract
+
+OpenAlpha tests whether a pretrained financial foundation model can produce useful market forecasts without additional training. Initial experiments with Kronos found that the model frequently generated structurally invalid OHLC candles, such as highs below opens or lows above closes. I built a deterministic repair method that corrected these violations and restored valid candle structure. The repair worked technically, but forecast accuracy improved by exactly **0.0**, showing that structural invalidity was not the main factor limiting the model’s performance.
+
+I then tested Kronos-base more broadly across four major ETFs, 100 forecast origins, and 1,600 generated forecasts. Under the preregistered evaluation, the model failed to outperform a simple zero-return persistence baseline.
+
+The central finding of OpenAlpha is therefore negative but clear: **Kronos has a measurable structural-output problem, but fixing that problem does not improve its forecasting ability, and its frozen zero-shot forecasts did not demonstrate useful predictive skill under the tested conditions.**
+
 Three completed studies against [Kronos](https://github.com/shiyu-coder/Kronos),
 a published time-series foundation model. Three negative results — including one
 that falsified this project's own original thesis.
