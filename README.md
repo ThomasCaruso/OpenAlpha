@@ -11,7 +11,7 @@ If structurally invalid outputs are a meaningful cause of error in a pretrained 
 
 ## Abstract
 
-OpenAlpha tests whether a pretrained financial foundation model can produce useful market forecasts without additional training. Initial experiments with Kronos found that the model frequently generated structurally invalid OHLC candles, such as highs below opens or lows above closes. I built a deterministic repair method that corrected these violations and restored valid candle structure. The repair worked technically, but forecast accuracy improved by exactly **0.0**, showing that structural invalidity was not the main factor limiting the model’s performance.
+OpenAlpha tests whether a pretrained financial foundation model can produce useful market forecasts without additional training. Initial experiments with Kronos found that the model frequently generated structurally invalid OHLC candles, such as highs below opens or lows above closes. I built a deterministic repair method that corrected these violations and restored valid candle structure. The repair worked technically, but produced **no measurable improvement in forecast accuracy**, showing that structural invalidity was not the main factor limiting the model’s performance.
 
 I then tested Kronos-base more broadly across four major ETFs, 100 forecast origins, and 1,600 generated forecasts. Under the preregistered evaluation, the model failed to outperform a simple zero-return persistence baseline.
 
