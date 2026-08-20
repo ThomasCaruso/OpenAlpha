@@ -1,15 +1,21 @@
 # OpenAlpha
 
-> **In one sentence:** I tested whether fixing invalid outputs from a pretrained financial AI model would make its forecasts more useful. The fixes made the outputs valid, but they did not improve forecast accuracy; a broader benchmark also found no zero-shot edge over a simple persistence baseline.
-
-## Abstract
-
-OpenAlpha is a preregistered research project testing a simple question: **can a pretrained financial foundation model produce useful market forecasts without retraining, and if its outputs are malformed, does fixing them help?** I tested Kronos-mini and Kronos-base. Both produced many impossible OHLC candles—for example, candles where the reported high was below the open or close. I built and tested a deterministic post-processing repair that restored complete structural validity, but forecast accuracy improved by exactly `0.0`. I then tested frozen Kronos-base more broadly across SPY, QQQ, IWM, and DIA over 100 chronological asset-origins and 1,600 generated forecasts. It still failed to beat a simple zero-return persistence baseline. **So this project did not make the model more efficient or more accurate.** What it established is narrower but useful: output validity was a real problem, fixing it was not the bottleneck, and under the tested zero-shot setup Kronos did not show usable forecasting skill. All decision rules were preregistered and cryptographically sealed before execution.
-
 **Preregistered empirical research on whether a pretrained financial foundation
 model produces usable forecasts.**
 
 ![OpenAlpha research flow: the Bridge thesis led through Kronos-mini and Kronos-base structural studies, abandonment of the structural-validity direction, a zero-shot benchmark, and the current official-protocol replication direction. Every transition is gated by sealed preregistrations, pinned commits, immutable artifacts, and predefined decision rules.](docs/assets/openalpha-research-flow.png)
+
+## Hypothesis
+
+If structurally invalid outputs are a meaningful cause of error in a pretrained financial forecasting model, then repairing those outputs should improve forecast accuracy.
+
+## Abstract
+
+OpenAlpha tests whether a pretrained financial foundation model can produce useful market forecasts without additional training. Initial experiments with Kronos found that the model frequently generated structurally invalid OHLC candles, such as highs below opens or lows above closes. I built a deterministic repair method that corrected these violations and restored valid candle structure. The repair worked technically, but forecast accuracy improved by exactly **0.0**, showing that structural invalidity was not the main factor limiting the model’s performance.
+
+I then tested Kronos-base more broadly across four major ETFs, 100 forecast origins, and 1,600 generated forecasts. Under the preregistered evaluation, the model failed to outperform a simple zero-return persistence baseline.
+
+The central finding of OpenAlpha is therefore negative but clear: **Kronos has a measurable structural-output problem, but fixing that problem does not improve its forecasting ability, and its frozen zero-shot forecasts did not demonstrate useful predictive skill under the tested conditions.**
 
 Three completed studies against [Kronos](https://github.com/shiyu-coder/Kronos),
 a published time-series foundation model. Three negative results — including one
